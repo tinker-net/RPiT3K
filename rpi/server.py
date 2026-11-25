@@ -67,6 +67,33 @@ class Controller:
             raise ValueError("Outside library")
         return p
 
+    def folder(self,name):
+        if name=="": return self.library
+        if not isinstance(name,str) or len(name)>900 or len(name.split("/"))>20 or any(not NAME.fullmatch(part) or part in (".","..") for part in name.split("/")):
+            raise ValueError("Invalid folder path")
+        p=self.library
+        for part in name.split("/"):
+            p=p/part
+            if p.is_symlink(): raise ValueError("Symlinks are not allowed")
+        if not p.resolve().is_relative_to(self.library.resolve()):
+            raise ValueError("Outside library")
+        return p
+
+    def library_folders(self):
+        folders=[]
+        for root,dirs,_ in os.walk(self.library,followlinks=False):
+            valid=[]
+            for name in dirs:
+                p=Path(root)/name
+                rel=p.relative_to(self.library).as_posix()
+                try:
+                    if self.folder(rel).is_dir():
+                        valid.append(name)
+                        folders.append(rel)
+                except (ValueError,OSError): pass
+            dirs[:]=valid
+        return sorted(folders,key=str.casefold)
+
     def library_files(self):
         files=[]
         for root, dirs, names in os.walk(self.library, followlinks=False):
@@ -298,7 +325,7 @@ class Controller:
                     cloud_enabled=not self.args.disable_cloud,
                     poweroff_enabled=os.environ.get("RPIT3K_ENABLE_POWEROFF")=="1",
                     running=self.proc is not None and self.proc.poll() is None,
-                    files=self.library_files(),
+                    files=self.library_files(),folders=self.library_folders(),
                     logs=list(self.logs), tuner=next((line for line in reversed(list(self.logs)) if line.startswith("TUNER ")), ""))
 
 class Handler(BaseHTTPRequestHandler):
@@ -400,11 +427,20 @@ class Handler(BaseHTTPRequestHandler):
             with c.lock:
                 if u.path=="/api/upload":
                     name=parse_qs(u.query).get("name",[""])[0]
-                    if "/" in name: raise ValueError("Upload must be a filename")
+                    if not isinstance(name,str): raise ValueError("Invalid filename")
+                    folder,name_only=name.rsplit("/",1) if "/" in name else ("",name)
+                    parent=c.folder(folder)
+                    if not parent.is_dir(): raise ValueError("Create the destination folder first")
                     p=c.file(name,(".nam",".wav"))
                     if p.exists(): raise ValueError("File already exists")
                     data=self.body(LIMIT)
                     with p.open("xb") as f: f.write(data)
+                elif u.path=="/api/folder":
+                    v=json.loads(self.body(65536))
+                    name=v["path"]
+                    if not name: raise ValueError("Choose a folder name")
+                    p=c.folder(name)
+                    p.mkdir(parents=True,exist_ok=True)
                 elif u.path=="/api/next":
                     if self.client_address[0] not in ("127.0.0.1","::1"): raise ValueError("Local button endpoint only")
                     c.next_preset()
