@@ -1,12 +1,14 @@
-# RPiT3K — Native NAM guitar processor for Raspberry Pi & Pisound
+# RPiT3K General — Native NAM guitar processor for Linux
 
-**Public preview · Linux / ALSA · Raspberry Pi 5 tested · MIT**
+**Experimental portability branch · Linux ARM64 / x86-64 · ALSA · MIT**
+
+This branch is derived from the current `rpi-ui` Pisound edition. It retains all DSP, presets, browser controls and experimental cloud functionality, but replaces fixed Pisound routing with configurable ALSA PCM and channel mapping. All measurements below are inherited from Pi 5/Pisound, not new USB or x86-64 results.
 
 RPiT3K is an independent open-source guitar processor inspired by the [TONE3000 × Daisy DIY Pedal](https://github.com/tone-3000/t3k-diy-pedal). It turns a Raspberry Pi equipped with [Blokas Pisound](https://blokas.io/pisound/) into a standalone neural amplifier and cabinet processor, controlled from a browser.
 
 The goal is a small, reproducible, offline-capable guitar rig rather than a general-purpose plugin host: native NAM inference, a predictable audio path, low buffering, persistent presets and transparent engineering measurements. The Raspberry Pi implementation does not run the Daisy firmware or its embedded inference engine.
 
-**[Installation and user guide](README-PISOUND.md)** · **[Technical report and test reproduction](rpi/README.md)** · **[Original Daisy documentation](README-DAISY.md)**
+**[General installation guide](README-GENERAL.md)** · **[Pisound edition](https://github.com/tinker-net/RPiT3K/tree/rpi-ui)** · **[Technical report and test reproduction](rpi/README.md)** · **[Original Daisy documentation](README-DAISY.md)**
 
 ## Web interface
 
@@ -198,33 +200,17 @@ Reproduce with the live service stopped:
 
 ## Installation
 
-See the [dedicated Pisound guide](README-PISOUND.md) for prerequisites, Blokas setup, access, updates and uninstall.
+See [README-GENERAL.md](README-GENERAL.md) for generic Linux installation and routing. The guided installer targets 64-bit Debian-family Linux on ARM64 or x86-64; other distributions require a manual build. No Blokas software is installed automatically.
 
 ```bash
 sudo apt update
 sudo apt install -y git
-git clone --branch rpi-ui https://github.com/tinker-net/RPiT3K.git
-cd RPiT3K
-bash rpi/install-pisound.sh --install-blokas
-sudo reboot
+git clone --branch rpi-general https://github.com/tinker-net/RPiT3K.git RPiT3K-General
+cd RPiT3K-General
+bash rpi/install-general.sh
 ```
 
-Skip the vendor installation and reboot if Pisound is already correctly installed. After reconnecting:
-
-```bash
-cd ~/RPiT3K
-bash rpi/install-pisound.sh
-```
-
-The installer targets 64-bit Raspberry Pi OS, detects CPU model, installs dependencies, builds pinned Core, runs regression checks and verifies live telemetry. Default access is loopback; use SSH forwarding (see guide). Explicit `--lan` enables unauthenticated HTTP on a trusted isolated network only; `--button` enables single-click preset cycling. Never expose the service to the Internet. New installer has not yet been validated from a clean SD card.
-
-| Platform | Status | Initial buffer |
-| --- | --- | --- |
-| Pi 5 + Pisound | Developer-tested audio and DSP | 64 × 3 |
-| Pi 4 / CM4 | Candidate, not hardware-tested | 128 × 3 |
-| Pi 3 / Zero 2 W | Experimental, performance unknown | 256 × 3 |
-
-Physical Pisound compatibility is required. 32-bit systems and Pisound Micro are not supported by this installer.
+Default device is ALSA `default`, 256 frames × 3 periods, two capture and playback channels. The web interface permits explicit PCM and channel mapping. Compatibility is not universal: driver, supported formats, channel counts, clock, period constraints and host performance determine operation. No physical USB or x86-64 test has yet been performed.
 
 ## Reproduce the engineering checks
 
@@ -245,7 +231,7 @@ Replace example paths with compatible local assets. Stop the live service before
 
 RPiT3K is a preview suitable for community testing, not a certified stage-ready product. The remaining work includes clean installation and reboot tests, extended playing sessions with the current build, latency loopback and analog calibration, Pi 4 validation, dual-NAM and additional architecture benchmarks, physical preset-button verification, hotspot robustness, and end-to-end cloud authentication/download testing.
 
-Useful bug reports include Pi model, OS version, commit, ALSA settings, model architecture, DSP timing, recovery count and reproducible steps. Do not attach private credentials or copyrighted captures. The separate `linux-native` branch explores generic Linux interfaces and is not the Pisound release.
+Useful bug reports include Pi model, OS version, commit, ALSA settings, model architecture, DSP timing, recovery count and reproducible steps. Do not attach private credentials or copyrighted captures. The original Pisound edition remains on `rpi-ui`; this branch is the current general Linux development version.
 
 ## Credits and license
 
