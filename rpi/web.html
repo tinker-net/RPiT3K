@@ -625,9 +625,6 @@ function makeAmpArt(key){
   controls+=ticks+`<circle cx="${cx}" cy="${cy+2}" r="${rad+1}" fill="#000" opacity=".55"/><circle cx="${cx}" cy="${cy}" r="${rad}" fill="${light?u("knob"):"#292827"}" stroke="#151311" stroke-width="1.2"/><circle cx="${cx}" cy="${cy}" r="${rad-4}" fill="${u("knob")}" stroke="#e5d4b2" stroke-opacity=".25"/><path d="M${cx} ${cy-rad+2}v${rad*.44}" stroke="${light?"#28211b":"#f2e2c1"}" stroke-width="2" stroke-linecap="round"/><text x="${cx}" y="${py+65}" text-anchor="middle" fill="${ink}" font-size="${a.knobs>8?7:8}" font-weight="600">${a.labels[i]||""}</text>`;
  }
  const corners=[[x,y],[x+cw-23,y],[x,y+ch-23],[x+cw-23,y+ch-23]].map(([cx,cy])=>`<rect x="${cx}" y="${cy}" width="23" height="23" rx="7" fill="${u("metal")}" stroke="#352f29" stroke-width=".8"/><circle cx="${cx+11.5}" cy="${cy+11.5}" r="2" fill="#302b25"/>`).join("");
- const logoY=gy+gh*(key==="blackface"||key==="silverface"?.26:.48);
- const logoX=key==="blackface"||key==="silverface"?innerX+30:w/2;
- const logoAnchor=key==="blackface"||key==="silverface"?"start":"middle";
  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" role="img" aria-label="${a.name} amplifier illustration" font-family="Arial,sans-serif">${defs}
  <ellipse cx="${w/2}" cy="${y+ch+13}" rx="${cw*.47}" ry="15" fill="#000" opacity=".85" filter="${u("shadow")}"/>
  <rect x="${x+40}" y="${y+ch-2}" width="42" height="12" rx="4" fill="#171717"/><rect x="${x+cw-82}" y="${y+ch-2}" width="42" height="12" rx="4" fill="#171717"/>
@@ -640,7 +637,7 @@ function makeAmpArt(key){
  <text x="${innerX+12}" y="${py+13}" fill="${ink}" font-size="9" font-weight="700">${a.channels[0]}</text>
  ${a.channels.length>1?`<text x="${innerX+innerW*.48}" y="${py+13}" fill="${ink}" font-size="9" font-weight="700">${a.channels[1]}</text>`:""}
  ${controls}<circle cx="${innerX+innerW-22}" cy="${py+36}" r="9" fill="${u("metal")}"/><circle cx="${innerX+innerW-22}" cy="${py+36}" r="6.5" fill="${u("lamp")}"/>
- <text x="${logoX}" y="${logoY}" fill="#f4e7ce" stroke="#211a16" stroke-width=".8" paint-order="stroke" font-size="${gh>150?30:19}" font-weight="700" font-style="italic" text-anchor="${logoAnchor}" letter-spacing=".7">${a.mark}</text>${corners}
+ ${corners}
  </svg>`;
 }
 function autoAmpSkin(name){
