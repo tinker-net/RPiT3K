@@ -51,3 +51,30 @@ jobs:
           name: rpi-ton3k-${{ matrix.label }}
           path: dist/*.deb
           if-no-files-found: error
+  publish:
+    needs: build
+    if: github.ref == 'refs/heads/deb-packaging'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: rpi-ton3k-*
+          path: release
+          merge-multiple: true
+      - name: Publish experimental prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          tag="deb-preview-${GITHUB_RUN_NUMBER}"
+          cd release
+          test "$(find . -maxdepth 1 -name '*.deb' | wc -l)" -eq 4
+          sha256sum *.deb > SHA256SUMS
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" *.deb SHA256SUMS --clobber
+          else
+            gh release create "$tag" *.deb SHA256SUMS --target "$GITHUB_SHA" --prerelease --latest=false --title "RPi-Ton3K Debian preview ${GITHUB_RUN_NUMBER}" --notes "Experimental packages for Debian 13 / Raspberry Pi OS Trixie 64-bit. All CI build and smoke tests passed. Physical ALSA/Pisound and systemd operation on real hardware remain unverified. Install only the matching CPU variant on a spare system. Pisound drivers must already be installed. See the deb-packaging branch for configuration and migration instructions."
+          fi
