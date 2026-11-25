@@ -36,6 +36,11 @@ class Controller:
         self.proc = None
         self.logs = deque(maxlen=100)
         self.active = None
+        self.settingsfile = self.data / "settings.json"
+        self.settings = dict(buffer=64, periods=3, last="1")
+        if self.settingsfile.exists(): self.settings.update(json.loads(self.settingsfile.read_text()))
+        self.cpu_prev = None
+        self.cpu_pct = None
         self.presets = {str(i): dict(DEFAULT) for i in range(1,5)}
         if self.statefile.exists():
             self.presets.update({k:dict(DEFAULT, **v) for k,v in json.loads(self.statefile.read_text()).items()})
@@ -73,8 +78,16 @@ class Controller:
             p["slim2"] = 1
         return p
 
+    def persist_settings(self):
+        temp=self.settingsfile.with_suffix(".tmp")
+        temp.write_text(json.dumps(self.settings))
+        os.replace(temp,self.settingsfile)
+
+    def audio_args(self):
+        return ["--buffer",str(self.settings["buffer"]),"--periods",str(self.settings["periods"])]
+
     def command(self,p):
-        cmd=[str(self.exe),"--device",self.args.device]
+        cmd=[str(self.exe),"--device",self.args.device]+self.audio_args()
         if p["bypass"]:
             cmd+=["--bypass"]
         else:
@@ -113,7 +126,7 @@ class Controller:
         for line in proc.stdout:
             self.logs.append(line.rstrip())
 
-    def apply(self,slot,p):
+    def apply(self,slot,p,benchmark=True):
         p=self.validate(p)
         if slot not in self.presets:
             raise ValueError("Invalid preset")
@@ -124,12 +137,15 @@ class Controller:
         self.stop()
         self.logs.clear()
         try:
-            test=subprocess.run(cmd+["--benchmark"],capture_output=True,text=True,timeout=30)
-            if test.returncode:
-                raise ValueError(test.stderr.strip() or "Model validation failed")
-            self.logs.append(test.stdout.strip())
+            if benchmark:
+                test=subprocess.run(cmd+["--benchmark"],capture_output=True,text=True,timeout=30)
+                if test.returncode:
+                    raise ValueError(test.stderr.strip() or "Model validation failed")
+                self.logs.append(test.stdout.strip())
             self.start(cmd,slot)
             self.save(slot,p)
+            self.settings["last"]=slot
+            self.persist_settings()
         except Exception:
             self.stop()
             if old_slot and old_p:
@@ -148,8 +164,42 @@ class Controller:
             raise ValueError("Audio engine stopped: "+"; ".join(list(self.logs)[-5:]))
         self.active=slot
 
+    def next_preset(self):
+        slot=str(int(self.settings["last"])%4+1)
+        self.apply(slot,self.presets[slot],benchmark=False)
+
+    def configure(self,values):
+        b,p=values.get("buffer"),values.get("periods")
+        if type(b) is not int or type(p) is not int or b not in (64,128,256,512) or p not in (2,3,4): raise ValueError("Invalid audio settings")
+        old=dict(self.settings);slot=self.active
+        self.settings.update(buffer=b,periods=p)
+        try:
+            if slot: self.apply(slot,self.presets[slot],benchmark=False)
+            elif self.proc and self.proc.poll() is None:
+                self.stop();self.start([str(self.exe),"--device",self.args.device,"--tuner"]+self.audio_args(),None)
+            self.persist_settings()
+        except Exception:
+            self.settings=old
+            self.stop()
+            if slot: self.start(self.command(self.presets[slot]),slot)
+            raise
+
+    def telemetry(self):
+        try:
+            v=list(map(int,Path("/proc/stat").read_text().splitlines()[0].split()[1:9]))
+            now=(sum(v),v[3]+v[4])
+            if self.cpu_prev:
+                dt=now[0]-self.cpu_prev[0];di=now[1]-self.cpu_prev[1]
+                if dt>0:self.cpu_pct=round(100*(dt-di)/dt,1)
+            self.cpu_prev=now
+        except (OSError,ValueError,IndexError): pass
+        try: temp=round(int(Path("/sys/class/thermal/thermal_zone0/temp").read_text())/1000,1)
+        except (OSError,ValueError): temp=None
+        b,p=self.settings["buffer"],self.settings["periods"]
+        return dict(cpu=self.cpu_pct,temp=temp,buffer=b,periods=p,period_ms=b/48,buffer_ms=b*p/48)
+
     def status(self):
-        return dict(presets=self.presets,active=self.active,
+        return dict(presets=self.presets,active=self.active,settings=self.settings,telemetry=self.telemetry(),
                     running=self.proc is not None and self.proc.poll() is None,
                     files=sorted(p.name for p in self.library.iterdir()
                                  if p.is_file() and not p.is_symlink() and p.suffix.lower() in (".nam",".wav")),
@@ -169,7 +219,8 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def authorized(self):
-        expected="Basic "+base64.b64encode(("rpit3k:"+self.server.password).encode()).decode()
+        if self.server.password is None: return True
+        expected="Basic "+base64.b64encode((self.server.username+":"+self.server.password).encode()).decode()
         if hmac.compare_digest(self.headers.get("Authorization",""),expected):
             return True
         self.send_response(401)
@@ -213,10 +264,15 @@ class Handler(BaseHTTPRequestHandler):
                     if p.exists(): raise ValueError("File already exists")
                     data=self.body(LIMIT)
                     with p.open("xb") as f: f.write(data)
+                elif u.path=="/api/next":
+                    if self.client_address[0] not in ("127.0.0.1","::1"): raise ValueError("Local button endpoint only")
+                    c.next_preset()
+                elif u.path=="/api/settings":
+                    c.configure(json.loads(self.body(65536)))
                 elif u.path=="/api/tuner":
                     c.stop()
                     c.logs.clear()
-                    c.start([str(c.exe),"--device",c.args.device,"--tuner"],None)
+                    c.start([str(c.exe),"--device",c.args.device,"--tuner"]+c.audio_args(),None)
                 elif u.path=="/api/stop":
                     c.stop()
                 elif u.path in ("/api/save","/api/apply"):
@@ -238,13 +294,21 @@ def main():
     p.add_argument("--port",type=int,default=8080)
     p.add_argument("--device",default="hw:pisound,0")
     p.add_argument("--data",default="~/.local/share/rpit3k")
+    p.add_argument("--no-auth",action="store_true")
+    p.add_argument("--autostart",action="store_true")
     a=p.parse_args()
     c=Controller(a)
-    password=os.getenv("RPIT3K_PASSWORD") or secrets.token_urlsafe(12)
+    password=None if a.no_auth else (os.getenv("RPIT3K_PASSWORD") or secrets.token_urlsafe(12))
     server=ThreadingHTTPServer((a.bind,a.port),Handler)
     server.controller=c
     server.password=password
-    print(f"RPiT3K http://{a.bind}:{a.port}  user=rpit3k  password={password}",flush=True)
+    server.username=os.getenv("RPIT3K_USERNAME","rpit3k")
+    print(f"RPiT3K http://{a.bind}:{a.port}  "+("no authentication (trusted LAN only)" if password is None else f"user={server.username}"),flush=True)
+    if password and not os.getenv("RPIT3K_PASSWORD"): print("Temporary password: "+password,flush=True)
+    if a.autostart:
+        try:
+            slot=c.settings["last"];c.apply(slot,c.presets[slot],benchmark=False)
+        except Exception as e: c.logs.append("Autostart failed: "+str(e))
     def stop(*_): raise KeyboardInterrupt
     signal.signal(signal.SIGTERM,stop)
     try: server.serve_forever()
