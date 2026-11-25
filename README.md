@@ -1,5 +1,28 @@
 # RPi-Ton3K General — Native NAM guitar processor for Linux
 
+## Download experimental Debian packages
+
+[**Download packages from GitHub Actions**](https://github.com/tinker-net/RPiT3K/actions/workflows/deb-packaging.yml?query=branch%3Adeb-packaging)
+
+Open the latest successful run and download the matching artifact (GitHub sign-in may be required). Extract the ZIP before installing.
+
+| Artifact | Target |
+|---|---|
+| rpi-ton3k-pi5 | Raspberry Pi 5 / Cortex-A76 |
+| rpi-ton3k-pi4 | Raspberry Pi 4 / Cortex-A72 |
+| rpi-ton3k-arm64 | Generic ARM64 |
+| rpi-ton3k-amd64 | x86-64 |
+
+On a clean Debian 13 / Raspberry Pi OS Trixie 64-bit system, from the extracted package directory:
+
+```sh
+sudo apt install ./*.deb
+```
+
+Install only one matching package. The service listens on localhost:8080 by default. For remote access use SSH forwarding: `ssh -L 8080:127.0.0.1:8080 user@raspberrypi`, then open http://localhost:8080. Configure audio in the browser. Pisound drivers must already be installed. See [package installation and migration notes](packaging/README.md).
+
+The first CI run was reported successful by the maintainer. Physical audio and systemd operation on real hardware remain unverified. These are experimental packages, not a stable release. Existing source installations must be stopped and disabled before installing; their data is not automatically migrated. Actions artifacts are temporary; persistent release assets are not yet published.
+
 **Experimental portability branch · Linux ARM64 / x86-64 · ALSA · MIT**
 
 This branch is derived from the current `rpi-ui` Pisound edition. It retains all DSP, presets, browser controls and experimental cloud functionality, but replaces fixed Pisound routing with configurable ALSA PCM and channel mapping. All measurements below are inherited from Pi 5/Pisound, not new USB or x86-64 results.
