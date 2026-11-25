@@ -4,6 +4,7 @@
 #include "../eq3band.h"
 #include "convolution.h"
 #include "tuner.h"
+#include "noise_gate.h"
 #include "NAM/wav.h"
 #include <cctype>
 #include <algorithm>
@@ -62,6 +63,7 @@ struct Options {
     std::string device = "hw:pisound", model, second, ir, render_in, render_out;
     double slim = 1., slim2 = 1.;
     float input = 1., output = .25f, bass = 0., mid = 0., treble = 0.;
+    float gate = -81.f;
     int meter_fd = -1;
     bool benchmark = false, bypass = false, tuner = false, live = false, verify = false;
 };
@@ -87,6 +89,7 @@ Options parse(int argc, char** argv) {
         else if(k=="--ir") o.ir=v;
         else if(k=="--slim") o.slim=std::stod(v);
         else if(k=="--slim2") o.slim2=std::stod(v);
+        else if(k=="--gate") o.gate=std::stof(v);
         else if(k=="--input") o.input=std::stof(v);
         else if(k=="--output") o.output=std::stof(v);
         else if(k=="--bass") o.bass=std::stof(v);
@@ -99,6 +102,7 @@ Options parse(int argc, char** argv) {
     for(float x:{o.input,o.output,o.bass,o.mid,o.treble}) if(!std::isfinite(x)) throw std::runtime_error("Nonfinite control");
     if(o.input<0||o.input>2||o.output<0||o.output>1) throw std::runtime_error("Gain outside range");
     if(std::abs(o.bass)>20||std::abs(o.mid)>15||std::abs(o.treble)>10) throw std::runtime_error("EQ outside range");
+    if(!std::isfinite(o.gate)||!(o.gate==-81.f||(o.gate>=-80.f&&o.gate<=-30.f)))throw std::runtime_error("Invalid gate threshold");
     return o;
 }
 std::unique_ptr<nam::DSP> load(const std::string& path,double slim) {
@@ -150,16 +154,20 @@ struct Chain {
     std::unique_ptr<CabinetConvolver> ir;
     Eq3Band eq;
     GuitarTuner tuner;
+    NoiseGate gate;
     bool tuning;
     float input,output;
     float target_input,target_output,bass,mid,treble,target_bass,target_mid,target_treble;
     NAM_SAMPLE x[512]{}, y[512]{}, z[512]{};
     Chain(const Options& o):a((o.bypass||o.tuner) ? nullptr : load(o.model,o.slim)),b((o.bypass||o.tuner||is_wav(o.second)) ? nullptr : load(o.second,o.slim2)),ir((o.bypass||o.tuner)?nullptr:load_ir(o.ir.empty()&&is_wav(o.second)?o.second:o.ir)),tuning(o.tuner),input(o.input),output(o.output),target_input(o.input),target_output(o.output),bass(o.bass),mid(o.mid),treble(o.treble),target_bass(o.bass),target_mid(o.mid),target_treble(o.treble) {
+        gate.set(o.gate);
         eq.Init(rate);eq.SetBass(o.bass);eq.SetMid(o.mid);eq.SetTreble(o.treble);
     }
-    void controls(float i,float o,float b,float m,float t) {
+    void controls(float i,float o,float b,float m,float t,float g=-81.f) {
         if(!std::isfinite(i)||!std::isfinite(o)||!std::isfinite(b)||!std::isfinite(m)||!std::isfinite(t))return;
         if(i<0||i>2||o<0||o>1||std::abs(b)>20||std::abs(m)>15||std::abs(t)>10)return;
+        if(!std::isfinite(g)||!(g==-81.f||(g>=-80.f&&g<=-30.f)))return;
+        gate.set(g);
         target_input=i;target_output=o;target_bass=b;target_mid=m;target_treble=t;
     }
     void process() {
@@ -181,6 +189,7 @@ struct Chain {
         approach(bass,target_bass,[&](float v){eq.SetBass(v);});
         approach(mid,target_mid,[&](float v){eq.SetMid(v);});
         approach(treble,target_treble,[&](float v){eq.SetTreble(v);});
+        if(gate.enabled())for(unsigned i=0;i<block;++i)x[i]=gate.process(x[i]);
         constexpr float gain_alpha=.0020811647f;
         for(unsigned i=0;i<block;++i){input+=gain_alpha*(target_input-input);if(std::abs(input-target_input)<1e-6f)input=target_input;x[i]*=input;}
         NAM_SAMPLE* in=x;NAM_SAMPLE* out=y;
@@ -287,8 +296,8 @@ int main(int argc,char** argv) {
             if(n<=0)return;
             for(ssize_t k=0;k<n;++k){
                 if(buf[k]=='\n'){
-                    if(!overflow){line[used]=0;float i,o,b,m,t;char extra;
-                        if(std::sscanf(line,"%f %f %f %f %f %c",&i,&o,&b,&m,&t,&extra)==5)chain.controls(i,o,b,m,t);}
+                    if(!overflow){line[used]=0;float i,o,b,m,t,g;char extra;
+                        if(std::sscanf(line,"%f %f %f %f %f %f %c",&i,&o,&b,&m,&t,&g,&extra)==6)chain.controls(i,o,b,m,t,g);}
                     used=0;overflow=false;
                 }else if(used<sizeof(line)-1)line[used++]=buf[k];else overflow=true;
             }
