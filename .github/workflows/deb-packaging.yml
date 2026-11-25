@@ -1,0 +1,53 @@
+name: Experimental Debian packages
+on:
+  push:
+    branches: [deb-packaging]
+    paths: ['packaging/**', 'rpi/**', '.github/workflows/deb-packaging.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            cpu: ''
+            label: amd64
+          - runner: ubuntu-24.04-arm
+            cpu: ''
+            label: arm64
+          - runner: ubuntu-24.04-arm
+            cpu: cortex-a72
+            label: pi4
+          - runner: ubuntu-24.04-arm
+            cpu: cortex-a76
+            label: pi5
+    runs-on: ${{ matrix.runner }}
+    container: debian:trixie
+    steps:
+      - run: apt-get update && apt-get install -y git ca-certificates build-essential cmake libasound2-dev python3 dpkg-dev
+      - uses: actions/checkout@v4
+      - name: Build and validate
+        env:
+          CPU: ${{ matrix.cpu }}
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          bash packaging/build-deb.sh "0.1.0~preview${GITHUB_RUN_NUMBER}" "$CPU"
+      - name: Package smoke test
+        run: |
+          apt-get install -y ./dist/*.deb
+          /usr/lib/rpi-ton3k/build-rpi/rpit3k --bypass --verify
+          python3 /usr/lib/rpi-ton3k/rpi/server.py --help
+          test -d /var/lib/rpi-ton3k
+          touch /var/lib/rpi-ton3k/ci-marker
+          apt-get install -y --reinstall ./dist/*.deb
+          test -f /var/lib/rpi-ton3k/ci-marker
+          apt-get remove -y rpi-ton3k
+          test -f /var/lib/rpi-ton3k/ci-marker
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rpi-ton3k-${{ matrix.label }}
+          path: dist/*.deb
+          if-no-files-found: error
