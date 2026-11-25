@@ -23,9 +23,9 @@ ROOT = Path(__file__).resolve().parent.parent
 LIMIT = 32 * 1024 * 1024
 NAME = re.compile(r"[\w .()+@-]{1,180}", re.UNICODE)
 DEFAULT = dict(model="", second="", ir="", slim=1, slim2=1, input=1, output=.15,
-               bass=0, mid=0, treble=0, gate=-81, bypass=True)
+               bass=0, mid=0, treble=0, gate=-81, comp=0, comp_post=0, reverb=0, decay=1.5, reverb_type=0, bypass=True)
 RANGES = dict(slim=(0,1), slim2=(0,1), input=(0,2), output=(0,1),
-              bass=(-20,20), mid=(-15,15), treble=(-10,10), gate=(-81,-30))
+              bass=(-20,20), mid=(-15,15), treble=(-10,10), gate=(-81,-30), comp=(0,1), comp_post=(0,1), reverb=(0,1), decay=(.2,5), reverb_type=(0,2))
 
 class Controller:
     def __init__(self, args):
@@ -94,6 +94,8 @@ class Controller:
             v = p[k]
             if type(v) not in (int,float) or not math.isfinite(v) or not lo <= v <= hi:
                 raise ValueError("Invalid "+k)
+        if p["comp_post"] not in (0,1) or p["reverb_type"] not in (0,1,2):
+            raise ValueError("Invalid effect mode")
         if p["gate"] != -81 and p["gate"] < -80:
             raise ValueError("Invalid gate threshold")
         for k,ext in (("model",(".nam",)),("second",(".nam",".wav")),("ir",(".wav",))):
@@ -247,7 +249,7 @@ class Controller:
     def live_controls(self,slot,values):
         if slot!=self.active or self.proc is None or self.proc.poll() is not None:
             raise ValueError("Select the running preset first")
-        keys=("input","output","bass","mid","treble","gate")
+        keys=("input","output","bass","mid","treble","gate","comp","comp_post","reverb","decay","reverb_type")
         p=dict(self.presets[slot])
         for k in keys:
             if k not in values: raise ValueError("Missing "+k)
@@ -359,6 +361,22 @@ class Handler(BaseHTTPRequestHandler):
         c=self.server.controller
         u=urlsplit(self.path)
         try:
+            if u.path=="/api/calibrate":
+                v=json.loads(self.body(65536))
+                ref=v["reference_dbu"]
+                if type(ref) not in (int,float) or not math.isfinite(ref) or not -60<=ref<=30:
+                    raise ValueError("Invalid hardware reference in dBu")
+                path=c.file(v["model"],(".nam",))
+                if path.stat().st_size>LIMIT: raise ValueError("Model too large")
+                model=json.loads(path.read_text())
+                metadata=model.get("metadata") or {}
+                level=metadata.get("input_level_dbu")
+                if type(level) not in (int,float) or not math.isfinite(level) or not -60<=level<=60:
+                    raise ValueError("Capture has no valid input_level_dbu metadata")
+                db=ref-level
+                gain=10**(db/20)
+                if gain>2 or gain<.000001: raise ValueError("Calibration outside available input gain range")
+                self.send(200,dict(gain=gain,db=db,model_dbu=level,reference_dbu=ref));return
             if u.path.startswith('/api/tone3000/'):
                 if c.args.disable_cloud:
                     self.send(403,dict(error='Experimental TONE3000 integration disabled'));return
