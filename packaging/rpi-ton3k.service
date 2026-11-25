@@ -1,0 +1,22 @@
+[Unit]
+Description=RPi-Ton3K native guitar processor
+After=sound.target network.target
+
+[Service]
+Type=simple
+User=rpi-ton3k
+SupplementaryGroups=audio
+StateDirectory=rpi-ton3k
+StateDirectoryMode=0700
+EnvironmentFile=/etc/default/rpi-ton3k
+ExecStart=/usr/bin/python3 /usr/lib/rpi-ton3k/rpi/server.py --data /var/lib/rpi-ton3k --bind ${BIND} --port ${PORT} --device ${PCM} --disable-cloud --no-auth $AUTOSTART
+LimitRTPRIO=60
+UMask=0077
+Restart=on-failure
+RestartSec=3
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
