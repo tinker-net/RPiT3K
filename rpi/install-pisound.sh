@@ -22,7 +22,7 @@ jobs=2
 while (($#)); do
  case "$1" in
   --install-blokas) blokas=yes ;;
-  --lan|--button) args+=("$1") ;;
+  --lan|--button|--cloud) args+=("$1") ;;
   --buffer) buffer="${2:?missing buffer}"; shift ;;
   --periods) periods="${2:?missing periods}"; shift ;;
   --jobs) jobs="${2:?missing jobs}"; shift ;;
