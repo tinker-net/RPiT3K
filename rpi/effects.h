@@ -61,14 +61,19 @@ class RigReverb {
                                 Voice({421,631,887,1153},.40f)};
     float mix_=0, target_=0;
     int type_=0;
+    unsigned tail_=0;
     std::array<float,3> weights{1,0,0};
 public:
     void set(float mix,float decay,int type) {
         target_=mix;type_=type;
+        if(mix>0)tail_=0;
         for(auto& v:voices)v.decay(decay);
     }
     float process(float x) {
-        // Keep delay memories moving while disabled, so stale tails never reappear.
+        // Initial OFF is an exact, cheap bypass. Drain existing tails on disable.
+        if(target_==0 && mix_==0 && tail_==0)return x;
+        if(target_>0)tail_=48000*10;
+        else if(tail_>0)--tail_;
         float wet=0;
         for(int i=0;i<3;++i){
             weights[i]+=.00208116f*((i==type_?1.f:0.f)-weights[i]);
