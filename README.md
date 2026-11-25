@@ -1,6 +1,6 @@
 # RPiT3K — Native Linux port
 
-**For Raspberry Pi and Pisound, see the [RPiT3K technical report, installation and reproducible tests](rpi/README.md).** This branch preserves the original upstream firmware documentation below for attribution and reference. Its Daisy-specific features and performance figures are not claims about RPiT3K.
+**For Raspberry Pi and Pisound, see the [standalone Pisound installation guide](README-PISOUND.md) and [technical report](rpi/README.md).** This branch preserves the original upstream firmware documentation below for attribution and reference. Its Daisy-specific features and performance figures are not claims about RPiT3K.
 
 ---
 
