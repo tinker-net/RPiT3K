@@ -2,6 +2,10 @@
 #include "NAM/get_dsp.h"
 #include "NAM/slimmable.h"
 #include "../eq3band.h"
+#include "convolution.h"
+#include "tuner.h"
+#include "NAM/wav.h"
+#include <cctype>
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -51,22 +55,24 @@ PCM open_pcm(const char* device, snd_pcm_stream_t stream) {
     return pcm;
 }
 struct Options {
-    std::string device = "hw:pisound", model, second;
+    std::string device = "hw:pisound", model, second, ir;
     double slim = 1., slim2 = 1.;
     float input = 1., output = .25f, bass = 0., mid = 0., treble = 0.;
-    bool benchmark = false, bypass = false;
+    bool benchmark = false, bypass = false, tuner = false;
 };
 Options parse(int argc, char** argv) {
     Options o;
     for(int i=1;i<argc;++i) {
         std::string k=argv[i];
         if(k=="--benchmark") {o.benchmark=true;continue;}
+        if(k=="--tuner") {o.tuner=true;continue;}
         if(k=="--bypass") {o.bypass=true;continue;}
         if(i+1>=argc) throw std::runtime_error("Missing value: "+k);
         std::string v=argv[++i];
         if(k=="--device") o.device=v;
         else if(k=="--model") o.model=v;
         else if(k=="--second") o.second=v;
+        else if(k=="--ir") o.ir=v;
         else if(k=="--slim") o.slim=std::stod(v);
         else if(k=="--slim2") o.slim2=std::stod(v);
         else if(k=="--input") o.input=std::stof(v);
@@ -76,7 +82,7 @@ Options parse(int argc, char** argv) {
         else if(k=="--treble") o.treble=std::stof(v);
         else throw std::runtime_error("Unknown option: "+k);
     }
-    if(o.model.empty() && !o.bypass) throw std::runtime_error("--model FILE required");
+    if(o.model.empty() && !o.bypass && !o.tuner) throw std::runtime_error("--model FILE required");
     for(double x:{o.slim,o.slim2}) if(!std::isfinite(x)||x<0||x>1) throw std::runtime_error("Slim must be 0..1");
     for(float x:{o.input,o.output,o.bass,o.mid,o.treble}) if(!std::isfinite(x)) throw std::runtime_error("Nonfinite control");
     if(o.input<0||o.input>2||o.output<0||o.output>1) throw std::runtime_error("Gain outside range");
@@ -94,20 +100,65 @@ std::unique_ptr<nam::DSP> load(const std::string& path,double slim) {
     m->Reset(rate,block);
     return m;
 }
+bool is_wav(const std::string& path) {
+    auto ext=std::filesystem::path(path).extension().string();
+    for(auto& c:ext)c=static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    return ext==".wav";
+}
+std::unique_ptr<CabinetConvolver> load_ir(const std::string& path) {
+    if(path.empty())return {};
+    double sr=0;int channels=0;
+    auto samples=nam::detail::load_wav_ir(std::filesystem::path(path),sr,channels);
+    if(channels!=1||!std::isfinite(sr)||sr<8000||sr>384000||samples.empty())
+        throw std::runtime_error("IR must be mono WAV with valid sample rate");
+    if(sr!=rate){
+        // Windowed sinc, preserving original time alignment and DC gain.
+        const double ratio=rate/sr, cutoff=std::min(1.,ratio);
+        const auto n=static_cast<size_t>(std::ceil(samples.size()*ratio));
+        if(n>48000)throw std::runtime_error("IR exceeds 1 second");
+        std::vector<float> resampled(n);
+        for(size_t i=0;i<n;++i){
+            double t=i/ratio, sum=0;
+            long center=static_cast<long>(std::floor(t));
+            for(long j=center-32;j<=center+32;++j){
+                if(j<0||static_cast<size_t>(j)>=samples.size())continue;
+                double d=t-j;if(std::abs(d)>=32)continue;
+                double a=3.141592653589793*d*cutoff;
+                double sinc=std::abs(a)<1e-12?1:std::sin(a)/a;
+                sum+=samples[j]*cutoff*sinc*(.5+.5*std::cos(3.141592653589793*d/32));
+            }
+            resampled[i]=static_cast<float>(sum/ratio);
+        }
+        samples=std::move(resampled);
+    }
+    return std::make_unique<CabinetConvolver>(samples);
+}
 struct Chain {
     std::unique_ptr<nam::DSP> a,b;
+    std::unique_ptr<CabinetConvolver> ir;
     Eq3Band eq;
+    GuitarTuner tuner;
+    bool tuning;
     float input,output;
     NAM_SAMPLE x[block]{}, y[block]{}, z[block]{};
-    Chain(const Options& o):a(o.bypass ? nullptr : load(o.model,o.slim)),b(o.bypass ? nullptr : load(o.second,o.slim2)),input(o.input),output(o.output) {
+    Chain(const Options& o):a((o.bypass||o.tuner) ? nullptr : load(o.model,o.slim)),b((o.bypass||o.tuner||is_wav(o.second)) ? nullptr : load(o.second,o.slim2)),ir((o.bypass||o.tuner)?nullptr:load_ir(o.ir.empty()&&is_wav(o.second)?o.second:o.ir)),tuning(o.tuner),input(o.input),output(o.output) {
         eq.Init(rate);eq.SetBass(o.bass);eq.SetMid(o.mid);eq.SetTreble(o.treble);
     }
     void process() {
+        if(tuning){
+            if(tuner.push(x,block)){
+                auto r=tuner.analyze();
+                std::cerr<<"TUNER "<<r.hz<<" "<<r.confidence<<"\n";
+            }
+            std::fill_n(y,block,0.f);return;
+        }
         for(auto& s:x)s*=input;
         NAM_SAMPLE* in=x;NAM_SAMPLE* out=y;
         if(a) a->process(&in,&out,block);
         else std::copy_n(x,block,y);
         if(b){in=y;out=z;b->process(&in,&out,block);}
+        float cab[block];
+        if(ir){ir->process(out,cab);out=cab;}
         for(unsigned i=0;i<block;++i){
             float s=eq.Process(out[i])*output;
             y[i]=std::isfinite(s)?std::clamp(s,-1.f,1.f):0.f;
