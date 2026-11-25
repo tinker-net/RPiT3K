@@ -1,4 +1,4 @@
-# RPiT3K General — Native NAM guitar processor for Linux
+# RPi-Ton3K General — Native NAM guitar processor for Linux
 
 **Experimental portability branch · Linux ARM64 / x86-64 · ALSA · MIT**
 
@@ -232,6 +232,48 @@ Replace example paths with compatible local assets. Stop the live service before
 RPiT3K is a preview suitable for community testing, not a certified stage-ready product. The remaining work includes clean installation and reboot tests, extended playing sessions with the current build, latency loopback and analog calibration, Pi 4 validation, dual-NAM and additional architecture benchmarks, physical preset-button verification, hotspot robustness, and end-to-end cloud authentication/download testing.
 
 Useful bug reports include Pi model, OS version, commit, ALSA settings, model architecture, DSP timing, recovery count and reproducible steps. Do not attach private credentials or copyrighted captures. The original Pisound edition remains on `rpi-ui`; this branch is the current general Linux development version.
+
+## Hi-Z compensation: production DSP validation (2026-11-25)
+
+RPi-Ton3K includes an optional pre-NAM impedance-load compensation filter for passive pickups connected directly to a nominal 100 kΩ input, targeting the response of a nominal 1 MΩ input. It is disabled by default, stored per preset and adjustable live. It does not change physical input impedance. Disable it when using a suitable external buffer or native 1 MΩ instrument input.
+
+The circuit approximation uses a series pickup resistance and inductance, a shunt capacitance of 470 pF, and the volume-pot resistance. With load conductance G = 1/Rload + 1/Rvolume, the transfer function is H(s) = 1/[1 + (R + sL)(G + sC)]. The correction is H(1 MΩ)/H(100 kΩ), discretized as a biquad using the bilinear transform at 48 kHz. Partial compensation is a linear blend of the dry and corrected signals, not a percentage of physical impedance.
+
+### Reproducible test
+
+From the repository root, with the current engine already built:
+
+```sh
+python3 rpi/hiz_test.py build-rpi/rpit3k
+```
+
+The test requires only Python's standard library. It renders synthetic sine waves through the actual production DSP executable in offline bypass mode (NAM and cabinet convolution bypassed; compensation remains active). Four profiles × eight frequencies × three settings (0%, 80%, 100%) = 96 renders. The script compares the measured complex frequency response (amplitude and phase) with an independently evaluated lumped-element circuit using the bilinear frequency mapping. The acceptance threshold is an absolute complex transfer-function error of 1e-4. It also reports the RMS difference between enabled and disabled output.
+
+Measured on the maintainer's Raspberry Pi 5, all four profiles passed:
+
+| Profile | Maximum complex error | Result |
+|---|---:|---|
+| Telecaster | 2.13e-5 | PASS |
+| Stratocaster | 1.97e-5 | PASS |
+| PAF | 2.69e-5 | PASS |
+| P90 | 3.43e-5 | PASS |
+
+Measured gain relative to compensation OFF, at 80% (dB):
+
+| Frequency | Telecaster | Stratocaster | PAF | P90 |
+|---|---:|---:|---:|---:|
+| 82 Hz | 0.47 | 0.36 | 0.48 | 0.51 |
+| 440 Hz | 0.52 | 0.38 | 0.54 | 0.60 |
+| 1 kHz | 0.75 | 0.50 | 0.87 | 1.07 |
+| 2 kHz | 1.88 | 1.04 | 2.62 | 3.67 |
+| 3 kHz | 4.60 | 2.45 | 7.61 | 9.22 |
+| 4 kHz | 6.76 | 5.43 | 7.10 | 5.70 |
+| 5 kHz | 4.42 | 6.28 | 3.42 | 2.87 |
+| 8 kHz | 1.05 | 1.29 | 0.78 | 0.73 |
+
+For example, the Telecaster profile at 4 kHz measured +7.86 dB at 100%, +6.76 dB at 80%, and a nonzero enabled-vs-disabled residual RMS of 0.0065481 at 100%. This confirms that the production executable actually applies the intended frequency-dependent correction. The 80% setting is a provisional conservative starting point for the maintainer's Telecaster with Tex-Mex pickups, not a measured optimum.
+
+**Validation scope:** this is a digital, model-relative test, not a physical measurement of the guitar, Pisound ADC, or an actual 1 MΩ input. Pickup inductance, capacitance and pot values are illustrative assumptions; cable and pickup variations may change the real response. The test does not validate live-control delivery, real-time CPU overhead, noise recovery or electrical equivalence. The general Linux branch shares the filter implementation but these results are inherited from the Pi test, not a new x86/USB measurement. A controlled comparison with a physical high-impedance buffer or selectable input load remains future work. Allow headroom for resonance boosts (over 10 dB in some profiles).
 
 ## Credits and license
 
