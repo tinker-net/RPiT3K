@@ -7,25 +7,29 @@
 int main(){
     NoiseGate gate;
     for(float v:{-.2f,0.f,.00001f,.3f})if(gate.process(v)!=v)throw std::runtime_error("Gate OFF transparency");
+    auto steady=[&](float level,float threshold){
+        gate.set(-81);gate.set(threshold);
+        float x=std::pow(10.f,level/20.f);
+        for(int i=0;i<480000;++i)gate.process(x);
+        return 20.f*std::log10(gate.gain());
+    };
+    for(float d:{-30.f,-12.f,-6.f,-3.f,-1.f,0.f,1.f,3.f,6.f}){
+        float actual=steady(-45.f+d,-45.f);
+        float expected=NoiseGate::attenuation_db(-45.f+d,-45.f);
+        if(std::abs(actual-expected)>.2f)throw std::runtime_error("Expander steady-state curve");
+    }
+    float a45=steady(-45,-45),a44=steady(-45,-44);
+    if(!(a44<a45&&a45-a44<3.f))throw std::runtime_error("Abrupt 1 dB threshold change");
     gate.set(-50);
-    float y=0;
-    for(int i=0;i<384000;++i)y=gate.process(.0005f);
-    if(std::abs(y)>1e-7f)throw std::runtime_error("Gate does not close");
-    for(int i=0;i<480;++i)y=gate.process(.1f);
-    if(std::abs(y-.1f)>1e-5f)throw std::runtime_error("Gate attack");
-    for(int i=0;i<960;++i)y=gate.process(.0005f);
-    if(y<.00049f)throw std::runtime_error("Gate hold");
-    for(int i=0;i<4800;++i)y=gate.process(.0005f);
-    if(gate.gain()<.99f)throw std::runtime_error("Gate sustain hold");
-    for(int i=0;i<4800;++i)y=gate.process(.0005f);
-    if(gate.gain()<.75f||gate.gain()>1.f)throw std::runtime_error("Gate release too abrupt");
-    for(int i=0;i<384000;++i)y=gate.process(.0005f);
-    if(std::abs(y)>1e-7f)throw std::runtime_error("Gate release");
-    if(.1f*gate.gain()>1e-7f)throw std::runtime_error("Gate output residual not muted");
+    for(int i=0;i<4800;++i)gate.process(.1f);
+    if(gate.gain()<.999f)throw std::runtime_error("Gate attack");
+    for(int i=0;i<4800;++i)gate.process(.0005f);
+    if(gate.gain()<.75f)throw std::runtime_error("Gate release too abrupt");
+    for(int i=0;i<480000;++i)gate.process(.00001f);
+    if(gate.gain()>.00004f)throw std::runtime_error("Gate deep attenuation");
     gate.set(-81);
-    if(gate.gain()!=1.f)throw std::runtime_error("Gate output bypass");
-    if(gate.process(.0005f)!=.0005f)throw std::runtime_error("Gate disable");
-    std::cout<<"Noise gate PASS\n";
+    if(gate.gain()!=1.f||gate.process(.0005f)!=.0005f)throw std::runtime_error("Gate disable");
+    std::cout<<"Soft-knee expander PASS\n";
 
     std::mt19937 rng(42);std::uniform_real_distribution<float> rnd(-.2f,.2f);
     for(unsigned len:{1u,63u,64u,65u,4096u,24000u,48000u}){
