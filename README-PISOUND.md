@@ -8,7 +8,7 @@ An independent, experimental Raspberry Pi guitar processor derived from the TONE
 - Browser-controlled four presets, live gain/EQ/gate controls, chromatic tuner, input/output peak meters, ALSA recovery counter and CPU/temperature monitoring.
 - Direct ALSA, 48 kHz, left input and dual mono output. No JACK, LV2 or PipeWire required.
 - Optional Pisound button preset cycling, systemd autostart and offline Wi-Fi hotspot.
-- Local captures work offline. TONE3000 account browsing/import is experimental, optional and not yet end-to-end verified; use local file import if unavailable.
+- Local captures work offline. TONE3000 account browsing/import is experimental, disabled by default on new service installations and not yet end-to-end verified; use local file import.
 
 ## Compatibility
 
@@ -45,7 +45,7 @@ cd ~/RPiT3K
 bash rpi/install-pisound.sh
 ```
 
-The second step installs build dependencies, checks the card, checks out pinned NAM Core and its submodules, selects CPU flags for the detected Pi, compiles locally, runs CTest and offline verification, and installs/enables the systemd service only after the tests pass. It preserves existing presets, captures and audio settings. It needs Internet for installation, not for local playing.
+The second step installs build dependencies, checks the card, checks out pinned NAM Core and its submodules, selects CPU flags for the detected Pi, compiles locally, runs CTest and offline verification, and installs/enables the systemd service only after the tests pass. A subsequent readiness check requires live audio telemetry before reporting success. It preserves existing presets, captures and audio settings. It needs Internet for installation, not for local playing.
 
 ### Browser access
 
@@ -62,6 +62,10 @@ bash rpi/install-service.sh --lan
 ```
 
 Then open http://PI_ADDRESS:8080. **LAN mode is unauthenticated HTTP; anyone on that network can operate the pedal and access the connected cloud session. Never expose port 8080 to the Internet or an untrusted network.** Keep loopback mode for shared networks. No public API key, account credentials or Wi-Fi password is bundled.
+
+### Experimental cloud integration
+
+For private development testing only, add --cloud to the service installer (prefer loopback access). A personal publishable key is required; never enter a secret key. Public distribution of the enabled integration must first meet [TONE3000 API terms and design requirements](https://www.tone3000.com/api/terms) and complete end-to-end authentication/download testing.
 
 ### Physical button and hotspot (optional)
 
@@ -97,7 +101,7 @@ ctest --test-dir build-rpi --output-on-failure
 sudo systemctl start rpit3k
 ```
 
-Run the guided installer again for dependency/CPU configuration changes; repeat your desired --lan/--button options. Existing audio settings are retained. Use --jobs 1 on low-memory machines. Check the browser diagnostics and:
+Run the guided installer again for dependency/CPU configuration changes; repeat your desired --lan/--button options (and --cloud only for development). Existing audio settings are retained. Use --jobs 1 on low-memory machines. Check the browser diagnostics and:
 
 ```bash
 sudo systemctl status rpit3k
