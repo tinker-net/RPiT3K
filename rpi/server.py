@@ -25,9 +25,9 @@ LIMIT = 32 * 1024 * 1024
 AMP_ART_KEYS = frozenset(("blackface","silverface","tweed","vox","orange","plexi","matchless","dumble","hiewatt","boutique","generic"))
 AMP_ART_LIMIT = 2 * 1024 * 1024
 NAME = re.compile(r"[\w .()+@-]{1,180}", re.UNICODE)
-DEFAULT = dict(model="", second="", ir="", ir2="", ir_mix=.5, slim=1, slim2=1, input=1, output=.15,
+DEFAULT = dict(model="", second="", ir="", ir2="", ir_mix=.5, hiz=0, hiz_profile=0, slim=1, slim2=1, input=1, output=.15,
                bass=0, mid=0, treble=0, gate=-81, comp=0, comp_post=0, reverb=0, decay=1.5, reverb_type=0, bypass=True)
-RANGES = dict(ir_mix=(0,1), slim=(0,1), slim2=(0,1), input=(0,2), output=(0,1),
+RANGES = dict(hiz=(0,1), hiz_profile=(0,3), ir_mix=(0,1), slim=(0,1), slim2=(0,1), input=(0,2), output=(0,1),
               bass=(-20,20), mid=(-15,15), treble=(-10,10), gate=(-81,-30), comp=(0,1), comp_post=(0,1), reverb=(0,1), decay=(.2,5), reverb_type=(0,2))
 
 class Controller:
@@ -247,7 +247,7 @@ class Controller:
             v = p[k]
             if type(v) not in (int,float) or not math.isfinite(v) or not lo <= v <= hi:
                 raise ValueError("Invalid "+k)
-        if p["comp_post"] not in (0,1) or p["reverb_type"] not in (0,1,2):
+        if p["comp_post"] not in (0,1) or p["reverb_type"] not in (0,1,2) or p["hiz_profile"] not in (0,1,2,3):
             raise ValueError("Invalid effect mode")
         if p["gate"] != -81 and p["gate"] < -80:
             raise ValueError("Invalid gate threshold")
@@ -404,7 +404,7 @@ class Controller:
     def live_controls(self,slot,values):
         if slot!=self.active or self.proc is None or self.proc.poll() is not None:
             raise ValueError("Select the running preset first")
-        keys=("input","output","bass","mid","treble","gate","comp","comp_post","reverb","decay","reverb_type","ir_mix")
+        keys=("input","output","bass","mid","treble","gate","comp","comp_post","reverb","decay","reverb_type","ir_mix","hiz","hiz_profile")
         p=dict(self.presets[slot])
         for k in keys:
             if k not in values: raise ValueError("Missing "+k)
