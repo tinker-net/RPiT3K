@@ -72,6 +72,10 @@ The latest implementation is a downward expander, not an all-or-nothing gate. It
 
 For a constant −45 dBFS detector level, theoretical steady-state gain is −2.25 dB at threshold −45 and −4 dB at threshold −44: a difference of 1.75 dB, rather than a binary mute. The automated test checks this transition as well as opening, release, deep attenuation and OFF transparency. Musical sustain and noise suppression with real pickups still need listening tests. Noise generated after the DAC cannot be removed digitally.
 
+## Experimental effects and calibration
+
+The latest revision adds an Amount-controlled compressor with selectable PRE/POST NAM position and a mono four-line feedback delay network reverb with Spring-style, Plate-style and Room voicings, Mix and Decay (0.2–5 s). These are algorithmic voicings, not physical spring/plate models or measured IRs. Both effects default to OFF in existing presets and are adjustable live. The reverb follows noise reduction so the expander does not cut its tail. Final output gain follows both effects. Calibrate Input reads NAM input_level_dbu metadata and computes 10^((ADC reference − model reference)/20); the suggested +1.14 dBu Pisound reference is nominal at minimum gain, not measured. Missing metadata or out-of-range compensation is rejected. New FX regression tests are included but have not yet been run on target hardware; historical measurements below do not cover active FX.
+
 ## Technical validation
 
 ### 1. Test platform and real-time performance
@@ -145,7 +149,7 @@ An earlier independent test exercised the actual WAV loader, resampler and produ
 
 Both verification runs passed. Finite-frequency shelf gains need not equal their asymptotic gain. The modeled zero-input residual is approximately −108 dBFS RMS after test gain; it is not the Pisound analog noise floor.
 
-Earlier idle telemetry showed maximum raw input peak 0.00483608 (−46.31 dBFS) and processed output peak 0.0234389 (−32.60 dBFS). These are peaks, not RMS noise measurements. They do not identify the cause of analog interference. Automatic analog NAM calibration and calibrated hand-off between captures are not implemented; use manual input gain. A physical voltage calibration is needed before claiming calibrated analog response.
+Earlier idle telemetry showed maximum raw input peak 0.00483608 (−46.31 dBFS) and processed output peak 0.0234389 (−32.60 dBFS). These are peaks, not RMS noise measurements. They do not identify the cause of analog interference. A metadata-based Calibrate Input action is now available using an explicitly entered ADC full-scale reference in dBu. It is not an automatic physical measurement; calibrated hand-off between captures is not implemented. A physical voltage calibration is needed before claiming calibrated analog response.
 
 ### 5. Tuner and current regression status
 
