@@ -555,7 +555,8 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if u.path=="/api/calibrate":
                 v=json.loads(self.body(65536))
-                ref=v["reference_dbu"]
+                ref=c.settings.get("reference_dbu")
+                if ref is None: raise ValueError("Set the ADC full-scale reference in Audio settings first")
                 if type(ref) not in (int,float) or not math.isfinite(ref) or not -60<=ref<=30:
                     raise ValueError("Invalid hardware reference in dBu")
                 path=c.file(v["model"],(".nam",))
