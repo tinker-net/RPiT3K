@@ -17,6 +17,7 @@ public:
         enabled_=true;
     }
     bool enabled() const {return enabled_;}
+    float gain() const {return enabled_?gain_:1.f;}
     float process(float x) {
         if(!enabled_)return x;
         env_=std::max(std::abs(x),env_*0.9979188f); // 10 ms peak decay at 48 kHz
