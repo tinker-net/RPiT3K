@@ -1,10 +1,29 @@
 #include "convolution.h"
 #include "tuner.h"
 #include "noise_gate.h"
+#include "effects.h"
 #include <iostream>
 #include <random>
 #include <stdexcept>
 int main(){
+    RigCompressor compressor;
+    RigReverb reverb;
+    for(float x:{-.3f,0.f,.0001f,.8f})if(compressor.process(x)!=x||reverb.process(x)!=x)throw std::runtime_error("FX OFF transparency");
+    compressor.set(1.f);float compressed=0;
+    for(int i=0;i<48000;++i)compressed=compressor.process(.5f);
+    if(!(compressed>0 && compressed<.1f))throw std::runtime_error("Compressor attenuation");
+    compressor.set(0);for(int i=0;i<48000;++i)compressed=compressor.process(.5f);
+    if(compressed!=.5f)throw std::runtime_error("Compressor bypass recovery");
+    for(int type=0;type<3;++type){
+        RigReverb v;v.set(.5f,1.f,type);
+        for(int i=0;i<4800;++i)v.process(0);
+        v.process(.5f);double early=0,late=0;
+        for(int i=0;i<144000;++i){float y=v.process(0);if(!std::isfinite(y))throw std::runtime_error("Reverb nonfinite");if(i<48000)early+=y*y;if(i>=96000)late+=y*y;}
+        if(!(early>1e-8 && late<early*.01))throw std::runtime_error("Reverb decay");
+        v.set(0,1.f,type);for(int i=0;i<48000;++i)v.process(0);
+        if(v.process(.25f)!=.25f)throw std::runtime_error("Reverb bypass recovery");
+    }
+    std::cout<<"Native FX PASS\n";
     NoiseGate gate;
     for(float v:{-.2f,0.f,.00001f,.3f})if(gate.process(v)!=v)throw std::runtime_error("Gate OFF transparency");
     auto steady=[&](float level,float threshold){
