@@ -3,13 +3,13 @@
 <title>RPiT3K</title><style>
 :root{color-scheme:dark;font:16px system-ui;color:#e8e5df;background:#151617}*{box-sizing:border-box}body{max-width:820px;margin:auto;padding:24px}header{display:flex;justify-content:space-between;align-items:center}h1{letter-spacing:.06em;margin-bottom:0}small{color:#aaa}section{background:#202224;border:1px solid #36393c;border-radius:12px;padding:20px;margin:16px 0}h2{font-size:16px;text-transform:uppercase;letter-spacing:.09em;margin-top:0;color:#d7ad77}button,select,input{font:inherit}button,select{padding:10px;border:1px solid #555;border-radius:7px;background:#303234;color:inherit}button{cursor:pointer}button.primary{background:#d7ad77;color:#161616;border:0;font-weight:bold}button.selected{border:2px solid #d7ad77}button:disabled{opacity:.5;cursor:wait}label{display:block;margin:12px 0}select{width:100%}input[type=range]{width:100%;accent-color:#d7ad77}.row{display:flex;gap:10px;flex-wrap:wrap}.row>*{flex:1}.controls{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:16px}.controls label{margin:0}output{float:right;color:#d7ad77}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;color:#bbb;max-height:180px;overflow:auto}#message{min-height:1.5em;color:#d7ad77}#status{font-size:13px}input[type=file]{max-width:100%}
 </style></head><body>
-<header><div><h1>RPiT3K</h1><small>Raspberry Pi 5 · Pisound · 48 kHz / 64 frames</small></div><span id="status">Connecting…</span></header>
+<header><div><h1>RPiT3K</h1><small>Raspberry Pi 5 · Pisound · 48 kHz</small></div><span id="status">Connecting…</span></header>
 <section><h2>Presets</h2><div class="row" id="slots"></div></section>
-<section><h2>Signal chain</h2>
+<section><h2>System & audio</h2><div class="row"><div>CPU <strong id="cpu">—</strong><br><meter id="cpuMeter" min="0" max="100" value="0"></meter></div><div>Temperature <strong id="temp">—</strong></div><div>Buffer <strong id="latency">—</strong></div></div><p><small id="latencyDetail"></small></p><div class="row"><label>Period size<select id="buffer"><option>64</option><option>128</option><option>256</option><option>512</option></select></label><label>Periods<select id="periods"><option>2</option><option>3</option><option>4</option></select></label><button id="audioSettings">Apply buffer</button></div></section><section><h2>Signal chain</h2><label>Filter library<input id="filter" type="search" placeholder="Search captures or IRs"></label>
 <label>Block 1 — NAM<select id="model"></select></label>
 <label>Model size<select id="slim"><option value="1">Full / maximum</option><option value="0">Lite / minimum (slimmable only)</option></select></label>
-<label>Block 2 — NAM or cabinet IR<select id="second"></select></label>
-<label>Dedicated cabinet IR<select id="ir"></select></label>
+<label>Block 2 — optional NAM<select id="second"></select></label>
+<label>Cabinet IR — WAV<select id="ir"></select></label>
 <label>Second model size<select id="slim2"><option value="1">Full / maximum</option><option value="0">Lite / minimum (slimmable only)</option></select></label>
 <label><input type="checkbox" id="bypass"> Bypass NAM and IR</label>
 </section>
@@ -21,7 +21,7 @@
 <script>
 const el=id=>document.getElementById(id);
 const ranges={input:[0,2,.01],output:[0,1,.01],bass:[-20,20,1],mid:[-15,15,1],treble:[-10,10,1]};
-let state,slot="1",busy=false;
+let state,slot="1",busy=false,settingsInitialized=false,lastActive=null;
 for(const [key,[min,max,step]] of Object.entries(ranges)){
  const label=document.createElement("label"),out=document.createElement("output"),input=document.createElement("input");
  label.append(key.toUpperCase(),out,input);out.id=key+"Value";input.type="range";input.id=key;input.min=min;input.max=max;input.step=step;
@@ -31,10 +31,10 @@ async function request(path,body){
  const opts=body===undefined?{}:{method:"POST",headers:{"X-RPiT3K":"1"},body};
  const res=await fetch(path,opts);const data=await res.json();if(!res.ok)throw Error(data.error||res.status);return data;
 }
-function options(id,files,value){const s=el(id);s.replaceChildren(new Option("None",""));for(const f of files)s.add(new Option(f,f));s.value=value||"";}
+function options(id,files,value){const s=el(id);s.replaceChildren(new Option("None",""));for(const f of files)if(f===value||f.toLowerCase().includes(el("filter").value.toLowerCase()))s.add(new Option(f,f));s.value=value||"";}
 function render(preset){
  options("model",state.files.filter(f=>f.toLowerCase().endsWith(".nam")),preset.model);
- options("second",state.files,preset.second);
+ options("second",state.files.filter(f=>f.toLowerCase().endsWith(".nam")||f===preset.second),preset.second);
  options("ir",state.files.filter(f=>f.toLowerCase().endsWith(".wav")),preset.ir);
  for(const k of ["slim","slim2",...Object.keys(ranges)]){el(k).value=preset[k];if(el(k+"Value"))el(k+"Value").textContent=preset[k];}
  el("bypass").checked=preset.bypass;
@@ -42,16 +42,20 @@ function render(preset){
 function read(){const p={model:el("model").value,second:el("second").value,ir:el("ir").value,bypass:el("bypass").checked};
  for(const k of ["slim","slim2",...Object.keys(ranges)])p[k]=Number(el(k).value);return p;}
 function status(){
- el("status").textContent=state.running?"Audio running · preset "+state.active:"Audio stopped";
+ const t=state.telemetry;if(t){el("cpu").textContent=t.cpu===null?"—":t.cpu+"%";el("cpuMeter").value=t.cpu||0;el("temp").textContent=t.temp===null?"—":t.temp+" °C";el("latency").textContent=t.buffer_ms.toFixed(2)+" ms";el("latencyDetail").textContent=t.buffer+" × "+t.periods+" · period "+t.period_ms.toFixed(2)+" ms · nominal ALSA buffer per direction; not measured round-trip latency";if(!settingsInitialized){el("buffer").value=t.buffer;el("periods").value=t.periods;settingsInitialized=true;}}
+ if(state.active&&state.active!==lastActive){lastActive=state.active;slot=state.active;render(state.presets[slot]);}
+ el("status").textContent=state.running?(state.active?"Audio running · preset "+state.active:"Tuner active"):"Audio stopped";
  el("logs").textContent=state.logs.join("\n");
  const hz=Number((state.tuner||"").split(" ")[1]);
  if(state.running&&state.active===null&&hz>0){const m=69+12*Math.log2(hz/440),n=Math.round(m);el("pitch").textContent=["C","C♯","D","D♯","E","F","F♯","G","G♯","A","A♯","B"][(n%12+12)%12]+(Math.floor(n/12)-1)+" · "+Math.round((m-n)*100)+" cents · "+hz.toFixed(1)+" Hz";}else el("pitch").textContent="—";
  el("slots").replaceChildren();
  for(const k of Object.keys(state.presets)){const b=document.createElement("button");b.textContent="Preset "+k+(state.running&&state.active===k?" •":"");b.className=k===slot?"selected":"";b.disabled=busy;b.onclick=()=>{slot=k;render(state.presets[k]);status()};el("slots").append(b);}
 }
-async function action(fn){if(busy)return;busy=true;for(const id of ["save","apply","stop","uploadBtn","tuner","resume"])el(id).disabled=true;
+async function action(fn){if(busy)return;busy=true;for(const id of ["save","apply","stop","uploadBtn","tuner","resume","audioSettings"])el(id).disabled=true;
  el("message").textContent="Working…";try{await fn();el("message").textContent="Done";}catch(e){el("message").textContent=e.message;}
- finally{busy=false;for(const id of ["save","apply","stop","uploadBtn","tuner","resume"])el(id).disabled=false;status();}}
+ finally{busy=false;for(const id of ["save","apply","stop","uploadBtn","tuner","resume","audioSettings"])el(id).disabled=false;status();}}
+el("filter").oninput=()=>render(read());
+el("audioSettings").onclick=()=>action(async()=>{state=await request("/api/settings",JSON.stringify({buffer:Number(el("buffer").value),periods:Number(el("periods").value)}));settingsInitialized=false;});
 el("save").onclick=()=>action(async()=>{state=await request("/api/save",JSON.stringify({slot,preset:read()}));});
 el("apply").onclick=()=>action(async()=>{state=await request("/api/apply",JSON.stringify({slot,preset:read()}));});
 el("tuner").onclick=()=>action(async()=>{state=await request("/api/tuner","");});
