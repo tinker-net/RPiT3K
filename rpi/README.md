@@ -93,7 +93,7 @@ cmake --build build-rpi -j2
 ctest --test-dir build-rpi --output-on-failure
 ```
 
-Reuse an existing Core checkout if already present; verify its revision. Current ARM64 build targets Cortex-A76. Other platforms are not validated.
+Reuse an existing Core checkout if already present; verify its revision. On this branch the default build is architecture-generic. On ARM64, optionally pass `-DRPIT3K_CPU=cortex-a76` for a Pi 5 or an appropriate compiler-supported CPU target for other hardware. The measurements above were obtained on the Pi-specific baseline, not this branch.
 
 ### Reproduce validation
 
@@ -109,27 +109,50 @@ python3 rpi/ir_test.py
 
 Substitute real local model/IR paths. Stop live service to avoid resource contention during benchmarks. Offline tests do not require an interface; SciPy and reference executable are test-only dependencies.
 
-## Live audio and web controller
+## Generic Debian / USB audio quick start
 
-Lower monitor volume and stop competing audio applications before opening ALSA.
+This branch is experimental. The validation report above is inherited from the Raspberry Pi baseline; generic Linux builds and physical USB audio have not yet been validated. The production DSP algorithms are unchanged.
 
-```sh
-./build-rpi/rpit3k --device hw:pisound --model amp.nam --ir cab.wav --output 0.15
-python3 rpi/server.py
-```
-
-Run CLI and controller separately, not simultaneously on the same hardware. Controller defaults to loopback with generated credentials. SSH tunnel: `ssh -N -L 8080:127.0.0.1:8080 user@pi-host`, then open http://localhost:8080. Import files, choose preset and Apply. Gain/EQ update live in the active preset; model changes restart audio. Data persists under ~/.local/share/rpit3k.
-
-## Autonomous deployment
+On Debian with ALSA, a C++20 compiler, CMake and Python 3, follow the build instructions above. Discover the interface:
 
 ```sh
-bash rpi/install-service.sh
+arecord -l
+aplay -l
 ```
 
-Runs as installing user with realtime priority permission, restores last applied preset, exposes port 8080 without authentication. Trusted isolated LAN only; never expose to Internet. Optional Pisound CLICK_1 cycles presets via loopback API; physical button not yet confirmed. Existing hold/double-click actions retained. CPU metric is total system utilization, displayed buffer duration is nominal, not physical latency.
+Choose the same full-duplex interface for capture and playback, using the ALSA card identifier rather than its numeric index when possible. Replace USB below with the actual identifier and select the logical input channel (1 or 2). On interfaces such as the Scarlett Solo, the instrument jack may correspond to channel 2.
 
-Optional NetworkManager fallback: `bash rpi/install-hotspot.sh`. WPA2 network at 10.42.0.1 when connectivity absent. Once started it stays active until disconnected or rebooted. Disable with `sudo systemctl disable --now rpit3k-hotspot.timer` and `sudo nmcli connection down RPiT3K-fallback`.
+```sh
+./build-rpi/rpit3k --device plughw:CARD=USB,DEV=0 --input-channel 2 \
+  --buffer 256 --periods 3 --bypass --output 0.1
+```
 
-## Portability
+Lower monitor/headphone volume first, disable hardware direct monitoring to avoid hearing a parallel unprocessed signal, and stop other programs that occupy the interface. Use the instrument/Hi-Z input for passive guitar pickups. Ctrl+C stops the engine. The ALSA engine requests 48 kHz, stereo S32_LE and matching capture/playback period and buffer sizes. It logs the actual sizes and rejects mismatches rather than silently changing timing. Try 128, 256 or 512 frames and 2–4 periods if 64 frames is unsupported. `hw:` is direct hardware access; `plughw:` explicitly permits ALSA format/channel/rate adaptation and may introduce extra latency. No guarantee that every interface or channel layout is supported. Interfaces with more than two hardware channels may require a custom ALSA route PCM. Separate unsynchronized input/output devices are not supported as a reliable configuration. USB hotplug recovery is not implemented.
 
-The engine and controller accept an ALSA device name via --device, but this branch is the validated Pi-specific baseline. Generic Debian/USB development is separate in [linux-native](https://github.com/tinker-net/RPiT3K/tree/linux-native). No universal interface compatibility is claimed.
+For the web controller:
+
+```sh
+python3 rpi/server.py --device plughw:CARD=USB,DEV=0 --input-channel 2 \
+  --data ~/.local/share/rpit3k-linux
+```
+
+Open http://127.0.0.1:8080 and use the credentials printed in the terminal. Import models/IRs, select a preset and Apply. Start with a conservative buffer in the settings. Stop the CLI before starting the controller. If using a remote machine, forward port 8080 over SSH. Do not expose unauthenticated HTTP to the network.
+
+## Generic systemd deployment
+
+Run as the normal audio user after a successful manual trial:
+
+```sh
+bash rpi/install-service.sh plughw:CARD=USB,DEV=0 2
+sudo journalctl -u rpit3k-linux -f
+```
+
+The separate `rpit3k-linux.service` grants realtime-priority permission, binds the unauthenticated controller only to loopback, and uses ~/.local/share/rpit3k-linux. It does not install Pisound button support or modify the original Pi service. Do not run both services concurrently (shared port and possibly shared hardware). On a fresh checkout the initial preset may be bypass; import and apply a NAM/IR to test actual processing.
+
+```sh
+sudo systemctl disable --now rpit3k-linux
+```
+
+Use the offline regression checks above on each target, then run the actual NAM + IR preset and check DSP telemetry for late blocks, xruns and clipping. DSP timing excludes ALSA I/O; latency must be measured physically. For reliable operation over long sessions, verify the chosen interface and buffer configuration under realistic load. The generic branch does not claim universal Debian or USB compatibility.
+
+The Pi-specific deployment, Pisound integration and original technical baseline remain in [rpi-native](https://github.com/tinker-net/RPiT3K/tree/rpi-native).
