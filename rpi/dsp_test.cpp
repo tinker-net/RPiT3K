@@ -1,9 +1,26 @@
 #include "convolution.h"
 #include "tuner.h"
+#include "noise_gate.h"
 #include <iostream>
 #include <random>
 #include <stdexcept>
 int main(){
+    NoiseGate gate;
+    for(float v:{-.2f,0.f,.00001f,.3f})if(gate.process(v)!=v)throw std::runtime_error("Gate OFF transparency");
+    gate.set(-50);
+    float y=0;
+    for(int i=0;i<96000;++i)y=gate.process(.0005f);
+    if(std::abs(y)>1e-7f)throw std::runtime_error("Gate does not close");
+    for(int i=0;i<480;++i)y=gate.process(.1f);
+    if(std::abs(y-.1f)>1e-5f)throw std::runtime_error("Gate attack");
+    for(int i=0;i<960;++i)y=gate.process(.0005f);
+    if(y<.00049f)throw std::runtime_error("Gate hold");
+    for(int i=0;i<96000;++i)y=gate.process(.0005f);
+    if(std::abs(y)>1e-7f)throw std::runtime_error("Gate release");
+    gate.set(-81);
+    if(gate.process(.0005f)!=.0005f)throw std::runtime_error("Gate disable");
+    std::cout<<"Noise gate PASS\n";
+
     std::mt19937 rng(42);std::uniform_real_distribution<float> rnd(-.2f,.2f);
     for(unsigned len:{1u,63u,64u,65u,4096u,24000u,48000u}){
         std::vector<float> h(len),x(512),y(((len+511+63)/64)*64);
