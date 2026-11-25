@@ -9,9 +9,11 @@
 <label>Block 1 — NAM<select id="model"></select></label>
 <label>Model size<select id="slim"><option value="1">Full / maximum</option><option value="0">Lite / minimum (slimmable only)</option></select></label>
 <label>Block 2 — NAM or cabinet IR<select id="second"></select></label>
+<label>Dedicated cabinet IR<select id="ir"></select></label>
 <label>Second model size<select id="slim2"><option value="1">Full / maximum</option><option value="0">Lite / minimum (slimmable only)</option></select></label>
 <label><input type="checkbox" id="bypass"> Bypass NAM and IR</label>
 </section>
+<section><h2>Tuner</h2><div class="row"><button id="tuner">Start muted tuner</button><button id="resume">Resume preset</button></div><p id="pitch" style="font-size:2rem;text-align:center">—</p><small>Play one string at a time. A4 = 440 Hz.</small></section>
 <section><h2>Controls</h2><div class="controls" id="controls"></div></section>
 <section><h2>Local library</h2><input type="file" id="upload" accept=".nam,.wav" multiple><button id="uploadBtn">Import files</button><p><small>Mono NAM and WAV. Files stay on the Raspberry Pi.</small></p></section>
 <div class="row"><button id="save">Save preset</button><button id="apply" class="primary">Apply / start audio</button><button id="stop">Stop audio</button></div>
@@ -33,22 +35,27 @@ function options(id,files,value){const s=el(id);s.replaceChildren(new Option("No
 function render(preset){
  options("model",state.files.filter(f=>f.toLowerCase().endsWith(".nam")),preset.model);
  options("second",state.files,preset.second);
+ options("ir",state.files.filter(f=>f.toLowerCase().endsWith(".wav")),preset.ir);
  for(const k of ["slim","slim2",...Object.keys(ranges)]){el(k).value=preset[k];if(el(k+"Value"))el(k+"Value").textContent=preset[k];}
  el("bypass").checked=preset.bypass;
 }
-function read(){const p={model:el("model").value,second:el("second").value,bypass:el("bypass").checked};
+function read(){const p={model:el("model").value,second:el("second").value,ir:el("ir").value,bypass:el("bypass").checked};
  for(const k of ["slim","slim2",...Object.keys(ranges)])p[k]=Number(el(k).value);return p;}
 function status(){
  el("status").textContent=state.running?"Audio running · preset "+state.active:"Audio stopped";
  el("logs").textContent=state.logs.join("\n");
+ const hz=Number((state.tuner||"").split(" ")[1]);
+ if(state.running&&state.active===null&&hz>0){const m=69+12*Math.log2(hz/440),n=Math.round(m);el("pitch").textContent=["C","C♯","D","D♯","E","F","F♯","G","G♯","A","A♯","B"][(n%12+12)%12]+(Math.floor(n/12)-1)+" · "+Math.round((m-n)*100)+" cents · "+hz.toFixed(1)+" Hz";}else el("pitch").textContent="—";
  el("slots").replaceChildren();
  for(const k of Object.keys(state.presets)){const b=document.createElement("button");b.textContent="Preset "+k+(state.running&&state.active===k?" •":"");b.className=k===slot?"selected":"";b.disabled=busy;b.onclick=()=>{slot=k;render(state.presets[k]);status()};el("slots").append(b);}
 }
-async function action(fn){if(busy)return;busy=true;for(const id of ["save","apply","stop","uploadBtn"])el(id).disabled=true;
+async function action(fn){if(busy)return;busy=true;for(const id of ["save","apply","stop","uploadBtn","tuner","resume"])el(id).disabled=true;
  el("message").textContent="Working…";try{await fn();el("message").textContent="Done";}catch(e){el("message").textContent=e.message;}
- finally{busy=false;for(const id of ["save","apply","stop","uploadBtn"])el(id).disabled=false;status();}}
+ finally{busy=false;for(const id of ["save","apply","stop","uploadBtn","tuner","resume"])el(id).disabled=false;status();}}
 el("save").onclick=()=>action(async()=>{state=await request("/api/save",JSON.stringify({slot,preset:read()}));});
 el("apply").onclick=()=>action(async()=>{state=await request("/api/apply",JSON.stringify({slot,preset:read()}));});
+el("tuner").onclick=()=>action(async()=>{state=await request("/api/tuner","");});
+el("resume").onclick=()=>action(async()=>{state=await request("/api/apply",JSON.stringify({slot,preset:read()}));});
 el("stop").onclick=()=>action(async()=>{state=await request("/api/stop","");});
 el("uploadBtn").onclick=()=>action(async()=>{const p=read();for(const f of el("upload").files){state=await request("/api/upload?name="+encodeURIComponent(f.name),f);}render(p);el("upload").value="";});
 (async()=>{try{state=await request("/api/status");render(state.presets[slot]);status();setInterval(async()=>{if(!busy){try{const s=await request("/api/status");if(!busy){state=s;status();}}catch(e){el("status").textContent="Disconnected";}}},2000);}catch(e){el("message").textContent=e.message;}})();
