@@ -2,10 +2,28 @@
 #include "tuner.h"
 #include "noise_gate.h"
 #include "effects.h"
+#include "hiz.h"
 #include <iostream>
 #include <random>
 #include <stdexcept>
 int main(){
+    for(int profile=0;profile<4;++profile){
+        HiZCompensation h;
+        for(float x:{-.5f,0.f,.001f,.5f})if(h.process(x)!=x)throw std::runtime_error("Hi-Z OFF transparency");
+        h.set(1,profile);
+        double input=0,output=0;
+        for(int i=0;i<96000;++i){
+            float x=.05f*std::sin(6.283185307179586*3000*i/48000.);
+            float y=h.process(x);
+            if(!std::isfinite(y)||std::abs(y)>1)throw std::runtime_error("Hi-Z stability");
+            if(i>=48000){input+=x*x;output+=y*y;}
+        }
+        if(!(output>input))throw std::runtime_error("Hi-Z resonance compensation");
+        h.set(0,profile);
+        for(int i=0;i<48000;++i)h.process(0);
+        if(h.process(.2f)!=.2f)throw std::runtime_error("Hi-Z bypass recovery");
+    }
+    std::cout<<"Hi-Z compensation PASS\n";
     RigCompressor compressor;
     RigReverb reverb;
     for(float x:{-.3f,0.f,.0001f,.8f})if(compressor.process(x)!=x||reverb.process(x)!=x)throw std::runtime_error("FX OFF transparency");
