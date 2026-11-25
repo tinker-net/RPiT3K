@@ -8,12 +8,14 @@ user="$(id -un)"
 home="$HOME"
 bind=127.0.0.1
 button=no
+cloud=--disable-cloud
 buffer=64
 periods=3
 while (($#)); do
  case "$1" in
   --lan) bind=0.0.0.0 ;;
   --button) button=yes ;;
+  --cloud) cloud= ;;
   --buffer) buffer="${2:?missing buffer}"; shift ;;
   --periods) periods="${2:?missing periods}"; shift ;;
   *) echo "Unknown option: $1"; exit 1 ;;
@@ -38,7 +40,7 @@ fi
 if [[ "$bind" == 0.0.0.0 ]]; then
  echo "WARNING: unauthenticated HTTP on the local network. Use only on a trusted isolated LAN."
 fi
-printf '[Unit]\nDescription=RPiT3K native pedal\nAfter=sound.target\n\n[Service]\nType=simple\nUser=%s\nSupplementaryGroups=audio\nWorkingDirectory=%s\nExecStart=/usr/bin/python3 %s/rpi/server.py --device hw:CARD=pisound,DEV=0 --bind %s --no-auth --autostart --data %s/.local/share/rpit3k\nLimitRTPRIO=60\nRestart=on-failure\nRestartSec=3\nUMask=0077\n\n[Install]\nWantedBy=multi-user.target\n' "$user" "$root" "$root" "$bind" "$home" | sudo tee /etc/systemd/system/rpit3k.service >/dev/null
+printf '[Unit]\nDescription=RPiT3K native pedal\nAfter=sound.target\n\n[Service]\nType=simple\nUser=%s\nSupplementaryGroups=audio\nWorkingDirectory=%s\nExecStart=/usr/bin/python3 %s/rpi/server.py --device hw:CARD=pisound,DEV=0 --bind %s --no-auth --autostart %s --data %s/.local/share/rpit3k\nLimitRTPRIO=60\nRestart=on-failure\nRestartSec=3\nUMask=0077\n\n[Install]\nWantedBy=multi-user.target\n' "$user" "$root" "$root" "$bind" "$cloud" "$home" | sudo tee /etc/systemd/system/rpit3k.service >/dev/null
 sudo install -m 755 "$root/rpi/next-preset.sh" /usr/local/bin/rpit3k-next
 if [[ "$button" == yes ]]; then
  if systemctl cat pisound-btn.service >/dev/null 2>&1 && [[ -f /etc/pisound.conf ]]; then
@@ -54,4 +56,14 @@ sudo systemctl daemon-reload
 sudo systemctl enable rpit3k.service
 sudo systemctl restart rpit3k.service
 sudo systemctl --no-pager status rpit3k.service
-echo "Local UI: http://127.0.0.1:8080"
+# Verify actual live audio telemetry, not just the Python service process.
+for attempt in $(seq 1 30); do
+ if curl --noproxy '*' --silent --fail --max-time 2 http://127.0.0.1:8080/api/levels | python3 -c 'import json,sys; sys.exit(not json.load(sys.stdin).get("valid"))' 2>/dev/null; then
+  echo "Audio stream confirmed by live telemetry."
+  echo "Local UI: http://127.0.0.1:8080"
+  exit 0
+ fi
+ sleep 1
+done
+echo "Audio telemetry not available; inspect browser diagnostics and journalctl -u rpit3k." >&2
+exit 1
