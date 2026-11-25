@@ -38,6 +38,8 @@ class Controller:
         self.cloud = ToneCloud(self)
         self.proc = None
         self.meter = None
+        self.xrun_lock = threading.Lock()
+        self.xrun_total = 0
         self.logs = deque(maxlen=100)
         self.active = None
         self.tuner_return = None
@@ -147,8 +149,28 @@ class Controller:
         self.meter=None
 
     def drain(self,proc):
+        # Engine reports a cumulative recovery count, including ALSA suspend
+        # recovery. Count deltas, not log lines, to avoid double counting.
         for line in proc.stdout:
-            self.logs.append(line.rstrip())
+            line=line.rstrip()
+            self.logs.append(line)
+            match=(re.search(r"\bxruns=(\d+)\b",line) if line.startswith("DSP ") else
+                   re.fullmatch(r"ALSA (?:xrun/restart #|xruns/restarts: )(\d+)",line))
+            if match:
+                n=int(match.group(1))
+                with self.xrun_lock:
+                    old=proc.rpit3k_xruns
+                    if n>old:
+                        proc.rpit3k_xruns=n
+                        self.xrun_total+=n-old
+                if n>old:
+                    print("ALSA recovery: engine count="+str(n),flush=True)
+
+    def xrun_status(self):
+        with self.xrun_lock:
+            proc=self.proc
+            current=getattr(proc,"rpit3k_xruns",None) if proc and proc.poll() is None else None
+            return dict(xruns=current,xruns_total=self.xrun_total)
 
     def apply(self,slot,p,benchmark=True):
         p=self.validate(p)
@@ -212,6 +234,7 @@ class Controller:
             raise
         finally:
             os.close(wr)
+        self.proc.rpit3k_xruns=0
         threading.Thread(target=self.drain_meter,args=(self.proc,rd),daemon=True).start()
         threading.Thread(target=self.drain,args=(self.proc,),daemon=True).start()
         time.sleep(.35)
@@ -264,7 +287,7 @@ class Controller:
         try: temp=round(int(Path("/sys/class/thermal/thermal_zone0/temp").read_text())/1000,1)
         except (OSError,ValueError): temp=None
         b,p=self.settings["buffer"],self.settings["periods"]
-        return dict(cpu=self.cpu_pct,temp=temp,buffer=b,periods=p,period_ms=b/48,buffer_ms=b*p/48)
+        return dict(cpu=self.cpu_pct,temp=temp,buffer=b,periods=p,period_ms=b/48,buffer_ms=b*p/48,**self.xrun_status())
 
     def status(self):
         return dict(presets=self.presets,active=self.active,settings=self.settings,telemetry=self.telemetry(),
