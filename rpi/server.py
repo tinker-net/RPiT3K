@@ -25,9 +25,9 @@ LIMIT = 32 * 1024 * 1024
 AMP_ART_KEYS = frozenset(("blackface","silverface","tweed","vox","orange","plexi","matchless","dumble","hiewatt","boutique","generic"))
 AMP_ART_LIMIT = 2 * 1024 * 1024
 NAME = re.compile(r"[\w .()+@-]{1,180}", re.UNICODE)
-DEFAULT = dict(model="", second="", ir="", slim=1, slim2=1, input=1, output=.15,
+DEFAULT = dict(model="", second="", ir="", ir2="", ir_mix=.5, slim=1, slim2=1, input=1, output=.15,
                bass=0, mid=0, treble=0, gate=-81, comp=0, comp_post=0, reverb=0, decay=1.5, reverb_type=0, bypass=True)
-RANGES = dict(slim=(0,1), slim2=(0,1), input=(0,2), output=(0,1),
+RANGES = dict(ir_mix=(0,1), slim=(0,1), slim2=(0,1), input=(0,2), output=(0,1),
               bass=(-20,20), mid=(-15,15), treble=(-10,10), gate=(-81,-30), comp=(0,1), comp_post=(0,1), reverb=(0,1), decay=(.2,5), reverb_type=(0,2))
 
 class Controller:
@@ -139,7 +139,7 @@ class Controller:
         new=dst.relative_to(self.library).as_posix()
         def remap(path):
             return new+path[len(old):] if path==old or (kind=="folder" and path.startswith(old+"/")) else path
-        presets={slot:{**preset,**{k:remap(preset[k]) for k in ("model","second","ir")}} for slot,preset in self.presets.items()}
+        presets={slot:{**preset,**{k:remap(preset[k]) for k in ("model","second","ir","ir2")}} for slot,preset in self.presets.items()}
         favorites={remap(path) for path in self.favorites}
         # Audio models are already loaded in memory. Do not restart audio.
         src.rename(dst)
@@ -166,7 +166,7 @@ class Controller:
         else: raise ValueError("Invalid item")
         def contains(value):
             return value==path or (kind=="folder" and value.startswith(path+"/"))
-        used=[slot for slot,preset in self.presets.items() if any(contains(preset[k]) for k in ("model","second","ir"))]
+        used=[slot for slot,preset in self.presets.items() if any(contains(preset[k]) for k in ("model","second","ir","ir2"))]
         if used: raise ValueError("Used by preset(s) "+", ".join(used)+". Change those presets before removing this item.")
         updated={f for f in self.favorites if not contains(f)}
         if kind=="folder":
@@ -251,7 +251,7 @@ class Controller:
             raise ValueError("Invalid effect mode")
         if p["gate"] != -81 and p["gate"] < -80:
             raise ValueError("Invalid gate threshold")
-        for k,ext in (("model",(".nam",)),("second",(".nam",".wav")),("ir",(".wav",))):
+        for k,ext in (("model",(".nam",)),("second",(".nam",".wav")),("ir",(".wav",)),("ir2",(".wav",))):
             if p[k] != "" and not self.file(p[k],ext).is_file():
                 raise ValueError("Missing "+k)
         if not p["bypass"] and not p["model"]:
@@ -278,6 +278,8 @@ class Controller:
                 cmd+=["--second",str(self.library/p["second"])]
             if p["ir"]:
                 cmd+=["--ir",str(self.library/p["ir"])]
+            if p["ir2"]:
+                cmd+=["--ir2",str(self.library/p["ir2"])]
         for k in RANGES:
             cmd+=["--"+k,str(p[k])]
         return cmd
@@ -402,7 +404,7 @@ class Controller:
     def live_controls(self,slot,values):
         if slot!=self.active or self.proc is None or self.proc.poll() is not None:
             raise ValueError("Select the running preset first")
-        keys=("input","output","bass","mid","treble","gate","comp","comp_post","reverb","decay","reverb_type")
+        keys=("input","output","bass","mid","treble","gate","comp","comp_post","reverb","decay","reverb_type","ir_mix")
         p=dict(self.presets[slot])
         for k in keys:
             if k not in values: raise ValueError("Missing "+k)
