@@ -61,13 +61,14 @@ struct Options {
     std::string device = "hw:pisound", model, second, ir;
     double slim = 1., slim2 = 1.;
     float input = 1., output = .25f, bass = 0., mid = 0., treble = 0.;
-    bool benchmark = false, bypass = false, tuner = false, live = false;
+    bool benchmark = false, bypass = false, tuner = false, live = false, verify = false;
 };
 Options parse(int argc, char** argv) {
     Options o;
     for(int i=1;i<argc;++i) {
         std::string k=argv[i];
         if(k=="--live-controls") {o.live=true;continue;}
+        if(k=="--verify") {o.verify=true;continue;}
         if(k=="--benchmark") {o.benchmark=true;continue;}
         if(k=="--tuner") {o.tuner=true;continue;}
         if(k=="--bypass") {o.bypass=true;continue;}
@@ -195,6 +196,39 @@ struct Chain {
 int main(int argc,char** argv) {
     try {
         auto o=parse(argc,argv); Chain chain(o);
+        if(o.verify){
+            // Same Chain as live playback; deterministic signal, no ALSA device.
+            auto measure=[&](float hz){
+                double sum=0;unsigned count=0,clipped=0;
+                for(unsigned i=0;i<96000/block;++i){
+                    for(unsigned j=0;j<block;++j)chain.x[j]=.01f*std::sin(6.283185307179586*hz*(i*block+j)/rate);
+                    chain.process();
+                    if(i>=48000/block)for(unsigned j=0;j<block;++j){
+                        double v=chain.y[j];sum+=v*v;++count;if(std::abs(v)>=.99999)++clipped;
+                    }
+                }
+                std::cout<<"frequency="<<hz<<" rms="<<std::sqrt(sum/count)<<" clipped="<<clipped<<"\n";
+                return std::sqrt(sum/count);
+            };
+            std::cout<<"VERIFY NAM="<<bool(chain.a)<<" NAM2="<<bool(chain.b)<<" IR="<<bool(chain.ir)<<"\n";
+            if(o.tuner)throw std::runtime_error("Verify requires audio mode");
+            chain.controls(1,.25,0,0,0);double base=measure(440);
+            chain.controls(1,.125,0,0,0);double half=measure(440);
+            chain.controls(1,0,0,0,0);double mute=measure(440);
+            chain.controls(0,.25,0,0,0);double zero_in=measure(440);
+            chain.controls(1,.25,0,0,0);double low=measure(80);
+            chain.controls(1,.25,10,0,0);double boost_low=measure(80);
+            chain.controls(1,.25,0,0,0);double mid=measure(425);
+            chain.controls(1,.25,0,10,0);double boost_mid=measure(425);
+            chain.controls(1,.25,0,0,0);double high=measure(3000);
+            chain.controls(1,.25,0,0,10);double boost_high=measure(3000);
+            auto db=[](double a,double b){return 20*std::log10(a/b);};
+            std::cout<<"output_half_db="<<db(half,base)<<" mute_rms="<<mute<<" zero_input_rms="<<zero_in
+                     <<" bass_delta_db="<<db(boost_low,low)<<" mid_delta_db="<<db(boost_mid,mid)<<" treble_delta_db="<<db(boost_high,high)<<"\n";
+            bool pass=base>1e-7&&std::abs(db(half,base)+6.0206)<.2&&mute==0&&
+                db(boost_low,low)>5&&db(boost_mid,mid)>7&&db(boost_high,high)>5;
+            std::cout<<"VERIFY "<<(pass?"PASS":"FAIL")<<"\n";return pass?0:2;
+        }
         if(o.benchmark) {
             using clock=std::chrono::steady_clock;
             double worst=0, total=0;
@@ -231,7 +265,9 @@ int main(int argc,char** argv) {
                 }else if(used<sizeof(line)-1)line[used++]=buf[k];else overflow=true;
             }
         };
-        unsigned xruns=0;
+        unsigned xruns=0, measured=0, late=0, clipped=0;
+        double total_us=0,worst_us=0,in_peak=0,out_peak=0;
+        auto report_at=std::chrono::steady_clock::now();
         auto restart=[&] {
             snd_pcm_drop(play.get());snd_pcm_drop(cap.get());
             check(snd_pcm_prepare(cap.get()),"prepare capture");
@@ -254,8 +290,13 @@ int main(int argc,char** argv) {
             if(!running)break;
             if(!failed){
                 for(unsigned i=0;i<block;++i)chain.x[i]=buf[i*2]/2147483648.0;
+                for(unsigned i=0;i<block;++i)in_peak=std::max(in_peak,double(std::abs(chain.x[i])));
+                auto dsp_start=std::chrono::steady_clock::now();
                 poll_controls();
                 chain.process();
+                double us=std::chrono::duration<double,std::micro>(std::chrono::steady_clock::now()-dsp_start).count();
+                total_us+=us;worst_us=std::max(worst_us,us);++measured;if(us>1e6*block/rate)++late;
+                for(unsigned i=0;i<block;++i){out_peak=std::max(out_peak,double(std::abs(chain.y[i])));if(std::abs(chain.y[i])>=.99999f)++clipped;}
                 for(unsigned i=0;i<block;++i) {
                     auto s=static_cast<int32_t>(std::clamp(double(chain.y[i])*2147483648.,-2147483648.,2147483647.));
                     buf[i*2]=buf[i*2+1]=s;
@@ -269,6 +310,11 @@ int main(int argc,char** argv) {
                     if(w==0)continue;
                     done+=w;
                 }
+            }
+            auto now=std::chrono::steady_clock::now();
+            if(measured && now-report_at>=std::chrono::seconds(5)){
+                std::cerr<<"DSP mean_us="<<total_us/measured<<" max_us="<<worst_us<<" deadline_us="<<1e6*block/rate<<" blocks="<<measured<<" late="<<late<<" xruns="<<xruns<<" in_peak="<<in_peak<<" out_peak="<<out_peak<<" clipped_samples="<<clipped<<" NAM="<<bool(chain.a)<<" IR="<<bool(chain.ir)<<"\n";
+                measured=late=clipped=0;total_us=worst_us=in_peak=out_peak=0;report_at=now;
             }
             if(failed && running){
                 ++xruns;
