@@ -21,10 +21,10 @@ public:
     float process(float x) {
         if(!enabled_)return x;
         env_=std::max(std::abs(x),env_*0.9979188f); // 10 ms peak decay at 48 kHz
-        if(env_>=threshold_){open_=true;hold_=2400;}
-        else if(open_){if(env_>=close_)hold_=2400;else if(hold_)--hold_;else open_=false;}
-        gain_+=(open_?0.0206178f:0.00020831f)*((open_?1.f:0.f)-gain_); // 1/100 ms time constants
-        if(gain_<1e-7f)gain_=0;
+        if(env_>=threshold_){open_=true;hold_=5760;}
+        else if(open_){if(env_>=close_)hold_=5760;else if(hold_)--hold_;else open_=false;}
+        gain_+=(open_?0.0206178f:0.00005952204f)*((open_?1.f:0.f)-gain_); // 1 ms opening / 350 ms closing time constants
+        if(!open_&&gain_<1e-7f)gain_=0;
         return x*gain_;
     }
 };
