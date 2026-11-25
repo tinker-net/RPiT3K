@@ -22,6 +22,8 @@ from urllib.parse import urlsplit, parse_qs
 
 ROOT = Path(__file__).resolve().parent.parent
 LIMIT = 32 * 1024 * 1024
+AMP_ART_KEYS = frozenset(("blackface","silverface","tweed","vox","orange","plexi","matchless","dumble","hiewatt","boutique","generic"))
+AMP_ART_LIMIT = 2 * 1024 * 1024
 NAME = re.compile(r"[\w .()+@-]{1,180}", re.UNICODE)
 DEFAULT = dict(model="", second="", ir="", slim=1, slim2=1, input=1, output=.15,
                bass=0, mid=0, treble=0, gate=-81, comp=0, comp_post=0, reverb=0, decay=1.5, reverb_type=0, bypass=True)
@@ -173,6 +175,35 @@ class Controller:
             src.unlink()
         self.write_json(self.favoritesfile,sorted(updated))
         self.favorites=updated
+
+    def amp_art_path(self,key):
+        if key not in AMP_ART_KEYS: raise ValueError("Unknown amp artwork family")
+        folder=self.data/"amp-art"
+        if folder.is_symlink(): raise ValueError("Invalid artwork directory")
+        path=folder/(key+".webp")
+        if path.is_symlink(): raise ValueError("Invalid artwork path")
+        return path
+
+    def amp_art_versions(self):
+        versions={}
+        for key in AMP_ART_KEYS:
+            try:
+                path=self.amp_art_path(key)
+                if path.is_file(): versions[key]=str(path.stat().st_mtime_ns)
+            except (ValueError,OSError): pass
+        return versions
+
+    def install_amp_art(self,key,data):
+        if len(data)<20 or data[:4]!=b"RIFF" or data[8:12]!=b"WEBP" or int.from_bytes(data[4:8],"little")!=len(data)-8 or data[12:16] not in (b"VP8 ",b"VP8L",b"VP8X"):
+            raise ValueError("Expected a valid WebP container")
+        path=self.amp_art_path(key)
+        path.parent.mkdir(mode=0o700,exist_ok=True)
+        tmp=path.parent/(key+"-"+secrets.token_hex(8)+".tmp")
+        try:
+            with tmp.open("xb") as f: f.write(data)
+            os.replace(tmp,path)
+        finally:
+            tmp.unlink(missing_ok=True)
 
     def library_folders(self):
         folders=[]
@@ -431,7 +462,7 @@ class Controller:
                     cloud_enabled=not self.args.disable_cloud,
                     poweroff_enabled=os.environ.get("RPIT3K_ENABLE_POWEROFF")=="1",
                     running=self.proc is not None and self.proc.poll() is None,
-                    files=self.library_files(),folders=self.library_folders(),favorites=sorted(self.favorites),
+                    files=self.library_files(),folders=self.library_folders(),favorites=sorted(self.favorites),amp_art=self.amp_art_versions(),
                     logs=list(self.logs), tuner=next((line for line in reversed(list(self.logs)) if line.startswith("TUNER ")), ""))
 
 class Handler(BaseHTTPRequestHandler):
@@ -479,6 +510,13 @@ class Handler(BaseHTTPRequestHandler):
         path=urlsplit(self.path).path
         if path=="/":
             self.send(200,(ROOT/"rpi/web.html").read_bytes(),"text/html; charset=utf-8")
+        elif path.startswith("/api/amp-art/"):
+            try:
+                asset=self.server.controller.amp_art_path(path.rsplit("/",1)[-1])
+                if not asset.is_file() or asset.stat().st_size>AMP_ART_LIMIT: raise ValueError("Artwork unavailable")
+                self.send(200,asset.read_bytes(),"image/webp")
+            except (OSError,ValueError):
+                self.send(404,dict(error="Artwork unavailable"))
         elif path=="/api/levels":
             self.send(200,self.server.controller.levels())
         elif path=="/api/devices":
@@ -537,7 +575,10 @@ class Handler(BaseHTTPRequestHandler):
                 self.send(200,c.cloud.action(u.path.rsplit('/',1)[-1],v))
                 return
             with c.lock:
-                if u.path=="/api/upload":
+                if u.path.startswith("/api/amp-art/"):
+                    key=u.path.rsplit("/",1)[-1]
+                    c.install_amp_art(key,self.body(AMP_ART_LIMIT))
+                elif u.path=="/api/upload":
                     name=parse_qs(u.query).get("name",[""])[0]
                     if not isinstance(name,str): raise ValueError("Invalid filename")
                     folder,name_only=name.rsplit("/",1) if "/" in name else ("",name)
