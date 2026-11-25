@@ -8,7 +8,7 @@ C++20, direct ALSA full duplex, 48 kHz, stereo S32_LE (left input, dual mono out
 
 Signal path: input gain → NAM → optional second NAM → optional cabinet IR → three-band EQ → output gain → finite-value guard and clamp. Full/minimum size selection for compatible slimmable models; fixed-size models subject to Core compatibility. Native FFT partitioned convolution (64-sample partitions), mono WAV IR up to 48,000 samples at 48 kHz, windowed-sinc resampling with sample-rate-ratio gain compensation. No automatic IR loudness normalization or automatic analog NAM calibration. Bypass skips NAM/IR but retains gain and EQ.
 
-Live gain/EQ controls are smoothed. Tuner mode mutes output. SCHED_FIFO priority 60 is requested, with normal-priority fallback; ALSA xrun/suspend recovery restarts both streams. Python web controller, four persistent presets, local NAM/WAV imports, systemd autostart, optional Pisound button and NetworkManager hotspot. Preset switches restart audio and are not gapless. No MIDI or TONE3000 account integration yet.
+Live gain/EQ controls are smoothed. Tuner mode mutes output. SCHED_FIFO priority 60 is requested, with normal-priority fallback; ALSA xrun/suspend recovery restarts both streams. Python web controller, four persistent presets, local NAM/WAV imports, systemd autostart, optional Pisound button and NetworkManager hotspot. Preset switches restart audio and are not gapless. No MIDI control. Experimental TONE3000 account integration is optional and not end-to-end validated. See [Pisound installation and usage](../README-PISOUND.md).
 
 ## Technical validation report — 2026-11-25
 
@@ -75,6 +75,10 @@ Acceptance: relative RMS residual <= -80 dB, maximum absolute error <= 1e-4, equ
 
 96-to-48 kHz alias test: equal-amplitude windowed 36 kHz versus 10 kHz tones, -79.88 dB (PASS). Thresholds: residual <= -50 dB, absolute DC deviation <= 0.1 dB, peak shift <= 1 sample, tail <= 1e-5, alias ratio <= -50 dB. Project engineering criteria, not industry certification. These results do not characterize the full transition band or every WAV encoding, IR length or sample rate.
 
+### Updated DSP regression results (2026-11-25)
+
+On Pi 5, the soft-knee expander, convolution and tuner suite passed (1/1, 0.25 s). Bypass --verify also passed with the same gain/EQ/mute measurements above. Maximum convolution error 3.97309e-7 and maximum synthetic tuner error 2.67776 cents. These results do not establish live gate behavior or long-session stability.
+
 ### Remaining validation
 
 Long-session stability under realistic load; measured physical ADC–DAC round-trip latency; physical input/output calibration and noise/headroom; additional NAM architectures, dual NAM chains and IRs; physical preset button and network/preset switching robustness. The digital path meets the defined acceptance criteria for tested configurations. Retain the tests as regression checks.
@@ -93,7 +97,7 @@ cmake --build build-rpi -j2
 ctest --test-dir build-rpi --output-on-failure
 ```
 
-Reuse an existing Core checkout if already present; verify its revision. Current ARM64 build targets Cortex-A76. Other platforms are not validated.
+Reuse an existing Core checkout if already present; verify its revision. ARM64 CPU tuning is optional via -DRPIT3K_CPU=cortex-a76 (Pi 5 only); the guided installer selects a target for the detected hardware. Other platforms are not validated.
 
 ### Reproduce validation
 
@@ -123,12 +127,12 @@ Run CLI and controller separately, not simultaneously on the same hardware. Cont
 ## Autonomous deployment
 
 ```sh
-bash rpi/install-service.sh
+bash rpi/install-service.sh --lan --button
 ```
 
-Runs as installing user with realtime priority permission, restores last applied preset, exposes port 8080 without authentication. Trusted isolated LAN only; never expose to Internet. Optional Pisound CLICK_1 cycles presets via loopback API; physical button not yet confirmed. Existing hold/double-click actions retained. CPU metric is total system utilization, displayed buffer duration is nominal, not physical latency.
+Runs as installing user with realtime priority permission and restores last applied preset. The explicit --lan option exposes port 8080 without authentication; default is loopback-only. Trusted isolated LAN only; never expose to Internet. Optional Pisound CLICK_1 cycles presets via loopback API; physical button not yet confirmed. Existing hold/double-click actions retained. CPU metric is total system utilization, displayed buffer duration is nominal, not physical latency.
 
-Optional NetworkManager fallback: `bash rpi/install-hotspot.sh`. WPA2 network at 10.42.0.1 when connectivity absent. Once started it stays active until disconnected or rebooted. Disable with `sudo systemctl disable --now rpit3k-hotspot.timer` and `sudo nmcli connection down RPiT3K-fallback`.
+Optional NetworkManager fallback (requires --lan): `bash rpi/install-hotspot.sh`. WPA2 network at 10.42.0.1 when connectivity absent. Once started it stays active until disconnected or rebooted. Disable with `sudo systemctl disable --now rpit3k-hotspot.timer` and `sudo nmcli connection down RPiT3K-fallback`.
 
 ## Portability
 
