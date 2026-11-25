@@ -1,6 +1,7 @@
 #include <alsa/asoundlib.h>
 #include "NAM/get_dsp.h"
 #include "NAM/slimmable.h"
+#include "hybrid_nam.h"
 #include "../eq3band.h"
 #include "convolution.h"
 #include "tuner.h"
@@ -121,16 +122,8 @@ Options parse(int argc, char** argv) {
     if(!std::isfinite(o.hiz)||o.hiz<0||o.hiz>1||!(o.hiz_profile==0||o.hiz_profile==1||o.hiz_profile==2||o.hiz_profile==3))throw std::runtime_error("Invalid Hi-Z compensation");
     return o;
 }
-std::unique_ptr<nam::DSP> load(const std::string& path,double slim) {
-    if(path.empty()) return {};
-    auto m=nam::get_dsp(std::filesystem::path(path));
-    if(m->NumInputChannels()!=1||m->NumOutputChannels()!=1) throw std::runtime_error("Mono models/IR only in prototype");
-    if(auto* s=dynamic_cast<nam::SlimmableModel*>(m.get())) s->SetSlimmableSize(slim);
-    else if(slim!=1.) throw std::runtime_error("Capture is not slimmable: "+path);
-    double sr=m->GetExpectedSampleRate();
-    if(sr>0&&sr!=rate&&!m->SupportsArbitrarySampleRate()) throw std::runtime_error("Model sample rate differs from 48 kHz");
-    m->Reset(rate,block);
-    return m;
+std::unique_ptr<hybrid::Model> load(const std::string& path,double slim) {
+    return hybrid::load(path,slim,rate,block);
 }
 bool is_wav(const std::string& path) {
     auto ext=std::filesystem::path(path).extension().string();
@@ -166,7 +159,7 @@ std::unique_ptr<CabinetConvolver> load_ir(const std::string& path) {
     return std::make_unique<CabinetConvolver>(samples);
 }
 struct Chain {
-    std::unique_ptr<nam::DSP> a,b;
+    std::unique_ptr<hybrid::Model> a,b;
     std::unique_ptr<CabinetConvolver> ir,ir2;
     float ir_mix,target_ir_mix;
     Eq3Band eq;
