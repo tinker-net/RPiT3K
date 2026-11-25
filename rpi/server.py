@@ -293,6 +293,7 @@ class Controller:
 
     def status(self):
         return dict(presets=self.presets,active=self.active,settings=self.settings,telemetry=self.telemetry(),
+                    cloud_enabled=not self.args.disable_cloud,
                     running=self.proc is not None and self.proc.poll() is None,
                     files=self.library_files(),
                     logs=list(self.logs), tuner=next((line for line in reversed(list(self.logs)) if line.startswith("TUNER ")), ""))
@@ -311,6 +312,13 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def authorized(self):
+        if self.server.server_address[0] == '127.0.0.1':
+            host=self.headers.get('Host','').lower()
+            allowed={f'localhost:{self.server.server_port}',f'127.0.0.1:{self.server.server_port}'}
+            if self.server.server_port==80: allowed.update(('localhost','127.0.0.1'))
+            if host not in allowed:
+                self.send(403,dict(error='Invalid Host; use localhost or 127.0.0.1'))
+                return False
         if self.server.password is None: return True
         expected="Basic "+base64.b64encode((self.server.username+":"+self.server.password).encode()).decode()
         if hmac.compare_digest(self.headers.get("Authorization",""),expected):
@@ -352,6 +360,8 @@ class Handler(BaseHTTPRequestHandler):
         u=urlsplit(self.path)
         try:
             if u.path.startswith('/api/tone3000/'):
+                if c.args.disable_cloud:
+                    self.send(403,dict(error='Experimental TONE3000 integration disabled'));return
                 v=json.loads(self.body(65536))
                 if not isinstance(v,dict): raise ValueError('Expected object')
                 self.send(200,c.cloud.action(u.path.rsplit('/',1)[-1],v))
@@ -414,6 +424,7 @@ def main():
     p.add_argument("--data",default="~/.local/share/rpit3k")
     p.add_argument("--no-auth",action="store_true")
     p.add_argument("--autostart",action="store_true")
+    p.add_argument("--disable-cloud",action="store_true")
     a=p.parse_args()
     c=Controller(a)
     password=None if a.no_auth else (os.getenv("RPIT3K_PASSWORD") or secrets.token_urlsafe(12))
@@ -426,7 +437,9 @@ def main():
     if a.autostart:
         try:
             slot=c.settings["last"];c.apply(slot,c.presets[slot],benchmark=False)
-        except Exception as e: c.logs.append("Autostart failed: "+str(e))
+        except Exception as e:
+            c.logs.append("Autostart failed: "+str(e))
+            print("Autostart failed: "+str(e),flush=True)
     def stop(*_): raise KeyboardInterrupt
     signal.signal(signal.SIGTERM,stop)
     try: server.serve_forever()
