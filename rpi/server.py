@@ -276,6 +276,8 @@ class Controller:
         if ref is not None and (type(ref) not in (int,float) or not math.isfinite(ref) or not -60<=ref<=30):
             raise ValueError("Invalid ADC reference")
         old=dict(self.settings);slot=self.active
+        if device!=old["device"] or routing["input_channel"]!=old["input_channel"] or routing["input_channels"]!=old["input_channels"]:
+            if ref==old["reference_dbu"]: ref=None
         self.settings.update(buffer=b,periods=p,device=device,reference_dbu=ref,**routing)
         try:
             if slot: self.apply(slot,self.presets[slot],benchmark=False)
@@ -359,7 +361,7 @@ class Handler(BaseHTTPRequestHandler):
         elif path=="/api/devices":
             result={}
             for command in ("aplay","arecord"):
-                try: result[command]=subprocess.run([command,"-l"],capture_output=True,text=True,timeout=3).stdout
+                try: result[command]=subprocess.run([command,"-l"],capture_output=True,text=True,timeout=3,env=dict(os.environ,LC_ALL="C")).stdout
                 except (OSError,subprocess.SubprocessError): result[command]="Unavailable"
             self.send(200,result)
         elif path=="/api/status":
