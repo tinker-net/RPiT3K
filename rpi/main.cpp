@@ -6,6 +6,7 @@
 #include "tuner.h"
 #include "noise_gate.h"
 #include "effects.h"
+#include "hiz.h"
 #include "NAM/wav.h"
 #include <cctype>
 #include <algorithm>
@@ -72,7 +73,7 @@ struct Options {
     double slim = 1., slim2 = 1.;
     float input = 1., output = .25f, bass = 0., mid = 0., treble = 0.;
     float gate = -81.f;
-    float ir_mix=.5f;
+    float ir_mix=.5f, hiz=0, hiz_profile=0;
     float comp=0, comp_post=0, reverb=0, decay=1.5f, reverb_type=0;
     int meter_fd = -1;
     unsigned input_channel=1, input_channels=2, output_channels=2, output_left=1, output_right=2;
@@ -105,6 +106,8 @@ Options parse(int argc, char** argv) {
         else if(k=="--ir") o.ir=v;
         else if(k=="--ir2") o.ir2=v;
         else if(k=="--ir_mix") o.ir_mix=std::stof(v);
+        else if(k=="--hiz") o.hiz=std::stof(v);
+        else if(k=="--hiz_profile") o.hiz_profile=std::stof(v);
         else if(k=="--slim") o.slim=std::stod(v);
         else if(k=="--slim2") o.slim2=std::stod(v);
         else if(k=="--comp") o.comp=std::stof(v);
@@ -129,6 +132,7 @@ Options parse(int argc, char** argv) {
     if(!std::isfinite(o.comp)||o.comp<0||o.comp>1||!(o.comp_post==0||o.comp_post==1)||!std::isfinite(o.reverb)||o.reverb<0||o.reverb>1||!std::isfinite(o.decay)||o.decay<.2f||o.decay>5||!(o.reverb_type==0||o.reverb_type==1||o.reverb_type==2))throw std::runtime_error("Invalid effects controls");
     if(o.input_channels<1||o.input_channels>64||o.output_channels<1||o.output_channels>64||o.input_channel<1||o.input_channel>o.input_channels||o.output_left<1||o.output_left>o.output_channels||o.output_right<1||o.output_right>o.output_channels)throw std::runtime_error("Invalid ALSA channel mapping");
     if(!std::isfinite(o.ir_mix)||o.ir_mix<0||o.ir_mix>1)throw std::runtime_error("Invalid IR mix");
+    if(!std::isfinite(o.hiz)||o.hiz<0||o.hiz>1||!(o.hiz_profile==0||o.hiz_profile==1||o.hiz_profile==2||o.hiz_profile==3))throw std::runtime_error("Invalid Hi-Z compensation");
     return o;
 }
 std::unique_ptr<nam::DSP> load(const std::string& path,double slim) {
@@ -182,6 +186,7 @@ struct Chain {
     Eq3Band eq;
     GuitarTuner tuner;
     NoiseGate gate;
+    HiZCompensation hiz;
     RigCompressor pre, post;
     RigReverb verb;
     bool tuning;
@@ -189,6 +194,7 @@ struct Chain {
     float target_input,target_output,bass,mid,treble,target_bass,target_mid,target_treble;
     NAM_SAMPLE x[512]{}, y[512]{}, z[512]{};
     Chain(const Options& o):a((o.bypass||o.tuner) ? nullptr : load(o.model,o.slim)),b((o.bypass||o.tuner||is_wav(o.second)) ? nullptr : load(o.second,o.slim2)),ir((o.bypass||o.tuner)?nullptr:load_ir(o.ir.empty()&&is_wav(o.second)?o.second:o.ir)),ir2((o.bypass||o.tuner)?nullptr:load_ir(o.ir2)),ir_mix(o.ir_mix),target_ir_mix(o.ir_mix),tuning(o.tuner),input(o.input),output(o.output),target_input(o.input),target_output(o.output),bass(o.bass),mid(o.mid),treble(o.treble),target_bass(o.bass),target_mid(o.mid),target_treble(o.treble) {
+        hiz.set(o.hiz,int(o.hiz_profile));
         gate.set(o.gate);
         effects(o.comp,o.comp_post,o.reverb,o.decay,o.reverb_type);
         eq.Init(rate);eq.SetBass(o.bass);eq.SetMid(o.mid);eq.SetTreble(o.treble);
@@ -197,11 +203,12 @@ struct Chain {
         if(!std::isfinite(c)||c<0||c>1||!(pos==0||pos==1)||!std::isfinite(wet)||wet<0||wet>1||!std::isfinite(d)||d<.2f||d>5||!(type==0||type==1||type==2))return;
         pre.set(pos==0?c:0);post.set(pos==1?c:0);verb.set(wet,d,int(type));
     }
-    void controls(float i,float o,float b,float m,float t,float g=-81.f,float c=0,float pos=0,float wet=0,float d=1.5f,float type=0,float mix=-1) {
+    void controls(float i,float o,float b,float m,float t,float g=-81.f,float c=0,float pos=0,float wet=0,float d=1.5f,float type=0,float mix=-1,float hz=-1,float profile=0) {
         if(!std::isfinite(i)||!std::isfinite(o)||!std::isfinite(b)||!std::isfinite(m)||!std::isfinite(t))return;
         if(i<0||i>2||o<0||o>1||std::abs(b)>20||std::abs(m)>15||std::abs(t)>10)return;
         if(!std::isfinite(g)||!(g==-81.f||(g>=-80.f&&g<=-30.f)))return;
         if(std::isfinite(mix)&&mix>=0&&mix<=1)target_ir_mix=mix;
+        if(std::isfinite(profile)&&(profile==0||profile==1||profile==2||profile==3))hiz.set(hz,int(profile));
         gate.set(g);
         effects(c,pos,wet,d,type);
         target_input=i;target_output=o;target_bass=b;target_mid=m;target_treble=t;
@@ -229,7 +236,7 @@ struct Chain {
         const bool gated=gate.enabled();
         if(gated)for(unsigned i=0;i<block;++i){gate.process(x[i]);gate_gain[i]=gate.gain();}
         constexpr float gain_alpha=.0020811647f;
-        for(unsigned i=0;i<block;++i){input+=gain_alpha*(target_input-input);if(std::abs(input-target_input)<1e-6f)input=target_input;x[i]*=input;x[i]=pre.process(x[i]);}
+        for(unsigned i=0;i<block;++i){input+=gain_alpha*(target_input-input);if(std::abs(input-target_input)<1e-6f)input=target_input;x[i]=hiz.process(x[i])*input;x[i]=pre.process(x[i]);}
         NAM_SAMPLE* in=x;NAM_SAMPLE* out=y;
         if(a) a->process(&in,&out,block);
         else std::copy_n(x,block,y);
@@ -340,8 +347,9 @@ int main(int argc,char** argv) {
             if(n<=0)return;
             for(ssize_t k=0;k<n;++k){
                 if(buf[k]=='\n'){
-                    if(!overflow){line[used]=0;float i,o,b,m,t,g,c,pos,wet,d,type,mix;char extra;
-                        if(std::sscanf(line,"%f %f %f %f %f %f %f %f %f %f %f %f %c",&i,&o,&b,&m,&t,&g,&c,&pos,&wet,&d,&type,&mix,&extra)==12)chain.controls(i,o,b,m,t,g,c,pos,wet,d,type,mix);
+                    if(!overflow){line[used]=0;float i,o,b,m,t,g,c,pos,wet,d,type,mix,hz,profile;char extra;
+                        if(std::sscanf(line,"%f %f %f %f %f %f %f %f %f %f %f %f %f %f %c",&i,&o,&b,&m,&t,&g,&c,&pos,&wet,&d,&type,&mix,&hz,&profile,&extra)==14)chain.controls(i,o,b,m,t,g,c,pos,wet,d,type,mix,hz,profile);
+                        else if(std::sscanf(line,"%f %f %f %f %f %f %f %f %f %f %f %f %c",&i,&o,&b,&m,&t,&g,&c,&pos,&wet,&d,&type,&mix,&extra)==12)chain.controls(i,o,b,m,t,g,c,pos,wet,d,type,mix);
                         else if(std::sscanf(line,"%f %f %f %f %f %f %f %f %f %f %f %c",&i,&o,&b,&m,&t,&g,&c,&pos,&wet,&d,&type,&extra)==11)chain.controls(i,o,b,m,t,g,c,pos,wet,d,type);}
                     used=0;overflow=false;
                 }else if(used<sizeof(line)-1)line[used++]=buf[k];else overflow=true;
