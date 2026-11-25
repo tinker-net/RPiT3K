@@ -14,18 +14,18 @@
 <label><input type="checkbox" id="bypass"> Bypass NAM and IR</label>
 </section>
 <section><h2>Tuner</h2><div class="row"><button id="tuner">Start muted tuner</button><button id="resume">Resume preset</button></div><p id="pitch" style="font-size:2rem;text-align:center">—</p><small>Play one string at a time. A4 = 440 Hz.</small></section>
-<section><h2>Controls</h2><div class="controls" id="controls"></div></section>
+<section><h2>Controls</h2><small>Live on the active preset · inactive presets are edited offline.</small><div class="controls" id="controls"></div></section>
 <section><h2>Local library</h2><input type="file" id="upload" accept=".nam,.wav" multiple><button id="uploadBtn">Import files</button><p><small>Mono NAM and WAV. Files stay on the Raspberry Pi.</small></p></section>
 <div class="row"><button id="save">Save preset</button><button id="apply" class="primary">Apply / start audio</button><button id="stop">Stop audio</button></div>
-<p id="message" role="status"></p><section><h2>Engine status</h2><pre id="logs"></pre><small>Applying a preset restarts the audio engine. Seamless switching and live knobs are not implemented yet.</small></section>
+<p id="message" role="status"></p><section><h2>Engine status</h2><pre id="logs"></pre><small>Gain and EQ update live on the running preset. Apply is needed for capture, IR, bypass and preset changes.</small></section>
 <script>
 const el=id=>document.getElementById(id);
 const ranges={input:[0,2,.01],output:[0,1,.01],bass:[-20,20,1],mid:[-15,15,1],treble:[-10,10,1]};
-let state,slot="1",busy=false,settingsInitialized=false,lastActive=null;
+let state,slot="1",busy=false,settingsInitialized=false,lastActive=null,liveTimer=null,liveBusy=false,livePending=null;
 for(const [key,[min,max,step]] of Object.entries(ranges)){
  const label=document.createElement("label"),out=document.createElement("output"),input=document.createElement("input");
  label.append(key.toUpperCase(),out,input);out.id=key+"Value";input.type="range";input.id=key;input.min=min;input.max=max;input.step=step;
- input.oninput=()=>out.textContent=input.value;el("controls").append(label);
+ input.oninput=()=>{out.textContent=input.value;queueLive();};el("controls").append(label);
 }
 async function request(path,body){
  const opts=body===undefined?{}:{method:"POST",headers:{"X-RPiT3K":"1"},body};
@@ -41,6 +41,18 @@ function render(preset){
 }
 function read(){const p={model:el("model").value,second:el("second").value,ir:el("ir").value,bypass:el("bypass").checked};
  for(const k of ["slim","slim2",...Object.keys(ranges)])p[k]=Number(el(k).value);return p;}
+function queueLive(){
+ if(!state||busy||!state.running||state.active!==slot)return;
+ livePending={slot,controls:Object.fromEntries(Object.keys(ranges).map(k=>[k,Number(el(k).value)]))};
+ clearTimeout(liveTimer);liveTimer=setTimeout(sendLive,80);
+}
+async function sendLive(){
+ if(liveBusy||busy||!livePending)return;
+ const p=livePending;livePending=null;liveBusy=true;
+ try{const s=await request("/api/controls",JSON.stringify(p));if(!busy){state=s;status();}el("message").textContent="Live controls applied";}
+ catch(e){el("message").textContent=e.message;}
+ finally{liveBusy=false;if(livePending&&!busy)sendLive();}
+}
 function status(){
  const t=state.telemetry;if(t){el("cpu").textContent=t.cpu===null?"—":t.cpu+"%";el("cpuMeter").value=t.cpu||0;el("temp").textContent=t.temp===null?"—":t.temp+" °C";el("latency").textContent=t.buffer_ms.toFixed(2)+" ms";el("latencyDetail").textContent=t.buffer+" × "+t.periods+" · period "+t.period_ms.toFixed(2)+" ms · nominal ALSA buffer per direction; not measured round-trip latency";if(!settingsInitialized){el("buffer").value=t.buffer;el("periods").value=t.periods;settingsInitialized=true;}}
  if(state.active&&state.active!==lastActive){lastActive=state.active;slot=state.active;render(state.presets[slot]);}
@@ -51,7 +63,7 @@ function status(){
  el("slots").replaceChildren();
  for(const k of Object.keys(state.presets)){const b=document.createElement("button");b.textContent="Preset "+k+(state.running&&state.active===k?" •":"");b.className=k===slot?"selected":"";b.disabled=busy;b.onclick=()=>{slot=k;render(state.presets[k]);status()};el("slots").append(b);}
 }
-async function action(fn){if(busy)return;busy=true;for(const id of ["save","apply","stop","uploadBtn","tuner","resume","audioSettings"])el(id).disabled=true;
+async function action(fn){if(busy)return;clearTimeout(liveTimer);livePending=null;busy=true;while(liveBusy)await new Promise(r=>setTimeout(r,20));for(const id of ["save","apply","stop","uploadBtn","tuner","resume","audioSettings"])el(id).disabled=true;
  el("message").textContent="Working…";try{await fn();el("message").textContent="Done";}catch(e){el("message").textContent=e.message;}
  finally{busy=false;for(const id of ["save","apply","stop","uploadBtn","tuner","resume","audioSettings"])el(id).disabled=false;status();}}
 el("filter").oninput=()=>render(read());
