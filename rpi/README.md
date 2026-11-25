@@ -4,11 +4,67 @@ Experimental native Linux port of the TONE3000 × Daisy DIY Pedal. The original 
 
 ## Architecture
 
-C++20, direct ALSA full duplex, 48 kHz, stereo S32_LE (left input, dual mono output), 64 frames × 3 periods by default. Selectable 64/128/256/512 frames and 2/3/4 periods. Upstream [NeuralAmpModelerCore](https://github.com/sdatkinson/NeuralAmpModelerCore) pinned to `d3189ed482ded880c128bf312941266c4fa5ceec`, float32 sample interface and A2 fast build. No JACK, PipeWire or LV2 required.
+C++20, direct ALSA full duplex, 48 kHz, stereo S32_LE (left input, dual mono output), 64 frames × 3 periods by default. Selectable 64/128/256/512 frames and 2/3/4 periods. Upstream [NeuralAmpModelerCore](https://github.com/sdatkinson/NeuralAmpModelerCore) pinned to `d3189ed482ded880c128bf312941266c4fa5ceec`, float32 sample interface and A2 fast build, with automatic TONE3000 Embedded v2.0.0 dispatch for compatible A2 captures. No JACK, PipeWire or LV2 required.
 
 Signal path: input gain → NAM → optional second NAM → optional cabinet IR → three-band EQ → output gain → finite-value guard and clamp. Full/minimum size selection for compatible slimmable models; fixed-size models subject to Core compatibility. Native FFT partitioned convolution (64-sample partitions), mono WAV IR up to 48,000 samples at 48 kHz, windowed-sinc resampling with sample-rate-ratio gain compensation. No automatic IR loudness normalization or automatic analog NAM calibration. Bypass skips NAM/IR but retains gain and EQ.
 
 Live gain/EQ controls are smoothed. Tuner mode mutes output. SCHED_FIFO priority 60 is requested, with normal-priority fallback; ALSA xrun/suspend recovery restarts both streams. Python web controller, four persistent presets, local NAM/WAV imports, systemd autostart, optional Pisound button and NetworkManager hotspot. Preset switches restart audio and are not gapless. No MIDI control. Experimental TONE3000 account integration is optional and not end-to-end validated. See [Pisound installation and usage](../README-PISOUND.md).
+
+## Automatic hybrid NAM engine — implemented and validated (2026-11-25)
+
+Following a suggestion from the original TONE3000 developer, we implemented an automatic hybrid inference backend in RPi-Ton3K using [TONE3000 Embedded v2.0.0](https://github.com/tone-3000/embedded/tree/v2.0.0) (Cortex-A76 engine) alongside the existing pinned NAM Core. The integration was developed in `embedded-a76`, tested by the maintainer on Raspberry Pi 5 + Pisound, and promoted to `rpi-ui`, `rpi-general` and `deb-packaging`. No upstream pull request was submitted.
+
+- Compatible 48 kHz mono A2-Full (8 channels) and A2-Lite (3 channels) use Embedded automatically, including the selected child of a SlimmableContainer. Selection follows Core's strict less-than breakpoint rule.
+- A1 and other Core-supported architectures that do not match the exact A2 signature fall back to NAM Core. Each of the two capture slots selects its backend independently.
+- Original .nam files are loaded directly; no .namb conversion or changes to the capture library. Embedded uses 64-frame chunks with continuous state even for larger host buffers. `RPIT3K_NAM_ENGINE=core` forces Core for diagnostic comparisons; `-DRPIT3K_EMBEDDED=OFF` disables Embedded at build time.
+- Engine selection is recorded as `NAM_ENGINE=embedded` or `NAM_ENGINE=core` in the controller logs (available at `/api/status`).
+
+### Controlled benchmarks (measured on Pi 5)
+
+Same production executable, same captures and settings, 48 kHz / 64 frames, input gain 1, output gain 0.125, no IR or active effects, service stopped. Three offline runs per backend, alternating order; each run processes 480,000 samples of a 220 Hz sine. Times are per DSP block, excluding ALSA I/O and model loading. Core here is our already optimized A2-fast build, not generic upstream WaveNet.
+
+| Case | Forced Core median (µs) | Auto median (µs) | Speedup | Core worst (µs) | Auto worst (µs) |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| A2 Full | 147.002 | 55.081 | 2.669× | 190.871 | 110.703 |
+| A2 Lite | 36.128 | 13.240 | 2.729× | 56.370 | 41.148 |
+| A1 | 273.436 | 273.505 | 1.000× | 318.759 | 374.555 |
+| A1 → A2 Full | 423.207 | 337.349 | 1.255× | 571.888 | 444.796 |
+
+Full and Lite reduced median processing time by 62.5% and 63.4%, respectively. The 64-frame deadline is 1,333.33 µs; A2 Full used 4.13% of it on average and Lite 0.99%. These are DSP timing fractions, not total system CPU utilization.
+
+### Numerical equivalence and automatic routing
+
+Four seconds (192,000 float32 samples) of deterministic silence, multitone at several amplitudes, broadband excitation and decay were rendered through the production chain with automatic selection and forced Core. Acceptance: relative RMS residual ≤ −80 dB, maximum absolute sample difference ≤ 1e-4, finite and unclipped output with nonzero reference RMS. Backend logs were asserted for each render. All four buffer sizes (64, 128, 256, 512) produced the same reported metrics for each case.
+
+| Case | Automatic backend | Reference RMS | Residual RMS | Max absolute error | Relative residual | Buffers passed |
+| --- | --- | ---: | ---: | ---: | ---: | --- |
+| A2 Full | Embedded | 0.024699961 | 4.8871098e-7 | 2.6375055e-6 | −94.07 dB | 4/4 |
+| A2 Lite | Embedded | 0.024185072 | 0 | 0 | −∞ dB | 4/4 |
+| A1 | Core | 0.019010728 | 0 | 0 | −∞ dB | 4/4 |
+| A1 → A2 Full | Core + Embedded | 0.031471144 | 6.0633638e-7 | 2.7269125e-6 | −94.30 dB | 4/4 |
+
+**16/16 null tests passed; HYBRID TEST PASS.** Lite and A1 matched sample-for-sample on this test signal. Full and the mixed chain showed very small numerical differences. This is evidence of equivalence for the tested captures and signal, not proof of bit-identical output for every model.
+
+Test captures (commercial Amalgam files, not redistributed):
+
+- A2: `VX TB30 BR Clean BRI DI.nam`, SHA-256 `20cfcd49680f15d590e183041f549f4d3ce45e915d3d92f76defccfe92dca801`.
+- A1: `ORNG GR100 Clean SCP DI.nam`, SHA-256 `589edb83e018337b90d72ff93dc93a7876e2b01021529dae77c978b67f338132`.
+
+### Real-time and regression checks
+
+On Pi 5/Pisound, the native DSP regression suite passed (1/1, 0.30 s), including Hi-Z, FX, gate, convolution and tuner; bypass verification also passed. A live A2 Full preset with two cabinet IRs at 48 kHz / 64 × 3 periods logged 13 consecutive five-second DSP intervals: mean per interval 225.908–263.465 µs, worst observed block 575.056 µs, zero late blocks, zero ALSA recoveries and zero clipped samples. This short live run was not a controlled Core-vs-Embedded comparison.
+
+### Reproduction and scope
+
+From the repository root on a built source installation, substitute your own compatible A2 Full/Lite container and A1 capture paths. Stop the appropriate audio service before timing, then restart it afterwards.
+
+```sh
+sudo systemctl stop rpit3k
+python3 -u rpi/hybrid_test.py "/path/to/A2.nam" "/path/to/A1.nam"
+sudo systemctl start rpit3k
+```
+
+The script supports optional `--ir` and `--ir2` for a controlled cabinet-chain comparison; those optional tests have not yet been run. Long-session playing tests, broader capture coverage, other audio interfaces, and new Debian/x86-64 hardware validation remain outstanding. The Pi measurements are shared as reference results across branches, not independent measurements of each deployment. The Pisound source version is the maintainer's stable development baseline; portability and Debian package deployments retain their experimental status.
 
 ## Technical validation report — 2026-11-25
 
