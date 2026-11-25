@@ -47,7 +47,7 @@ class Controller:
         self.active = None
         self.tuner_return = None
         self.settingsfile = self.data / "settings.json"
-        self.settings = dict(buffer=64, periods=3, last="1")
+        self.settings = dict(buffer=64, periods=3, last="1", reference_dbu=1.14)
         if self.settingsfile.exists(): self.settings.update(json.loads(self.settingsfile.read_text()))
         self.cpu_prev = None
         self.cpu_pct = None
@@ -422,7 +422,9 @@ class Controller:
         b,p=values.get("buffer"),values.get("periods")
         if type(b) is not int or type(p) is not int or b not in (64,128,256,512) or p not in (2,3,4): raise ValueError("Invalid audio settings")
         old=dict(self.settings);slot=self.active
-        self.settings.update(buffer=b,periods=p)
+        ref=values.get("reference_dbu",self.settings["reference_dbu"])
+        if ref is not None and (type(ref) not in (int,float) or not math.isfinite(ref) or not -60<=ref<=30): raise ValueError("Invalid ADC reference in dBu")
+        self.settings.update(buffer=b,periods=p,reference_dbu=ref)
         try:
             if slot: self.apply(slot,self.presets[slot],benchmark=False)
             elif self.proc and self.proc.poll() is None:
@@ -538,7 +540,8 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if u.path=="/api/calibrate":
                 v=json.loads(self.body(65536))
-                ref=v["reference_dbu"]
+                ref=c.settings.get("reference_dbu")
+                if ref is None: raise ValueError("Set the ADC full-scale reference in Audio settings first")
                 if type(ref) not in (int,float) or not math.isfinite(ref) or not -60<=ref<=30:
                     raise ValueError("Invalid hardware reference in dBu")
                 path=c.file(v["model"],(".nam",))
