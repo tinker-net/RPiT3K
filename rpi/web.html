@@ -49,7 +49,9 @@ header .metric{padding:3px 7px}
 .controls-panel .dial{width:clamp(38px,9vh,65px)}
 .controls-panel p{display:none}
 }
-#poweroff{flex:none;width:36px;height:36px;display:grid;place-items:center;padding:6px;color:#c8b9aa;border-color:#57504a}#poweroff:hover:not(:disabled){color:#ff8d7c;border-color:#ff8d7c}#poweroff:disabled{opacity:.35;cursor:not-allowed}.folder-tools{display:flex;gap:5px;margin-top:6px}.folder-tools button{flex:1;padding:5px;font-size:11px}#folderTarget{display:block;margin-top:5px;overflow-wrap:anywhere}.folder-pick{float:right;padding:0 5px;font-size:11px;background:transparent;border:0;color:#aaa}.folder-selected{color:var(--amber)!important}.folder-import{margin:3px 0;font-size:11px}.folder-import input{margin:3px 0!important}.folder-home{font-weight:600}</style></head><body>
+#poweroff{flex:none;width:36px;height:36px;display:grid;place-items:center;padding:6px;color:#c8b9aa;border-color:#57504a}#poweroff:hover:not(:disabled){color:#ff8d7c;border-color:#ff8d7c}#poweroff:disabled{opacity:.35;cursor:not-allowed}.folder-tools{display:flex;gap:5px;margin-top:6px}.folder-tools button{flex:1;padding:5px;font-size:11px}#folderTarget{display:block;margin-top:5px;overflow-wrap:anywhere}.folder-pick{float:right;padding:0 5px;font-size:11px;background:transparent;border:0;color:#aaa}.folder-selected{color:var(--amber)!important}.folder-import{margin:3px 0;font-size:11px}.folder-import input{margin:3px 0!important}.folder-home{font-weight:600}
+#fileTree{padding:2px 0;color:#c9c5bf}#fileTree details{margin:2px 0}#fileTree summary{display:flex;align-items:center;gap:6px;padding:3px 4px;min-height:28px;border-radius:5px;cursor:pointer;list-style:none}#fileTree summary::-webkit-details-marker{display:none}#fileTree summary:before{content:"›";font-size:15px;color:#8b8782;width:9px;flex:none}#fileTree details[open]>summary:before{transform:rotate(90deg)}#fileTree summary:hover,.library-file:hover{background:#ffffff08}.library-glyph{display:inline-flex;flex:none;color:#aaa39b}.folder-glyph{color:#d3a066}.library-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.library-children{margin-left:10px;padding-left:5px;border-left:1px solid #3e3b39}.library-file{display:flex;align-items:center;gap:2px;border:1px solid transparent;border-radius:5px;min-height:28px}.library-file.current{background:#e99c4212;border-color:#bc813d;color:#ffc985}.library-file-main{flex:1;min-width:0;display:flex;align-items:center;gap:6px;text-align:left;background:transparent;border:0;padding:5px 3px;color:inherit;font-size:12px}.library-file-main:hover{border:0}.library-type{font-size:9px;color:#999;flex:none}.library-icon{flex:none;background:transparent;border:0;padding:2px 4px;color:#a8a29b;font-size:14px;line-height:20px;min-width:20px}.library-icon:hover{color:var(--amber);background:#ffffff09}.library-icon.starred{color:#f2ae59}.favorite-count{margin-left:auto}.favorites-section{border-bottom:1px solid #393839;padding-bottom:5px;margin-bottom:5px!important}.favorites-section>summary{color:#efb96e!important;font-weight:600}.favorite-hint{display:block;padding:5px 12px}.folder-home{font-size:11px;padding:5px 8px;margin:3px 0;color:#aaa;border-color:transparent!important;box-shadow:none!important}.folder-home.selected{background:#ffffff08;color:#efb96e}.folder-tools button{background:#252527;border-color:#3e3c3b}.folder-import input{color:#aaa}
+</style></head><body>
 <header><div><div class="brand"><i>///</i>RPiT3K</div><div class="subtitle">NATIVE GUITAR PROCESSOR</div></div><div id="currentTitle">Connecting…</div><div class="metrics"><span class="metric">CPU <strong id="cpu">—</strong><meter id="cpuMeter" min="0" max="100"></meter></span><span class="metric">TEMP <strong id="temp">—</strong></span><span class="metric">BUFFER <strong id="latency">—</strong></span><span class="metric" id="xrunMetric" title="ALSA recoveries since service start (includes suspend recovery)">XRUNS <strong id="xruns">—</strong></span></div><span id="status">Connecting…</span><button id="poweroff" type="button" title="Shut down the host" aria-label="Shut down the host" disabled><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2v10M6 5a9 9 0 1 0 12 0"/></svg></button></header>
 <main class="layout"><aside class="panel"><h2>Library</h2><div class="library"><input id="filter" type="search" placeholder="Find NAM or IR"><div class="folder-tools"><button id="newFolder" title="Create folder in selected location">+ Folder</button><button id="collapseTree" title="Collapse all folders">Collapse</button></div><small id="folderTarget" title="Upload destination">Import to: /</small><div id="fileTree" aria-label="Local file tree"></div><label class="folder-import">Import directory<input id="uploadFolder" type="file" webkitdirectory multiple></label><input id="upload" type="file" accept=".nam,.wav" multiple><button id="uploadBtn">Import files</button><button id="cloudOpen">Browse TONE3000</button><p><small>Pi library · choose a file to load it into the rig.</small></p></div></aside>
 <section class="stage"><div id="ampView"><div id="amp" class="amp" data-style="black"><div class="handle"></div><span class="corner tl"></span><span class="corner tr"></span><span class="corner bl"></span><span class="corner br"></span><div class="grille"><span id="ampFamily" class="amp-brand">RPiT3K</span></div><div class="face"><span class="lamp"></span><small>CAPTURE</small><div class="mini-dials" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div></div></div><div id="ampName" class="amp-name">No capture selected</div><small id="ampCaption"></small></div><div id="tunerView" hidden><h2>Chromatic tuner · A4 = 440 Hz</h2><div id="pitch">—</div><div class="tuner-scale"><span>−50</span><span>0</span><span>+50</span><i id="needle"></i></div><p id="pitchDetail">Play one string</p><small>Output muted while tuning</small></div></section>
@@ -159,14 +161,37 @@ function ampStyle(name){const n=name.toLowerCase();if(/orange|or120|rv100|rocker
 function updateAmp(){const name=el("model").value;const [style,family]=ampStyle(name);el("amp").dataset.style=style;el("ampFamily").textContent=name?family:"RPiT3K";el("ampName").textContent=name?name.replace(/\.nam$/i,""):"No capture selected";el("ampCaption").textContent=el("bypass").checked?"BYPASS · Start to activate":name?"NAM capture · "+(el("ir").value?"Cabinet IR selected":"No cabinet IR"):"Import a NAM capture to begin";el("currentTitle").textContent="Preset "+slot+" · "+(name?name.replace(/\.nam$/i,""):"Empty");}
 
 
+const folderIcon='<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M3 6h7l2 3h9v11H3z"/></svg>';
+const fileIcon='<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 3h9l5 5v13H5zM14 3v6h5M8 15h2l2-4 2 7 2-3h2"/></svg>';
 function selectFolder(path){
  libraryTarget=path;el("folderTarget").textContent="Import to: /"+path;
  renderTree(true);
 }
+function libraryButton(label,title,fn,cls=""){
+ const b=document.createElement("button");b.type="button";b.className="library-icon "+cls;b.textContent=label;b.title=title;b.setAttribute("aria-label",title);
+ b.onclick=e=>{e.preventDefault();e.stopPropagation();if(!busy)fn();};return b;
+}
+function renameItem(path,kind){
+ const base=path.split("/").pop(),oldName=kind==="file"?base.replace(/\.(nam|wav)$/i,""):base;
+ const name=prompt("Rename "+kind,oldName);if(name===null||!name.trim()||name.trim()===oldName)return;
+ action(async()=>{
+  const p=read(),oldTarget=libraryTarget;
+  const ext=kind==="file"?base.slice(base.lastIndexOf(".")):"";
+  const stem=name.trim();
+  const finalName=ext&&!stem.toLowerCase().endsWith(ext.toLowerCase())?stem+ext:stem;
+  const next=path.split("/").slice(0,-1).concat(finalName).join("/");
+  const remap=v=>v===path||(kind==="folder"&&v.startsWith(path+"/"))?next+v.slice(path.length):v;
+  state=await request("/api/rename",JSON.stringify({path,name:stem,kind}));
+  for(const k of ["model","second","ir"])p[k]=remap(p[k]);
+  const folders=[...openFolders].map(remap);openFolders.clear();folders.forEach(f=>openFolders.add(f));
+  libraryTarget=remap(oldTarget);el("folderTarget").textContent="Import to: /"+libraryTarget;
+  render(p);renderTree(true);
+ });
+}
 function renderTree(force=false){
  if(!state)return;
- const q=el("filter").value.trim().toLowerCase(),selected=[el("model").value,el("ir").value,el("second").value];
- const key=JSON.stringify([state.files,state.folders,q,selected,libraryTarget]);
+ const q=el("filter").value.trim().toLowerCase(),selected=[el("model").value,el("ir").value,el("second").value],favorites=new Set(state.favorites||[]);
+ const key=JSON.stringify([state.files,state.folders,state.favorites,q,selected,libraryTarget]);
  if(!force&&key===treeKey)return;treeKey=key;
  const root=el("fileTree"),scroll=root.scrollTop;
  root.replaceChildren();
@@ -174,20 +199,31 @@ function renderTree(force=false){
  const nodeFor=parts=>{let node=tree;for(const part of parts){if(!node.dirs.has(part))node.dirs.set(part,{dirs:new Map(),files:[]});node=node.dirs.get(part);}return node;};
  for(const dir of state.folders||[])if(!q||dir.toLowerCase().includes(q))nodeFor(dir.split("/"));
  for(const file of state.files)if(!q||file.toLowerCase().includes(q)){const parts=file.split("/");nodeFor(parts.slice(0,-1)).files.push(file);}
+ function fileRow(file){
+  const row=document.createElement("div"),b=document.createElement("button"),ico=document.createElement("span"),name=document.createElement("span"),tag=document.createElement("small"),isIR=file.toLowerCase().endsWith(".wav");
+  row.className="library-file";row.classList.toggle("current",selected.includes(file));
+  b.className="library-file-main";b.type="button";ico.className="library-glyph";ico.innerHTML=fileIcon;name.textContent=file.split("/").pop().replace(/\.(nam|wav)$/i,"");name.className="library-name";tag.textContent=isIR?"IR":"NAM";tag.className="library-type";b.title=file;b.append(ico,name,tag);
+  b.onclick=()=>{if(busy)return;const id=isIR?"ir":"model";el(id).value=file;if(!isIR)el("bypass").checked=false;updateAmp();renderTree(true);};
+  const starred=favorites.has(file);
+  row.append(b,libraryButton(starred?"★":"☆",starred?"Remove favorite":"Add favorite",()=>action(async()=>{state=await request("/api/favorite",JSON.stringify({path:file,enabled:!starred}));renderTree(true);}),starred?"starred":""),libraryButton("⋯","Rename file",()=>renameItem(file,"file")));return row;
+ }
  function addContents(parent,node,path){
   for(const [name,child] of [...node.dirs].sort((a,b)=>a[0].localeCompare(b[0],undefined,{numeric:true,sensitivity:"base"}))){
    const full=path?path+"/"+name:name;
-   const d=document.createElement("details"),head=document.createElement("summary"),label=document.createElement("span"),pick=document.createElement("button");
-   label.textContent="📁 "+name;pick.type="button";pick.textContent="↳";pick.title="Select this folder as import destination";pick.className="folder-pick";
-   pick.onclick=e=>{e.preventDefault();e.stopPropagation();selectFolder(full);};
-   head.append(label,pick);head.classList.toggle("folder-selected",full===libraryTarget);
+   const d=document.createElement("details"),head=document.createElement("summary"),ico=document.createElement("span"),label=document.createElement("span");
+   ico.className="library-glyph folder-glyph";ico.innerHTML=folderIcon;label.className="library-name";label.textContent=name;
+   head.append(ico,label,libraryButton("↳","Import into this folder",()=>selectFolder(full)),libraryButton("⋯","Rename folder",()=>renameItem(full,"folder")));
+   head.classList.toggle("folder-selected",full===libraryTarget);
    d.append(head);d.open=!!q||openFolders.has(full);
    d.ontoggle=()=>{if(!q){if(d.open)openFolders.add(full);else openFolders.delete(full);}};
-   addContents(d,child,full);parent.append(d);
+   const children=document.createElement("div");children.className="library-children";addContents(children,child,full);d.append(children);parent.append(d);
   }
-  for(const file of node.files){const b=document.createElement("button"),isIR=file.toLowerCase().endsWith(".wav");b.className="tree-file";b.textContent=(isIR?"IR · ":"NAM · ")+file.split("/").pop().replace(/\.(nam|wav)$/i,"");b.title=file;b.classList.toggle("selected",selected.includes(file));b.onclick=()=>{if(busy)return;const id=isIR?"ir":"model";el(id).value=file;if(!isIR)el("bypass").checked=false;updateAmp();renderTree(true);};parent.append(b);}
+  for(const file of node.files)parent.append(fileRow(file));
  }
- const home=document.createElement("button");home.type="button";home.className="tree-file folder-home";home.textContent="▣ Library root";home.classList.toggle("selected",libraryTarget==="");home.onclick=()=>selectFolder("");root.append(home);
+ const fav=document.createElement("details"),fh=document.createElement("summary"),fc=document.createElement("small");fh.textContent="★ Favorites";fc.textContent=String(state.files.filter(f=>favorites.has(f)).length);fc.className="favorite-count";fh.append(fc);fav.className="favorites-section";fav.append(fh);fav.open=!!q||openFolders.has("@favorites");fav.ontoggle=()=>{if(!q){if(fav.open)openFolders.add("@favorites");else openFolders.delete("@favorites");}};
+ for(const file of state.files.filter(f=>favorites.has(f)&&(!q||f.toLowerCase().includes(q))))fav.append(fileRow(file));
+ if(!fav.querySelector(".library-file")){const hint=document.createElement("small");hint.className="favorite-hint";hint.textContent="Star a capture or IR to keep it here.";fav.append(hint);}root.append(fav);
+ const home=document.createElement("button");home.type="button";home.className="tree-file folder-home";home.textContent="Library root";home.classList.toggle("selected",libraryTarget==="");home.onclick=()=>selectFolder("");root.append(home);
  addContents(root,tree,"");root.scrollTop=scroll;
 }
 el("newFolder").onclick=()=>{const name=prompt("New folder name in /"+libraryTarget);if(!name||!name.trim())return;const path=(libraryTarget?libraryTarget+"/":"")+name.trim();action(async()=>{state=await request("/api/folder",JSON.stringify({path}));let parts=path.split("/");for(let i=1;i<=parts.length;i++)openFolders.add(parts.slice(0,i).join("/"));selectFolder(path);});};
