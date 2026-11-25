@@ -49,9 +49,9 @@ header .metric{padding:3px 7px}
 .controls-panel .dial{width:clamp(38px,9vh,65px)}
 .controls-panel p{display:none}
 }
-#poweroff{flex:none;width:36px;height:36px;display:grid;place-items:center;padding:6px;color:#c8b9aa;border-color:#57504a}#poweroff:hover:not(:disabled){color:#ff8d7c;border-color:#ff8d7c}#poweroff:disabled{opacity:.35;cursor:not-allowed}</style></head><body>
+#poweroff{flex:none;width:36px;height:36px;display:grid;place-items:center;padding:6px;color:#c8b9aa;border-color:#57504a}#poweroff:hover:not(:disabled){color:#ff8d7c;border-color:#ff8d7c}#poweroff:disabled{opacity:.35;cursor:not-allowed}.folder-tools{display:flex;gap:5px;margin-top:6px}.folder-tools button{flex:1;padding:5px;font-size:11px}#folderTarget{display:block;margin-top:5px;overflow-wrap:anywhere}.folder-pick{float:right;padding:0 5px;font-size:11px;background:transparent;border:0;color:#aaa}.folder-selected{color:var(--amber)!important}.folder-import{margin:3px 0;font-size:11px}.folder-import input{margin:3px 0!important}.folder-home{font-weight:600}</style></head><body>
 <header><div><div class="brand"><i>///</i>RPiT3K</div><div class="subtitle">NATIVE GUITAR PROCESSOR</div></div><div id="currentTitle">Connecting…</div><div class="metrics"><span class="metric">CPU <strong id="cpu">—</strong><meter id="cpuMeter" min="0" max="100"></meter></span><span class="metric">TEMP <strong id="temp">—</strong></span><span class="metric">BUFFER <strong id="latency">—</strong></span><span class="metric" id="xrunMetric" title="ALSA recoveries since service start (includes suspend recovery)">XRUNS <strong id="xruns">—</strong></span></div><span id="status">Connecting…</span><button id="poweroff" type="button" title="Shut down the host" aria-label="Shut down the host" disabled><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2v10M6 5a9 9 0 1 0 12 0"/></svg></button></header>
-<main class="layout"><aside class="panel"><h2>Library</h2><div class="library"><input id="filter" type="search" placeholder="Find NAM or IR"><div id="fileTree" aria-label="Local file tree"></div><input id="upload" type="file" accept=".nam,.wav" multiple><button id="uploadBtn">Import files</button><button id="cloudOpen">Browse TONE3000</button><p><small>Pi library · choose a file to load it into the rig.</small></p></div></aside>
+<main class="layout"><aside class="panel"><h2>Library</h2><div class="library"><input id="filter" type="search" placeholder="Find NAM or IR"><div class="folder-tools"><button id="newFolder" title="Create folder in selected location">+ Folder</button><button id="collapseTree" title="Collapse all folders">Collapse</button></div><small id="folderTarget" title="Upload destination">Import to: /</small><div id="fileTree" aria-label="Local file tree"></div><label class="folder-import">Import directory<input id="uploadFolder" type="file" webkitdirectory multiple></label><input id="upload" type="file" accept=".nam,.wav" multiple><button id="uploadBtn">Import files</button><button id="cloudOpen">Browse TONE3000</button><p><small>Pi library · choose a file to load it into the rig.</small></p></div></aside>
 <section class="stage"><div id="ampView"><div id="amp" class="amp" data-style="black"><div class="handle"></div><span class="corner tl"></span><span class="corner tr"></span><span class="corner bl"></span><span class="corner br"></span><div class="grille"><span id="ampFamily" class="amp-brand">RPiT3K</span></div><div class="face"><span class="lamp"></span><small>CAPTURE</small><div class="mini-dials" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div></div></div><div id="ampName" class="amp-name">No capture selected</div><small id="ampCaption"></small></div><div id="tunerView" hidden><h2>Chromatic tuner · A4 = 440 Hz</h2><div id="pitch">—</div><div class="tuner-scale"><span>−50</span><span>0</span><span>+50</span><i id="needle"></i></div><p id="pitchDetail">Play one string</p><small>Output muted while tuning</small></div></section>
 <aside class="panel rig"><h2>Rig details</h2><div class="rig-fields"><div class="capture-row"><label>Capture<select id="model"></select></label><label>Quality<select id="slim"><option value="1">Full</option><option value="0">Lite</option></select></label></div><div class="capture-row"><label>Second NAM<select id="second"></select></label><label>Quality<select id="slim2"><option value="1">Full</option><option value="0">Lite</option></select></label></div><label>Cabinet IR<select id="ir"></select></label><div class="row"><button id="calibrate">Calibrate Input</button></div><small id="calibrationInfo">Uses capture metadata and your ADC reference.</small><label class="bypass"><input type="checkbox" id="bypass">Bypass NAM / IR</label></div><details class="fx-panel"><summary>Effects <small id="fxSummary">OFF</small></summary><label>Compressor amount <output id="compLabel">0%</output><input id="comp" type="range" min="0" max="1" step=".01"></label><label>Position<select id="comp_post"><option value="0">PRE NAM</option><option value="1">POST NAM</option></select></label><label>Reverb mix <output id="reverbLabel">0%</output><input id="reverb" type="range" min="0" max="1" step=".01"></label><label>Decay <output id="decayLabel">1.5 s</output><input id="decay" type="range" min=".2" max="5" step=".1"></label><label>Voicing<select id="reverb_type"><option value="0">Spring-style</option><option value="1">Plate-style</option><option value="2">Room</option></select></label></details><div class="row"><button id="tuner" aria-pressed="false">Tuner</button></div><div class="row actionbar"><button id="save">Save</button><button id="apply" class="primary">Start</button><button id="stop">Stop</button></div><p id="message" role="status"></p></aside></main>
 <section class="panel controls-panel"><div><h2>Preset slots</h2><div class="slots" id="slots"></div><p><small>Choose slot · Start to activate</small></p></div><div><div class="meter-console"><div class="signal-meter" id="inputMeter" aria-label="Input peak level"><span>IN</span><div class="meter-track"></div><output>—</output></div><div class="controls" id="controls"></div><div class="signal-meter" id="outputMeter" aria-label="Output peak level"><span>OUT</span><div class="meter-track"></div><output>—</output></div></div><p style="text-align:center"><small>Drag · scroll · type a value</small></p></div></section>
@@ -61,7 +61,7 @@ const ranges={input:[0,2,.000001],gate:[-81,-30,1],bass:[-20,20,1],mid:[-15,15,1
 const fxKeys=["comp","comp_post","reverb","decay","reverb_type"];const controlKeys=[...Object.keys(ranges),...fxKeys];
 function fxLabels(){el("fxSummary").textContent=[Number(el("comp").value)>0?"COMP":"",Number(el("reverb").value)>0?"REVERB":""].filter(Boolean).join(" · ")||"OFF";el("compLabel").textContent=Math.round(Number(el("comp").value)*100)+"%";el("reverbLabel").textContent=Math.round(Number(el("reverb").value)*100)+"%";el("decayLabel").textContent=Number(el("decay").value).toFixed(1)+" s";}
 for(const k of fxKeys)el(k).addEventListener("input",()=>{fxLabels();queueLive();});
-let treeKey=null;const openFolders=new Set(["NAM","IR"]);
+let treeKey=null;const openFolders=new Set();let libraryTarget="";
 let state,slot="1",busy=false,settingsInitialized=false,lastActive=null,liveTimer=null,liveBusy=false,livePending=null;
 for(const [key,[min,max,step]] of Object.entries(ranges)){
  const label=document.createElement("div"),out=document.createElement("input"),input=document.createElement("input");
@@ -152,37 +152,47 @@ el("poweroff").onclick=async()=>{
  catch(e){el("message").textContent=e.message+" — if the connection closed, check whether the device has shut down.";busy=false;for(const id of ["save","apply","stop","uploadBtn","tuner","audioSettings"])el(id).disabled=false;status();}
 };
 el("stop").onclick=()=>action(async()=>{state=await request("/api/stop","");});
-el("uploadBtn").onclick=()=>action(async()=>{const p=read();for(const f of el("upload").files){state=await request("/api/upload?name="+encodeURIComponent(f.name),f);}render(p);renderTree(true);el("upload").value="";});
+el("uploadBtn").onclick=()=>action(async()=>{const p=read();for(const f of el("upload").files){state=await request("/api/upload?name="+encodeURIComponent((libraryTarget?libraryTarget+"/":"")+f.name),f);}render(p);renderTree(true);el("upload").value="";});
 (async()=>{try{state=await request("/api/status");render(state.presets[slot]);status();setInterval(async()=>{if(!busy){try{const s=await request("/api/status");if(!busy){state=s;status();}}catch(e){el("status").textContent="Disconnected";el("xruns").textContent="—";el("xrunMetric").classList.remove("xrun-ok","xrun-warn");}}},2000);}catch(e){el("message").textContent=e.message;}})();
 
 function ampStyle(name){const n=name.toLowerCase();if(/orange|or120|rv100|rocker/.test(n))return ["orange","ORANGE"];if(/vox|\bvx\b|ac30|tb30|matchless|chieftain/.test(n))return ["diamond","BRITISH CLASS A"];if(/fender|super reverb|panoverb|bfsr|deluxe|bassman|tone king/.test(n))return ["silver","AMERICAN"];if(/marshall|jtm|jt50|mrsh|plexi/.test(n))return ["gold","BRITISH"];return ["black","NAM"];}
 function updateAmp(){const name=el("model").value;const [style,family]=ampStyle(name);el("amp").dataset.style=style;el("ampFamily").textContent=name?family:"RPiT3K";el("ampName").textContent=name?name.replace(/\.nam$/i,""):"No capture selected";el("ampCaption").textContent=el("bypass").checked?"BYPASS · Start to activate":name?"NAM capture · "+(el("ir").value?"Cabinet IR selected":"No cabinet IR"):"Import a NAM capture to begin";el("currentTitle").textContent="Preset "+slot+" · "+(name?name.replace(/\.nam$/i,""):"Empty");}
 
 
+function selectFolder(path){
+ libraryTarget=path;el("folderTarget").textContent="Import to: /"+path;
+ renderTree(true);
+}
 function renderTree(force=false){
  if(!state)return;
- const q=el("filter").value.toLowerCase(),key=JSON.stringify([state.files,q,el("model").value,el("ir").value,el("second").value]);
+ const q=el("filter").value.trim().toLowerCase(),selected=[el("model").value,el("ir").value,el("second").value];
+ const key=JSON.stringify([state.files,state.folders,q,selected,libraryTarget]);
  if(!force&&key===treeKey)return;treeKey=key;
- const root=el("fileTree");root.replaceChildren();
- for(const [group,ext] of [["NAM",".nam"],["IR",".wav"]]){
-  const tree={dirs:new Map(),files:[]};
-  for(const file of state.files.filter(f=>f.toLowerCase().endsWith(ext)&&f.toLowerCase().includes(q))){
-   const parts=file.split("/");let node=tree;
-   for(const part of parts.slice(0,-1)){if(!node.dirs.has(part))node.dirs.set(part,{dirs:new Map(),files:[]});node=node.dirs.get(part);}
-   node.files.push(file);
+ const root=el("fileTree"),scroll=root.scrollTop;
+ root.replaceChildren();
+ const tree={dirs:new Map(),files:[]};
+ const nodeFor=parts=>{let node=tree;for(const part of parts){if(!node.dirs.has(part))node.dirs.set(part,{dirs:new Map(),files:[]});node=node.dirs.get(part);}return node;};
+ for(const dir of state.folders||[])if(!q||dir.toLowerCase().includes(q))nodeFor(dir.split("/"));
+ for(const file of state.files)if(!q||file.toLowerCase().includes(q)){const parts=file.split("/");nodeFor(parts.slice(0,-1)).files.push(file);}
+ function addContents(parent,node,path){
+  for(const [name,child] of [...node.dirs].sort((a,b)=>a[0].localeCompare(b[0],undefined,{numeric:true,sensitivity:"base"}))){
+   const full=path?path+"/"+name:name;
+   const d=document.createElement("details"),head=document.createElement("summary"),label=document.createElement("span"),pick=document.createElement("button");
+   label.textContent="📁 "+name;pick.type="button";pick.textContent="↳";pick.title="Select this folder as import destination";pick.className="folder-pick";
+   pick.onclick=e=>{e.preventDefault();e.stopPropagation();selectFolder(full);};
+   head.append(label,pick);head.classList.toggle("folder-selected",full===libraryTarget);
+   d.append(head);d.open=!!q||openFolders.has(full);
+   d.ontoggle=()=>{if(!q){if(d.open)openFolders.add(full);else openFolders.delete(full);}};
+   addContents(d,child,full);parent.append(d);
   }
-  function folder(name,node,path){
-   const d=document.createElement("details"),head=document.createElement("summary");head.textContent=name;d.append(head);d.open=!!q||openFolders.has(path);
-   d.ontoggle=()=>{if(d.open)openFolders.add(path);else openFolders.delete(path);};
-   for(const [n,child] of node.dirs)d.append(folder(n,child,path+"/"+n));
-   for(const file of node.files){const b=document.createElement("button");b.className="tree-file";b.textContent=file.split("/").pop().replace(/\.(nam|wav)$/i,"");b.title=file;
-    b.classList.toggle("selected",[el("model").value,el("ir").value,el("second").value].includes(file));
-    b.onclick=()=>{if(busy)return;const id=ext===".wav"?"ir":"model";el(id).value=file;if(id==="model")el("bypass").checked=false;updateAmp();renderTree(true);};d.append(b);}
-   return d;
-  }
-  root.append(folder(group,tree,group));
+  for(const file of node.files){const b=document.createElement("button"),isIR=file.toLowerCase().endsWith(".wav");b.className="tree-file";b.textContent=(isIR?"IR · ":"NAM · ")+file.split("/").pop().replace(/\.(nam|wav)$/i,"");b.title=file;b.classList.toggle("selected",selected.includes(file));b.onclick=()=>{if(busy)return;const id=isIR?"ir":"model";el(id).value=file;if(!isIR)el("bypass").checked=false;updateAmp();renderTree(true);};parent.append(b);}
  }
+ const home=document.createElement("button");home.type="button";home.className="tree-file folder-home";home.textContent="▣ Library root";home.classList.toggle("selected",libraryTarget==="");home.onclick=()=>selectFolder("");root.append(home);
+ addContents(root,tree,"");root.scrollTop=scroll;
 }
+el("newFolder").onclick=()=>{const name=prompt("New folder name in /"+libraryTarget);if(!name||!name.trim())return;const path=(libraryTarget?libraryTarget+"/":"")+name.trim();action(async()=>{state=await request("/api/folder",JSON.stringify({path}));let parts=path.split("/");for(let i=1;i<=parts.length;i++)openFolders.add(parts.slice(0,i).join("/"));selectFolder(path);});};
+el("collapseTree").onclick=()=>{openFolders.clear();renderTree(true);};
+el("uploadFolder").onchange=()=>action(async()=>{const p=read(),created=new Set();for(const f of el("uploadFolder").files){if(!/\.(nam|wav)$/i.test(f.name))continue;const path=(libraryTarget?libraryTarget+"/":"")+(f.webkitRelativePath||f.name),dir=path.split("/").slice(0,-1).join("/");if(dir&&!created.has(dir)){state=await request("/api/folder",JSON.stringify({path:dir}));created.add(dir);}state=await request("/api/upload?name="+encodeURIComponent(path),f);}render(p);renderTree(true);el("uploadFolder").value="";});
 
 let cloudEpoch=0,cloudPage=1,cloudTone=null,cloudBusy=false;
 const cloud=(op,v={})=>request("/api/tone3000/"+op,JSON.stringify(v));
