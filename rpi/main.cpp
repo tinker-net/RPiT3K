@@ -30,6 +30,7 @@ void stop(int) { running = 0; }
 constexpr unsigned rate = 48000;
 unsigned block = 64;
 unsigned periods = 3;
+unsigned input_channel = 1;
 void check(int rc, const char* what) {
     if (rc < 0) throw std::runtime_error(std::string(what)+": "+snd_strerror(rc));
 }
@@ -49,6 +50,10 @@ PCM open_pcm(const char* device, snd_pcm_stream_t stream) {
     check(snd_pcm_hw_params_set_period_size(raw, hw, block, 0), "period");
     check(snd_pcm_hw_params_set_buffer_size(raw, hw, block*periods), "buffer");
     check(snd_pcm_hw_params(raw, hw), "apply hw");
+    snd_pcm_uframes_t actual_period=0,actual_buffer=0;
+    check(snd_pcm_get_params(raw,&actual_buffer,&actual_period), "read negotiated params");
+    if(actual_period!=block||actual_buffer!=block*periods)throw std::runtime_error("PCM period/buffer differs from request; try a larger --buffer or --periods");
+    std::cerr<<(stream==SND_PCM_STREAM_CAPTURE?"Capture":"Playback")<<" PCM "<<device<<" period="<<actual_period<<" buffer="<<actual_buffer<<" input_channel="<<input_channel<<"\n";
     snd_pcm_sw_params_t* sw;
     snd_pcm_sw_params_alloca(&sw);
     check(snd_pcm_sw_params_current(raw, sw), "sw params");
@@ -59,7 +64,7 @@ PCM open_pcm(const char* device, snd_pcm_stream_t stream) {
     return pcm;
 }
 struct Options {
-    std::string device = "hw:pisound", model, second, ir, render_in, render_out;
+    std::string device = "default", model, second, ir, render_in, render_out;
     double slim = 1., slim2 = 1.;
     float input = 1., output = .25f, bass = 0., mid = 0., treble = 0.;
     bool benchmark = false, bypass = false, tuner = false, live = false, verify = false;
@@ -78,6 +83,7 @@ Options parse(int argc, char** argv) {
         if(k=="--render-in") o.render_in=v;
         else if(k=="--render-out") o.render_out=v;
         else if(k=="--device") o.device=v;
+        else if(k=="--input-channel") { if(v!="1"&&v!="2") throw std::runtime_error("Input channel must be 1 or 2"); input_channel=std::stoul(v); }
         else if(k=="--buffer") { if(v!="64"&&v!="128"&&v!="256"&&v!="512") throw std::runtime_error("Invalid buffer"); block=std::stoul(v); }
         else if(k=="--periods") { if(v!="2"&&v!="3"&&v!="4") throw std::runtime_error("Invalid periods"); periods=std::stoul(v); }
         else if(k=="--model") o.model=v;
@@ -315,7 +321,7 @@ int main(int argc,char** argv) {
             }
             if(!running)break;
             if(!failed){
-                for(unsigned i=0;i<block;++i)chain.x[i]=buf[i*2]/2147483648.0;
+                for(unsigned i=0;i<block;++i)chain.x[i]=buf[i*2+input_channel-1]/2147483648.0;
                 for(unsigned i=0;i<block;++i)in_peak=std::max(in_peak,double(std::abs(chain.x[i])));
                 auto dsp_start=std::chrono::steady_clock::now();
                 poll_controls();
