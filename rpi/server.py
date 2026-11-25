@@ -20,7 +20,7 @@ from urllib.parse import urlsplit, parse_qs
 ROOT = Path(__file__).resolve().parent.parent
 LIMIT = 32 * 1024 * 1024
 NAME = re.compile(r"[\w .()+@-]{1,180}", re.UNICODE)
-DEFAULT = dict(model="", second="", slim=1, slim2=1, input=1, output=.15,
+DEFAULT = dict(model="", second="", ir="", slim=1, slim2=1, input=1, output=.15,
                bass=0, mid=0, treble=0, bypass=True)
 RANGES = dict(slim=(0,1), slim2=(0,1), input=(0,2), output=(0,1),
               bass=(-20,20), mid=(-15,15), treble=(-10,10))
@@ -38,7 +38,7 @@ class Controller:
         self.active = None
         self.presets = {str(i): dict(DEFAULT) for i in range(1,5)}
         if self.statefile.exists():
-            self.presets.update(json.loads(self.statefile.read_text()))
+            self.presets.update({k:dict(DEFAULT, **v) for k,v in json.loads(self.statefile.read_text()).items()})
         self.exe = ROOT / "build-rpi/rpit3k"
         if not self.exe.is_file():
             raise RuntimeError("Compile build-rpi/rpit3k first")
@@ -64,7 +64,7 @@ class Controller:
             v = p[k]
             if type(v) not in (int,float) or not math.isfinite(v) or not lo <= v <= hi:
                 raise ValueError("Invalid "+k)
-        for k,ext in (("model",(".nam",)),("second",(".nam",".wav"))):
+        for k,ext in (("model",(".nam",)),("second",(".nam",".wav")),("ir",(".wav",))):
             if p[k] != "" and not self.file(p[k],ext).is_file():
                 raise ValueError("Missing "+k)
         if not p["bypass"] and not p["model"]:
@@ -81,6 +81,8 @@ class Controller:
             cmd+=["--model",str(self.library/p["model"])]
             if p["second"]:
                 cmd+=["--second",str(self.library/p["second"])]
+            if p["ir"]:
+                cmd+=["--ir",str(self.library/p["ir"])]
         for k in RANGES:
             cmd+=["--"+k,str(p[k])]
         return cmd
@@ -151,7 +153,7 @@ class Controller:
                     running=self.proc is not None and self.proc.poll() is None,
                     files=sorted(p.name for p in self.library.iterdir()
                                  if p.is_file() and not p.is_symlink() and p.suffix.lower() in (".nam",".wav")),
-                    logs=list(self.logs))
+                    logs=list(self.logs), tuner=next((line for line in reversed(list(self.logs)) if line.startswith("TUNER ")), ""))
 
 class Handler(BaseHTTPRequestHandler):
     def send(self,code,data,mime="application/json"):
@@ -211,6 +213,10 @@ class Handler(BaseHTTPRequestHandler):
                     if p.exists(): raise ValueError("File already exists")
                     data=self.body(LIMIT)
                     with p.open("xb") as f: f.write(data)
+                elif u.path=="/api/tuner":
+                    c.stop()
+                    c.logs.clear()
+                    c.start([str(c.exe),"--device",c.args.device,"--tuner"],None)
                 elif u.path=="/api/stop":
                     c.stop()
                 elif u.path in ("/api/save","/api/apply"):
