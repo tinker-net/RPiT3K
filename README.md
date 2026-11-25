@@ -74,7 +74,7 @@ For a constant −45 dBFS detector level, theoretical steady-state gain is −2.
 
 ## Experimental effects and calibration
 
-The latest revision adds an Amount-controlled compressor with selectable PRE/POST NAM position and a mono four-line feedback delay network reverb with Spring-style, Plate-style and Room voicings, Mix and Decay (0.2–5 s). These are algorithmic voicings, not physical spring/plate models or measured IRs. Both effects default to OFF in existing presets and are adjustable live. The reverb follows noise reduction so the expander does not cut its tail. Final output gain follows both effects. Calibrate Input reads NAM input_level_dbu metadata and computes 10^((ADC reference − model reference)/20); the suggested +1.14 dBu Pisound reference is nominal at minimum gain, not measured. Missing metadata or out-of-range compensation is rejected. New FX regression tests are included but have not yet been run on target hardware; historical measurements below do not cover active FX.
+The latest revision adds an Amount-controlled compressor with selectable PRE/POST NAM position and a mono four-line feedback delay network reverb with Spring-style, Plate-style and Room voicings, Mix and Decay (0.2–5 s). These are algorithmic voicings, not physical spring/plate models or measured IRs. Both effects default to OFF in existing presets and are adjustable live. The reverb follows noise reduction so the expander does not cut its tail. Final output gain follows both effects. Calibrate Input reads NAM input_level_dbu metadata and computes 10^((ADC reference − model reference)/20); the suggested +1.14 dBu Pisound reference is nominal at minimum gain, not measured. Missing metadata or out-of-range compensation is rejected. The Pi 5 native FX regression tests now pass (see below). Historical NAM + IR real-time measurements still do not cover active FX.
 
 ## Technical validation
 
@@ -165,6 +165,30 @@ Earlier idle telemetry showed maximum raw input peak 0.00483608 (−46.31 dBFS) 
 | 440 | 440.39 | 1.5323 |
 
 All synthetic tuner tests pass the 5-cent limit. The latest Pi 5 test output reports `Soft-knee expander PASS`, `100% tests passed, 0 tests failed out of 1`, total time 0.25 s, and separate `VERIFY PASS` in bypass. This confirms the implemented regression checks, not full hardware or subjective sound quality.
+
+### 6. Native effects regression and isolated performance
+
+On Raspberry Pi 5, the expanded native DSP suite reported `Native FX PASS`, `Soft-knee expander PASS`, 1/1 tests passed in 0.27 s. Bypass `--verify` passed with the same reported gain, EQ and mute results as before. The new unit tests cover compressor attenuation, three FDN reverb impulse decays and return to bypass.
+
+Offline benchmark with the service stopped, 48 kHz, 64-frame blocks, NAM and IR bypassed:
+
+| Configuration | Mean DSP (µs) | Maximum DSP (µs) | Mean share of 1333.33 µs period |
+| --- | ---: | ---: | ---: |
+| Baseline | 1.89861 | 14.815 | 0.142% |
+| Compressor 0.5, PRE | 2.16995 | 48.834 | 0.163% |
+| Reverb mix 0.3, decay 2 s, default voice | 5.52232 | 49.445 | 0.414% |
+| Compressor + reverb + gate −45 dBFS | 5.10517 | 20.463 | 0.383% |
+
+Observed mean incremental cost of the combined configuration relative to baseline: 3.20656 µs (0.240% of period). These are single offline runs on a synthetic input, not end-to-end real-time timings. The combined result being lower than the reverb-only result does not imply that additional effects improve performance; run-to-run variability was not characterized. No conclusion about xruns, active NAM + IR performance, physical calibration, or subjective sound quality follows from this benchmark.
+
+Reproduce with the live service stopped:
+
+```bash
+./build-rpi/rpit3k --bypass --benchmark
+./build-rpi/rpit3k --bypass --comp 0.5 --benchmark
+./build-rpi/rpit3k --bypass --reverb 0.3 --decay 2 --benchmark
+./build-rpi/rpit3k --bypass --comp 0.5 --reverb 0.3 --decay 2 --gate -45 --benchmark
+```
 
 ## Installation
 
