@@ -19,6 +19,9 @@
 #include <cstdint>
 #include <cerrno>
 #include <sched.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <cstdio>
 
 namespace {
 volatile std::sig_atomic_t running = 1;
@@ -58,12 +61,13 @@ struct Options {
     std::string device = "hw:pisound", model, second, ir;
     double slim = 1., slim2 = 1.;
     float input = 1., output = .25f, bass = 0., mid = 0., treble = 0.;
-    bool benchmark = false, bypass = false, tuner = false;
+    bool benchmark = false, bypass = false, tuner = false, live = false;
 };
 Options parse(int argc, char** argv) {
     Options o;
     for(int i=1;i<argc;++i) {
         std::string k=argv[i];
+        if(k=="--live-controls") {o.live=true;continue;}
         if(k=="--benchmark") {o.benchmark=true;continue;}
         if(k=="--tuner") {o.tuner=true;continue;}
         if(k=="--bypass") {o.bypass=true;continue;}
@@ -142,9 +146,15 @@ struct Chain {
     GuitarTuner tuner;
     bool tuning;
     float input,output;
+    float target_input,target_output,bass,mid,treble,target_bass,target_mid,target_treble;
     NAM_SAMPLE x[512]{}, y[512]{}, z[512]{};
-    Chain(const Options& o):a((o.bypass||o.tuner) ? nullptr : load(o.model,o.slim)),b((o.bypass||o.tuner||is_wav(o.second)) ? nullptr : load(o.second,o.slim2)),ir((o.bypass||o.tuner)?nullptr:load_ir(o.ir.empty()&&is_wav(o.second)?o.second:o.ir)),tuning(o.tuner),input(o.input),output(o.output) {
+    Chain(const Options& o):a((o.bypass||o.tuner) ? nullptr : load(o.model,o.slim)),b((o.bypass||o.tuner||is_wav(o.second)) ? nullptr : load(o.second,o.slim2)),ir((o.bypass||o.tuner)?nullptr:load_ir(o.ir.empty()&&is_wav(o.second)?o.second:o.ir)),tuning(o.tuner),input(o.input),output(o.output),target_input(o.input),target_output(o.output),bass(o.bass),mid(o.mid),treble(o.treble),target_bass(o.bass),target_mid(o.mid),target_treble(o.treble) {
         eq.Init(rate);eq.SetBass(o.bass);eq.SetMid(o.mid);eq.SetTreble(o.treble);
+    }
+    void controls(float i,float o,float b,float m,float t) {
+        if(!std::isfinite(i)||!std::isfinite(o)||!std::isfinite(b)||!std::isfinite(m)||!std::isfinite(t))return;
+        if(i<0||i>2||o<0||o>1||std::abs(b)>20||std::abs(m)>15||std::abs(t)>10)return;
+        target_input=i;target_output=o;target_bass=b;target_mid=m;target_treble=t;
     }
     void process() {
         if(tuning){
@@ -154,7 +164,19 @@ struct Chain {
             }
             std::fill_n(y,block,0.f);return;
         }
-        for(unsigned i=0;i<block;++i)x[i]*=input;
+        // Smooth gains sample by sample; move EQ gains gradually at block boundaries.
+        const float alpha=1.f-std::exp(-float(block)/(rate*.02f));
+        auto approach=[alpha](float& v,float target,auto setter){
+            if(v==target)return;
+            v+=alpha*(target-v);
+            if(std::abs(v-target)<.001f)v=target;
+            setter(v);
+        };
+        approach(bass,target_bass,[&](float v){eq.SetBass(v);});
+        approach(mid,target_mid,[&](float v){eq.SetMid(v);});
+        approach(treble,target_treble,[&](float v){eq.SetTreble(v);});
+        constexpr float gain_alpha=.0020811647f;
+        for(unsigned i=0;i<block;++i){input+=gain_alpha*(target_input-input);if(std::abs(input-target_input)<1e-6f)input=target_input;x[i]*=input;}
         NAM_SAMPLE* in=x;NAM_SAMPLE* out=y;
         if(a) a->process(&in,&out,block);
         else std::copy_n(x,block,y);
@@ -162,6 +184,8 @@ struct Chain {
         float cab[512];
         if(ir){for(unsigned i=0;i<block;i+=64)ir->process(out+i,cab+i);out=cab;}
         for(unsigned i=0;i<block;++i){
+            output+=gain_alpha*(target_output-output);
+            if(std::abs(output-target_output)<1e-6f)output=target_output;
             float s=eq.Process(out[i])*output;
             y[i]=std::isfinite(s)?std::clamp(s,-1.f,1.f):0.f;
         }
@@ -192,6 +216,21 @@ int main(int argc,char** argv) {
         sp.sched_priority=60;
         if(sched_setscheduler(0,SCHED_FIFO,&sp)<0)
             std::cerr<<"Realtime scheduling unavailable; continuing with normal priority\n";
+        // Private nonblocking stdin pipe from the controller; fixed storage, bounded work.
+        if(o.live){int flags=fcntl(STDIN_FILENO,F_GETFL);if(flags<0||fcntl(STDIN_FILENO,F_SETFL,flags|O_NONBLOCK)<0)throw std::runtime_error("Cannot configure live controls");}
+        char line[256]{}; unsigned used=0; bool overflow=false;
+        auto poll_controls=[&]{
+            if(!o.live)return;
+            char buf[512];auto n=read(STDIN_FILENO,buf,sizeof(buf));
+            if(n<=0)return;
+            for(ssize_t k=0;k<n;++k){
+                if(buf[k]=='\n'){
+                    if(!overflow){line[used]=0;float i,o,b,m,t;char extra;
+                        if(std::sscanf(line,"%f %f %f %f %f %c",&i,&o,&b,&m,&t,&extra)==5)chain.controls(i,o,b,m,t);}
+                    used=0;overflow=false;
+                }else if(used<sizeof(line)-1)line[used++]=buf[k];else overflow=true;
+            }
+        };
         unsigned xruns=0;
         auto restart=[&] {
             snd_pcm_drop(play.get());snd_pcm_drop(cap.get());
@@ -215,6 +254,7 @@ int main(int argc,char** argv) {
             if(!running)break;
             if(!failed){
                 for(unsigned i=0;i<block;++i)chain.x[i]=buf[i*2]/2147483648.0;
+                poll_controls();
                 chain.process();
                 for(unsigned i=0;i<block;++i) {
                     auto s=static_cast<int32_t>(std::clamp(double(chain.y[i])*2147483648.,-2147483648.,2147483647.));
