@@ -90,6 +90,16 @@ header .metric{padding:3px 7px}
 .rig #message:empty{display:none}
 @media(max-width:600px){.rig .rig-fields{gap:8px}}
 @media(min-width:1001px) and (max-height:650px){.rig h2{margin-bottom:7px}.rig .rig-fields{gap:6px}.rig select{height:28px}.rig .actionbar{margin-top:7px}}
+
+/* Keep the rig editor narrow independently of display resolution. */
+@media(min-width:1001px){
+ .layout{grid-template-columns:clamp(180px,18vw,350px) minmax(0,1fr) clamp(260px,17vw,320px)}
+ .layout>.rig{padding:12px}
+ .rig .capture-row{grid-template-columns:minmax(0,1fr) 60px;gap:6px}
+ .rig-calibration{grid-template-columns:minmax(0,1fr);gap:4px}
+ .rig-calibration #calibrate{justify-self:start}
+ .rig #calibrationInfo{min-height:14px}
+}
 </style></head><body>
 <header><div><div class="brand"><i>///</i>RPiT3K</div><div class="subtitle">NATIVE GUITAR PROCESSOR</div></div><div id="currentTitle">Connecting…</div><div class="metrics"><span class="metric">CPU <strong id="cpu">—</strong><meter id="cpuMeter" min="0" max="100"></meter></span><span class="metric">TEMP <strong id="temp">—</strong></span><span class="metric">BUFFER <strong id="latency">—</strong></span><span class="metric" id="xrunMetric" title="ALSA recoveries since service start (includes suspend recovery)">XRUNS <strong id="xruns">—</strong></span></div><span id="status">Connecting…</span><button id="poweroff" type="button" title="Shut down the host" aria-label="Shut down the host" disabled><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2v10M6 5a9 9 0 1 0 12 0"/></svg></button></header>
 <main class="layout"><aside class="panel"><h2>Library</h2><div class="library"><input id="filter" type="search" placeholder="Find NAM or IR"><div class="folder-tools"><button id="newFolder" title="Create folder in selected location">+ Folder</button><button id="collapseTree" title="Collapse all folders">Collapse</button></div><small id="folderTarget" title="Upload destination">Import to: /</small><div id="fileTree" aria-label="Local file tree"></div><label class="folder-import">Import directory<input id="uploadFolder" type="file" webkitdirectory multiple></label><input id="upload" type="file" accept=".nam,.wav" multiple><button id="uploadBtn">Import files</button><button id="cloudOpen">Browse TONE3000</button><p><small>Pi library · choose a file to load it into the rig.</small></p></div></aside>
