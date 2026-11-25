@@ -5,6 +5,7 @@
 #include "convolution.h"
 #include "tuner.h"
 #include "noise_gate.h"
+#include "effects.h"
 #include "NAM/wav.h"
 #include <cctype>
 #include <algorithm>
@@ -64,6 +65,7 @@ struct Options {
     double slim = 1., slim2 = 1.;
     float input = 1., output = .25f, bass = 0., mid = 0., treble = 0.;
     float gate = -81.f;
+    float comp=0, comp_post=0, reverb=0, decay=1.5f, reverb_type=0;
     int meter_fd = -1;
     bool benchmark = false, bypass = false, tuner = false, live = false, verify = false;
 };
@@ -89,6 +91,11 @@ Options parse(int argc, char** argv) {
         else if(k=="--ir") o.ir=v;
         else if(k=="--slim") o.slim=std::stod(v);
         else if(k=="--slim2") o.slim2=std::stod(v);
+        else if(k=="--comp") o.comp=std::stof(v);
+        else if(k=="--comp_post") o.comp_post=std::stof(v);
+        else if(k=="--reverb") o.reverb=std::stof(v);
+        else if(k=="--decay") o.decay=std::stof(v);
+        else if(k=="--reverb_type") o.reverb_type=std::stof(v);
         else if(k=="--gate") o.gate=std::stof(v);
         else if(k=="--input") o.input=std::stof(v);
         else if(k=="--output") o.output=std::stof(v);
@@ -103,6 +110,7 @@ Options parse(int argc, char** argv) {
     if(o.input<0||o.input>2||o.output<0||o.output>1) throw std::runtime_error("Gain outside range");
     if(std::abs(o.bass)>20||std::abs(o.mid)>15||std::abs(o.treble)>10) throw std::runtime_error("EQ outside range");
     if(!std::isfinite(o.gate)||!(o.gate==-81.f||(o.gate>=-80.f&&o.gate<=-30.f)))throw std::runtime_error("Invalid gate threshold");
+    if(!std::isfinite(o.comp)||o.comp<0||o.comp>1||!(o.comp_post==0||o.comp_post==1)||!std::isfinite(o.reverb)||o.reverb<0||o.reverb>1||!std::isfinite(o.decay)||o.decay<.2f||o.decay>5||!(o.reverb_type==0||o.reverb_type==1||o.reverb_type==2))throw std::runtime_error("Invalid effects controls");
     return o;
 }
 std::unique_ptr<nam::DSP> load(const std::string& path,double slim) {
@@ -155,19 +163,27 @@ struct Chain {
     Eq3Band eq;
     GuitarTuner tuner;
     NoiseGate gate;
+    RigCompressor pre, post;
+    RigReverb verb;
     bool tuning;
     float input,output;
     float target_input,target_output,bass,mid,treble,target_bass,target_mid,target_treble;
     NAM_SAMPLE x[512]{}, y[512]{}, z[512]{};
     Chain(const Options& o):a((o.bypass||o.tuner) ? nullptr : load(o.model,o.slim)),b((o.bypass||o.tuner||is_wav(o.second)) ? nullptr : load(o.second,o.slim2)),ir((o.bypass||o.tuner)?nullptr:load_ir(o.ir.empty()&&is_wav(o.second)?o.second:o.ir)),tuning(o.tuner),input(o.input),output(o.output),target_input(o.input),target_output(o.output),bass(o.bass),mid(o.mid),treble(o.treble),target_bass(o.bass),target_mid(o.mid),target_treble(o.treble) {
         gate.set(o.gate);
+        effects(o.comp,o.comp_post,o.reverb,o.decay,o.reverb_type);
         eq.Init(rate);eq.SetBass(o.bass);eq.SetMid(o.mid);eq.SetTreble(o.treble);
     }
-    void controls(float i,float o,float b,float m,float t,float g=-81.f) {
+    void effects(float c,float pos,float wet,float d,float type){
+        if(!std::isfinite(c)||c<0||c>1||!(pos==0||pos==1)||!std::isfinite(wet)||wet<0||wet>1||!std::isfinite(d)||d<.2f||d>5||!(type==0||type==1||type==2))return;
+        pre.set(pos==0?c:0);post.set(pos==1?c:0);verb.set(wet,d,int(type));
+    }
+    void controls(float i,float o,float b,float m,float t,float g=-81.f,float c=0,float pos=0,float wet=0,float d=1.5f,float type=0) {
         if(!std::isfinite(i)||!std::isfinite(o)||!std::isfinite(b)||!std::isfinite(m)||!std::isfinite(t))return;
         if(i<0||i>2||o<0||o>1||std::abs(b)>20||std::abs(m)>15||std::abs(t)>10)return;
         if(!std::isfinite(g)||!(g==-81.f||(g>=-80.f&&g<=-30.f)))return;
         gate.set(g);
+        effects(c,pos,wet,d,type);
         target_input=i;target_output=o;target_bass=b;target_mid=m;target_treble=t;
     }
     void process() {
@@ -193,7 +209,7 @@ struct Chain {
         const bool gated=gate.enabled();
         if(gated)for(unsigned i=0;i<block;++i){gate.process(x[i]);gate_gain[i]=gate.gain();}
         constexpr float gain_alpha=.0020811647f;
-        for(unsigned i=0;i<block;++i){input+=gain_alpha*(target_input-input);if(std::abs(input-target_input)<1e-6f)input=target_input;x[i]*=input;}
+        for(unsigned i=0;i<block;++i){input+=gain_alpha*(target_input-input);if(std::abs(input-target_input)<1e-6f)input=target_input;x[i]*=input;x[i]=pre.process(x[i]);}
         NAM_SAMPLE* in=x;NAM_SAMPLE* out=y;
         if(a) a->process(&in,&out,block);
         else std::copy_n(x,block,y);
@@ -203,8 +219,9 @@ struct Chain {
         for(unsigned i=0;i<block;++i){
             output+=gain_alpha*(target_output-output);
             if(std::abs(output-target_output)<1e-6f)output=target_output;
-            float s=eq.Process(out[i])*output;
+            float s=eq.Process(out[i]);
             if(gated)s*=gate_gain[i];
+            s=verb.process(post.process(s))*output;
             y[i]=std::isfinite(s)?std::clamp(s,-1.f,1.f):0.f;
         }
     }
@@ -299,8 +316,8 @@ int main(int argc,char** argv) {
             if(n<=0)return;
             for(ssize_t k=0;k<n;++k){
                 if(buf[k]=='\n'){
-                    if(!overflow){line[used]=0;float i,o,b,m,t,g;char extra;
-                        if(std::sscanf(line,"%f %f %f %f %f %f %c",&i,&o,&b,&m,&t,&g,&extra)==6)chain.controls(i,o,b,m,t,g);}
+                    if(!overflow){line[used]=0;float i,o,b,m,t,g,c,pos,wet,d,type;char extra;
+                        if(std::sscanf(line,"%f %f %f %f %f %f %f %f %f %f %f %c",&i,&o,&b,&m,&t,&g,&c,&pos,&wet,&d,&type,&extra)==11)chain.controls(i,o,b,m,t,g,c,pos,wet,d,type);}
                     used=0;overflow=false;
                 }else if(used<sizeof(line)-1)line[used++]=buf[k];else overflow=true;
             }
