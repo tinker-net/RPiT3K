@@ -51,6 +51,8 @@ class Controller:
         self.presets = {str(i): dict(DEFAULT) for i in range(1,5)}
         if self.statefile.exists():
             self.presets.update({k:dict(DEFAULT, **v) for k,v in json.loads(self.statefile.read_text()).items()})
+        self.favoritesfile=self.data/"favorites.json"
+        self.favorites=set(json.loads(self.favoritesfile.read_text())) if self.favoritesfile.exists() else set()
         self.exe = ROOT / "build-rpi/rpit3k"
         if not self.exe.is_file():
             raise RuntimeError("Compile build-rpi/rpit3k first")
@@ -78,6 +80,56 @@ class Controller:
         if not p.resolve().is_relative_to(self.library.resolve()):
             raise ValueError("Outside library")
         return p
+
+    def write_json(self,path,value):
+        tmp=path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(value,indent=2))
+        os.replace(tmp,path)
+
+    def set_favorite(self,path,enabled):
+        if type(enabled) is not bool or not self.file(path,(".nam",".wav")).is_file():
+            raise ValueError("Invalid favorite")
+        updated=set(self.favorites)
+        if enabled: updated.add(path)
+        else: updated.discard(path)
+        self.write_json(self.favoritesfile,sorted(updated))
+        self.favorites=updated
+
+    def rename_library(self,old,name,kind):
+        if not isinstance(name,str) or not NAME.fullmatch(name) or name in (".",".."):
+            raise ValueError("Invalid new name")
+        if kind=="folder" and old:
+            src=self.folder(old)
+            if not src.is_dir(): raise ValueError("Folder not found")
+            dst=self.folder(str(Path(old).with_name(name)))
+        elif kind=="file":
+            src=self.file(old,(".nam",".wav"))
+            if not src.is_file(): raise ValueError("File not found")
+            ext=src.suffix
+            if name.lower().endswith(ext.lower()): name=name[:-len(ext)]
+            if not name or name in (".",".."): raise ValueError("Invalid new name")
+            dst=self.file(str(Path(old).with_name(name+ext)),(".nam",".wav"))
+        else: raise ValueError("Invalid item")
+        if src==dst: return old
+        if dst.exists() or dst.is_symlink(): raise ValueError("Destination already exists")
+        new=dst.relative_to(self.library).as_posix()
+        def remap(path):
+            return new+path[len(old):] if path==old or (kind=="folder" and path.startswith(old+"/")) else path
+        presets={slot:{**preset,**{k:remap(preset[k]) for k in ("model","second","ir")}} for slot,preset in self.presets.items()}
+        favorites={remap(path) for path in self.favorites}
+        # Audio models are already loaded in memory. Do not restart audio.
+        src.rename(dst)
+        try:
+            self.write_json(self.statefile,presets)
+            self.write_json(self.favoritesfile,sorted(favorites))
+        except OSError:
+            dst.rename(src)
+            self.write_json(self.statefile,self.presets)
+            self.write_json(self.favoritesfile,sorted(self.favorites))
+            raise
+        self.presets=presets
+        self.favorites=favorites
+        return new
 
     def library_folders(self):
         folders=[]
@@ -325,7 +377,7 @@ class Controller:
                     cloud_enabled=not self.args.disable_cloud,
                     poweroff_enabled=os.environ.get("RPIT3K_ENABLE_POWEROFF")=="1",
                     running=self.proc is not None and self.proc.poll() is None,
-                    files=self.library_files(),folders=self.library_folders(),
+                    files=self.library_files(),folders=self.library_folders(),favorites=sorted(self.favorites),
                     logs=list(self.logs), tuner=next((line for line in reversed(list(self.logs)) if line.startswith("TUNER ")), ""))
 
 class Handler(BaseHTTPRequestHandler):
@@ -435,6 +487,12 @@ class Handler(BaseHTTPRequestHandler):
                     if p.exists(): raise ValueError("File already exists")
                     data=self.body(LIMIT)
                     with p.open("xb") as f: f.write(data)
+                elif u.path=="/api/favorite":
+                    v=json.loads(self.body(65536))
+                    c.set_favorite(v["path"],v["enabled"])
+                elif u.path=="/api/rename":
+                    v=json.loads(self.body(65536))
+                    c.rename_library(v["path"],v["name"],v["kind"])
                 elif u.path=="/api/folder":
                     v=json.loads(self.body(65536))
                     name=v["path"]
