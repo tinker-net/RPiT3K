@@ -8,6 +8,12 @@ The goal is a small, reproducible, offline-capable guitar rig rather than a gene
 
 **[Installation and user guide](README-PISOUND.md)** · **[Technical report and test reproduction](rpi/README.md)** · **[Original Daisy documentation](README-DAISY.md)**
 
+## Web interface
+
+![RPiT3K running on Raspberry Pi and Pisound, with local capture library, amplifier view, rig controls, live meters and collapsible effects](docs/images/rpit3k-interface.png)
+
+*Actual RPiT3K interface running on the development hardware. The screenshot illustrates a live preset with NAM and cabinet IR selected; it is not a mockup.*
+
 ## Results at a glance
 
 | Measurement | Observed result | Scope |
