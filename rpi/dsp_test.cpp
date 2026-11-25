@@ -17,7 +17,9 @@ int main(){
     if(y<.00049f)throw std::runtime_error("Gate hold");
     for(int i=0;i<96000;++i)y=gate.process(.0005f);
     if(std::abs(y)>1e-7f)throw std::runtime_error("Gate release");
+    if(.1f*gate.gain()>1e-7f)throw std::runtime_error("Gate output residual not muted");
     gate.set(-81);
+    if(gate.gain()!=1.f)throw std::runtime_error("Gate output bypass");
     if(gate.process(.0005f)!=.0005f)throw std::runtime_error("Gate disable");
     std::cout<<"Noise gate PASS\n";
 
