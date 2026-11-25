@@ -156,13 +156,26 @@ class Controller:
             raise
 
     def start(self,cmd,slot):
-        self.proc=subprocess.Popen(cmd,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,
+        self.proc=subprocess.Popen(cmd+["--live-controls"],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,
                                    text=True,bufsize=1)
         threading.Thread(target=self.drain,args=(self.proc,),daemon=True).start()
         time.sleep(.35)
         if self.proc.poll() is not None:
             raise ValueError("Audio engine stopped: "+"; ".join(list(self.logs)[-5:]))
         self.active=slot
+
+    def live_controls(self,slot,values):
+        if slot!=self.active or self.proc is None or self.proc.poll() is not None:
+            raise ValueError("Select the running preset first")
+        keys=("input","output","bass","mid","treble")
+        p=dict(self.presets[slot])
+        for k in keys:
+            if k not in values: raise ValueError("Missing "+k)
+            p[k]=values[k]
+        p=self.validate(p)
+        self.proc.stdin.write(" ".join(str(p[k]) for k in keys)+"\n")
+        self.proc.stdin.flush()
+        self.save(slot,p)
 
     def next_preset(self):
         slot=str(int(self.settings["last"])%4+1)
@@ -267,6 +280,9 @@ class Handler(BaseHTTPRequestHandler):
                 elif u.path=="/api/next":
                     if self.client_address[0] not in ("127.0.0.1","::1"): raise ValueError("Local button endpoint only")
                     c.next_preset()
+                elif u.path=="/api/controls":
+                    v=json.loads(self.body(65536))
+                    c.live_controls(v["slot"],v["controls"])
                 elif u.path=="/api/settings":
                     c.configure(json.loads(self.body(65536)))
                 elif u.path=="/api/tuner":
