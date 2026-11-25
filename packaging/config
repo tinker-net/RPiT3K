@@ -1,0 +1,7 @@
+# Loopback only by default; use SSH port forwarding for remote access.
+# Changing BIND to 0.0.0.0 exposes an unauthenticated API. Trusted LAN only.
+BIND=127.0.0.1
+PORT=8080
+PCM=default
+# Set AUTOSTART=--autostart after configuring audio.
+AUTOSTART=
