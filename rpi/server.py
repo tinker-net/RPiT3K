@@ -44,7 +44,7 @@ class Controller:
         self.active = None
         self.tuner_return = None
         self.settingsfile = self.data / "settings.json"
-        self.settings = dict(buffer=64, periods=3, last="1")
+        self.settings = dict(buffer=256, periods=3, last="1", device=args.device, input_channel=args.input_channel, input_channels=args.input_channels, output_channels=args.output_channels, output_left=args.output_left, output_right=args.output_right, reference_dbu=None)
         if self.settingsfile.exists(): self.settings.update(json.loads(self.settingsfile.read_text()))
         self.cpu_prev = None
         self.cpu_pct = None
@@ -113,10 +113,10 @@ class Controller:
         os.replace(temp,self.settingsfile)
 
     def audio_args(self):
-        return ["--buffer",str(self.settings["buffer"]),"--periods",str(self.settings["periods"])]
+        return ["--device",self.settings["device"],"--buffer",str(self.settings["buffer"]),"--periods",str(self.settings["periods"])]+[v for k in ("input_channel","input_channels","output_channels","output_left","output_right") for v in ("--"+k.replace("_","-"),str(self.settings[k]))]
 
     def command(self,p):
-        cmd=[str(self.exe),"--device",self.args.device]+self.audio_args()
+        cmd=[str(self.exe)]+self.audio_args()
         if p["bypass"]:
             cmd+=["--bypass"]
         else:
@@ -266,12 +266,21 @@ class Controller:
     def configure(self,values):
         b,p=values.get("buffer"),values.get("periods")
         if type(b) is not int or type(p) is not int or b not in (64,128,256,512) or p not in (2,3,4): raise ValueError("Invalid audio settings")
+        device=values.get("device",self.settings["device"])
+        if not isinstance(device,str) or not re.fullmatch(r"[A-Za-z0-9_.,:=+ -]{1,160}",device):
+            raise ValueError("Invalid ALSA PCM name")
+        routing={k:values.get(k,self.settings[k]) for k in ("input_channel","input_channels","output_channels","output_left","output_right")}
+        if any(type(v) is not int or not 1<=v<=64 for v in routing.values()) or routing["input_channel"]>routing["input_channels"] or max(routing["output_left"],routing["output_right"])>routing["output_channels"]:
+            raise ValueError("Invalid channel routing")
+        ref=values.get("reference_dbu",self.settings["reference_dbu"])
+        if ref is not None and (type(ref) not in (int,float) or not math.isfinite(ref) or not -60<=ref<=30):
+            raise ValueError("Invalid ADC reference")
         old=dict(self.settings);slot=self.active
-        self.settings.update(buffer=b,periods=p)
+        self.settings.update(buffer=b,periods=p,device=device,reference_dbu=ref,**routing)
         try:
             if slot: self.apply(slot,self.presets[slot],benchmark=False)
             elif self.proc and self.proc.poll() is None:
-                self.stop();self.start([str(self.exe),"--device",self.args.device,"--tuner"]+self.audio_args(),None)
+                self.stop();self.start([str(self.exe),"--tuner"]+self.audio_args(),None)
             self.persist_settings()
         except Exception:
             self.settings=old
@@ -347,6 +356,12 @@ class Handler(BaseHTTPRequestHandler):
             self.send(200,(ROOT/"rpi/web.html").read_bytes(),"text/html; charset=utf-8")
         elif path=="/api/levels":
             self.send(200,self.server.controller.levels())
+        elif path=="/api/devices":
+            result={}
+            for command in ("aplay","arecord"):
+                try: result[command]=subprocess.run([command,"-l"],capture_output=True,text=True,timeout=3).stdout
+                except (OSError,subprocess.SubprocessError): result[command]="Unavailable"
+            self.send(200,result)
         elif path=="/api/status":
             with self.server.controller.lock:
                 self.send(200,self.server.controller.status())
@@ -412,7 +427,7 @@ class Handler(BaseHTTPRequestHandler):
                         c.stop()
                         c.logs.clear()
                         try:
-                            c.start([str(c.exe),"--device",c.args.device,"--tuner"]+c.audio_args(),None)
+                            c.start([str(c.exe),"--tuner"]+c.audio_args(),None)
                         except Exception:
                             previous=c.tuner_return
                             c.stop()
@@ -438,8 +453,13 @@ def main():
     p=argparse.ArgumentParser()
     p.add_argument("--bind",default="127.0.0.1")
     p.add_argument("--port",type=int,default=8080)
-    p.add_argument("--device",default="hw:pisound,0")
-    p.add_argument("--data",default="~/.local/share/rpit3k")
+    p.add_argument("--device",default="default")
+    p.add_argument("--input-channel",type=int,default=1)
+    p.add_argument("--input-channels",type=int,default=2)
+    p.add_argument("--output-channels",type=int,default=2)
+    p.add_argument("--output-left",type=int,default=1)
+    p.add_argument("--output-right",type=int,default=2)
+    p.add_argument("--data",default="~/.local/share/rpit3k-general")
     p.add_argument("--no-auth",action="store_true")
     p.add_argument("--autostart",action="store_true")
     p.add_argument("--disable-cloud",action="store_true")
