@@ -63,3 +63,32 @@ ssh -N -L 8080:127.0.0.1:8080 tinkernet@HWW-RPiT3K.local
 Open http://localhost:8080 in a browser and enter the username and generated password printed on the Pi terminal. For a trusted isolated LAN you can instead launch with `--bind 0.0.0.0`, but HTTP Basic authentication is not encrypted over LAN; do not expose it to the Internet. No root web server. The audio engine may warn that realtime scheduling is unavailable until the audio user's limits are configured. Stop any existing CLI audio process first.
 
 Import local NAM/WAV files, select a preset, choose a capture, uncheck bypass, and Apply. Four presets persist under ~/.local/share/rpit3k. Full is the default for slimmable models. Controls apply on restart, not continuously; switching interrupts audio and runs an offline validation benchmark first. No TONE3000 account integration yet. Web controller is untested on the Pi.
+
+## Autonomous pedal preview
+
+Stop the manually launched controller with Ctrl+C before installation. From the repository root:
+
+```sh
+git pull --ff-only origin rpi-native
+cmake -S rpi -B build-rpi -DCMAKE_BUILD_TYPE=Release
+cmake --build build-rpi -j2
+ctest --test-dir build-rpi --output-on-failure
+bash rpi/install-service.sh
+```
+
+The systemd service runs as the installing user, with realtime priority permission, restores the last successfully applied slot (initially 1), and exposes HTTP on port 8080 without authentication. Use only on a trusted network; never forward this port to the Internet. CLICK_1 in /etc/pisound.conf cycles slots 1–4 using the loopback API, if the official pisound-btn service is installed. Existing hold/double-click actions are unchanged. Preset switching currently restarts the engine; it is not gapless. Buffer settings are persistent and require restarting audio. Displayed latency is nominal ALSA buffer duration per direction, not measured round-trip latency. CPU percentage is total system utilization.
+
+Optional NetworkManager fallback (separate installation):
+
+```sh
+bash rpi/install-hotspot.sh
+```
+
+Enter a WPA2 password when prompted. A timer checks for absent Ethernet/Wi-Fi connectivity after boot and starts the protected RPiT3K network at 10.42.0.1. It leaves an active network alone. Once the AP is active it stays active until explicitly disconnected or rebooted; it does not scan for known networks while serving the AP. Existing Wi-Fi profiles are retained. To disable the fallback:
+
+```sh
+sudo systemctl disable --now rpit3k-hotspot.timer
+sudo nmcli connection down RPiT3K-fallback
+```
+
+The autonomous deployment, variable ALSA settings, and physical button have not yet been tested on the target Pi.
