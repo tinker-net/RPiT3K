@@ -131,6 +131,36 @@ class Controller:
         self.favorites=favorites
         return new
 
+    def delete_library(self,path,kind):
+        if not isinstance(path,str) or not path: raise ValueError("Cannot delete library root")
+        if kind=="folder":
+            src=self.folder(path)
+            if not src.is_dir(): raise ValueError("Folder not found")
+        elif kind=="file":
+            src=self.file(path,(".nam",".wav"))
+            if not src.is_file(): raise ValueError("File not found")
+        else: raise ValueError("Invalid item")
+        def contains(value):
+            return value==path or (kind=="folder" and value.startswith(path+"/"))
+        used=[slot for slot,preset in self.presets.items() if any(contains(preset[k]) for k in ("model","second","ir"))]
+        if used: raise ValueError("Used by preset(s) "+", ".join(used)+". Change those presets before removing this item.")
+        # Move to a private recoverable trash directory outside the library.
+        trash=self.data/"trash"
+        trash.mkdir(mode=0o700,exist_ok=True)
+        if trash.is_symlink() or not trash.is_dir(): raise ValueError("Invalid trash directory")
+        entry=trash/(str(time.time_ns())+"-"+secrets.token_hex(4))
+        entry.mkdir(mode=0o700)
+        dst=entry/src.name
+        self.write_json(entry/"origin.json",dict(path=path,kind=kind))
+        updated={f for f in self.favorites if not contains(f)}
+        src.rename(dst)
+        try:
+            self.write_json(self.favoritesfile,sorted(updated))
+        except OSError:
+            dst.rename(src)
+            raise
+        self.favorites=updated
+
     def library_folders(self):
         folders=[]
         for root,dirs,_ in os.walk(self.library,followlinks=False):
@@ -487,6 +517,9 @@ class Handler(BaseHTTPRequestHandler):
                     if p.exists(): raise ValueError("File already exists")
                     data=self.body(LIMIT)
                     with p.open("xb") as f: f.write(data)
+                elif u.path=="/api/delete":
+                    v=json.loads(self.body(65536))
+                    c.delete_library(v["path"],v["kind"])
                 elif u.path=="/api/favorite":
                     v=json.loads(self.body(65536))
                     c.set_favorite(v["path"],v["enabled"])
