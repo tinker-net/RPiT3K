@@ -44,4 +44,22 @@ The prototype requests 48 kHz, stereo S32_LE, 64 frames, 3 periods; unsupported 
 - Preset storage, safe model changes, MIDI, systemd service.
 - Adapt React app to LAN API; retain TONE3000 integration and add local NAM/WAV imports and per-block quality control.
 
-No web server or MIDI service is implemented yet. This prototype has not been compiled or tested on Pisound.
+The CLI engine has been compiled and tested with Pisound on a Raspberry Pi 5; a real slimmable capture ran successfully. Long-session stability and IR throughput remain unverified. MIDI is not implemented yet.
+
+## Local web controller (preview)
+
+From the repository root, run as your normal audio-enabled user:
+
+```sh
+python3 rpi/server.py
+```
+
+For secure access from a Mac, open a second Mac terminal and run:
+
+```sh
+ssh -N -L 8080:127.0.0.1:8080 tinkernet@HWW-RPiT3K.local
+```
+
+Open http://localhost:8080 in a browser and enter the username and generated password printed on the Pi terminal. For a trusted isolated LAN you can instead launch with `--bind 0.0.0.0`, but HTTP Basic authentication is not encrypted over LAN; do not expose it to the Internet. No root web server. The audio engine may warn that realtime scheduling is unavailable until the audio user's limits are configured. Stop any existing CLI audio process first.
+
+Import local NAM/WAV files, select a preset, choose a capture, uncheck bypass, and Apply. Four presets persist under ~/.local/share/rpit3k. Full is the default for slimmable models. Controls apply on restart, not continuously; switching interrupts audio and runs an offline validation benchmark first. No TONE3000 account integration yet. Web controller is untested on the Pi.
