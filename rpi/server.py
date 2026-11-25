@@ -84,7 +84,7 @@ class Controller:
         os.replace(temp,self.settingsfile)
 
     def audio_args(self):
-        return ["--buffer",str(self.settings["buffer"]),"--periods",str(self.settings["periods"])]
+        return ["--buffer",str(self.settings["buffer"]),"--periods",str(self.settings["periods"]),"--input-channel",str(self.args.input_channel)]
 
     def command(self,p):
         cmd=[str(self.exe),"--device",self.args.device]+self.audio_args()
@@ -308,7 +308,8 @@ def main():
     p=argparse.ArgumentParser()
     p.add_argument("--bind",default="127.0.0.1")
     p.add_argument("--port",type=int,default=8080)
-    p.add_argument("--device",default="hw:pisound,0")
+    p.add_argument("--device",default="default")
+    p.add_argument("--input-channel",type=int,choices=(1,2),default=1)
     p.add_argument("--data",default="~/.local/share/rpit3k")
     p.add_argument("--no-auth",action="store_true")
     p.add_argument("--autostart",action="store_true")
