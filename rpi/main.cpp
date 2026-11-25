@@ -12,6 +12,7 @@
 #include <csignal>
 #include <filesystem>
 #include <iostream>
+#include <fstream>
 #include <memory>
 #include <stdexcept>
 #include <vector>
@@ -58,7 +59,7 @@ PCM open_pcm(const char* device, snd_pcm_stream_t stream) {
     return pcm;
 }
 struct Options {
-    std::string device = "hw:pisound", model, second, ir;
+    std::string device = "hw:pisound", model, second, ir, render_in, render_out;
     double slim = 1., slim2 = 1.;
     float input = 1., output = .25f, bass = 0., mid = 0., treble = 0.;
     bool benchmark = false, bypass = false, tuner = false, live = false, verify = false;
@@ -74,7 +75,9 @@ Options parse(int argc, char** argv) {
         if(k=="--bypass") {o.bypass=true;continue;}
         if(i+1>=argc) throw std::runtime_error("Missing value: "+k);
         std::string v=argv[++i];
-        if(k=="--device") o.device=v;
+        if(k=="--render-in") o.render_in=v;
+        else if(k=="--render-out") o.render_out=v;
+        else if(k=="--device") o.device=v;
         else if(k=="--buffer") { if(v!="64"&&v!="128"&&v!="256"&&v!="512") throw std::runtime_error("Invalid buffer"); block=std::stoul(v); }
         else if(k=="--periods") { if(v!="2"&&v!="3"&&v!="4") throw std::runtime_error("Invalid periods"); periods=std::stoul(v); }
         else if(k=="--model") o.model=v;
@@ -196,6 +199,29 @@ struct Chain {
 int main(int argc,char** argv) {
     try {
         auto o=parse(argc,argv); Chain chain(o);
+        if(!o.render_in.empty() || !o.render_out.empty()){
+            // Offline path uses the identical production Chain and block size.
+            if(o.render_in.empty()||o.render_out.empty()||o.tuner||o.verify||o.benchmark||o.live)
+                throw std::runtime_error("Offline render requires both paths and audio mode");
+            if(std::filesystem::exists(o.render_out))
+                throw std::runtime_error("Render output already exists");
+            std::ifstream in(o.render_in,std::ios::binary);
+            if(!in)throw std::runtime_error("Cannot open render input");
+            std::ofstream out(o.render_out,std::ios::binary);
+            if(!out)throw std::runtime_error("Cannot open render output");
+            size_t frames=0;
+            while(in.read(reinterpret_cast<char*>(chain.x),block*sizeof(float))){
+                for(unsigned i=0;i<block;++i)if(!std::isfinite(chain.x[i]))throw std::runtime_error("Nonfinite input");
+                chain.process();
+                out.write(reinterpret_cast<const char*>(chain.y),block*sizeof(float));
+                if(!out)throw std::runtime_error("Render write failed");
+                frames+=block;
+            }
+            if(!in.eof()||in.gcount()!=0||!frames)throw std::runtime_error("Input must contain whole nonempty float32 blocks");
+            out.close();if(!out)throw std::runtime_error("Render close failed");
+            std::cout<<"RENDER frames="<<frames<<" block="<<block<<"\n";
+            return 0;
+        }
         if(o.verify){
             // Same Chain as live playback; deterministic signal, no ALSA device.
             auto measure=[&](float hz){
