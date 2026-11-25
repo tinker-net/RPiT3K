@@ -1,0 +1,17 @@
+#!/bin/sh
+set -e
+if [ "$1" = configure ]; then
+ if ! getent passwd rpi-ton3k >/dev/null; then
+  adduser --system --group --home /var/lib/rpi-ton3k --no-create-home rpi-ton3k
+ fi
+ install -d -m700 -o rpi-ton3k -g rpi-ton3k /var/lib/rpi-ton3k
+ if [ -d /run/systemd/system ]; then
+  systemctl daemon-reload
+  if [ -n "${2:-}" ]; then
+   if systemctl is-active --quiet rpi-ton3k.service; then deb-systemd-invoke restart rpi-ton3k.service; fi
+  else
+   deb-systemd-helper enable rpi-ton3k.service >/dev/null
+   deb-systemd-invoke start rpi-ton3k.service
+  fi
+ fi
+fi
