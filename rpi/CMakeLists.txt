@@ -16,3 +16,8 @@ if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64)$")
   target_compile_options(rpit3k PRIVATE -mcpu=cortex-a76)
 endif()
 target_link_libraries(rpit3k PRIVATE ${ALSA_LIBRARIES})
+
+add_executable(rpit3k-dsp-test dsp_test.cpp)
+target_compile_options(rpit3k-dsp-test PRIVATE $<$<CONFIG:Release>:-O3>)
+enable_testing()
+add_test(NAME native_dsp COMMAND rpit3k-dsp-test)
