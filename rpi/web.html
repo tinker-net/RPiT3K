@@ -250,6 +250,61 @@ html[data-skin=tone3000]{--amber:#ffff00;--line:#454549;color:#fff;background:#0
 #status.audio-active{color:#7cc68c;border-color:#7cc68c;background:#7cc68c18;box-shadow:none}
 [data-skin=tone3000] #status.audio-active{color:#7cc68c;border-color:#7cc68c;background:#193020}
 #status:disabled{opacity:.55}
+
+/* T3K instrument faceplate, revision 2. Texture is CSS, not an image:
+   it stays crisp at any device scale and does not intercept input. */
+html[data-skin=tone3000]{--line:#303034;background:#080809;color:#e5e5e9}
+[data-skin=tone3000] body{
+ --face-grain:repeating-linear-gradient(0deg,#ffffff04 0 1px,transparent 1px 3px),repeating-linear-gradient(90deg,#ffffff03 0 1px,transparent 1px 3px);
+ background:var(--face-grain),radial-gradient(ellipse at 48% 28%,#202023 0,#0c0c0d 43%,#030304 82%);border:1px solid #303034;border-radius:13px;box-shadow:inset 0 0 0 2px #ffffff06;
+}
+[data-skin=tone3000] header{background:transparent;border-color:#ffffff12}
+[data-skin=tone3000] .layout>.panel{background:transparent;border-color:transparent;border-radius:0;box-shadow:none}
+[data-skin=tone3000] .stage{background:transparent;border:0;border-radius:0;box-shadow:none}
+[data-skin=tone3000] .layout-resizer:after{background:#ffffff0e}
+[data-skin=tone3000] .layout-resizer:hover:after,[data-skin=tone3000] .layout-resizer.dragging:after{background:#aaa}
+[data-skin=tone3000] .controls-panel{background:var(--face-grain),linear-gradient(180deg,#262629,#171719 15%,#111113);border:0;border-top:1px solid #ffffff24;border-bottom:1px solid #ffffff0d;border-radius:0;box-shadow:inset 0 1px #ffffff08}
+[data-skin=tone3000] body>details.panel{background:transparent;border:0;border-top:1px solid #ffffff12;border-radius:0}
+[data-skin=tone3000] .rig{--rig-border:#ffffff19;--rig-muted:#a0a0a7}
+[data-skin=tone3000] .rig-scroll{scrollbar-color:#44444a transparent}
+[data-skin=tone3000] :is(.rig button,.rig select,.capture-picker){border-color:#ffffff19;background:#ffffff07!important}
+[data-skin=tone3000] .rig button:hover{border-color:#ffffff55;background:#ffffff10!important}
+[data-skin=tone3000] .rig .capture-picker{border-radius:6px}
+[data-skin=tone3000] .rig #save{border-color:#55555b;background:#ffffff0b!important}
+[data-skin=tone3000] .rig .picker-path{color:#85858d}
+[data-skin=tone3000] .metric{background:#ffffff06;border-color:#ffffff18;border-radius:4px}
+[data-skin=tone3000] .slots{gap:3px;background:#ffffff06;border:1px solid #ffffff12;border-radius:8px;padding:3px}
+[data-skin=tone3000] .slots button{background:transparent;border-color:transparent;border-radius:5px;color:#aaa;font-size:15px;box-shadow:none}
+[data-skin=tone3000] .slots button.selected{background:#ffffff15;color:#fff;border-color:#ffffff25}
+[data-skin=tone3000] .controls-panel h2{font-weight:400;letter-spacing:.8px;color:#929298}
+[data-skin=tone3000] .controls-panel .knob{gap:4px}
+[data-skin=tone3000] .knob>span{order:1;color:#b7b7bd;font-weight:400;font-size:12px;text-transform:capitalize}
+[data-skin=tone3000] .knob input[type=text]{order:2;color:#9999a1;padding:1px 3px;font-size:10px}
+[data-skin=tone3000] .knob input[type=text]:focus{color:#fff;background:#111;border-color:#666}
+[data-skin=tone3000] .dial .t3k-face{filter:drop-shadow(0 2px 3px #000c)}
+[data-skin=tone3000] .t3k-arc{filter:drop-shadow(0 0 5px #ffff0055)}
+[data-skin=tone3000] .knob:has(#gate) .t3k-arc{stroke:#b6b6b6;filter:none}
+[data-skin=tone3000] .knob:has(#gate) .t3k-face{width:76%;height:76%;inset:12%}
+[data-skin=tone3000] .meter-track{width:6px;gap:3px}
+[data-skin=tone3000] .meter-segment{border-radius:0;background:var(--meter-color);opacity:.10;box-shadow:none}
+[data-skin=tone3000] .meter-segment.on{background:var(--meter-color);opacity:1;box-shadow:0 0 5px color-mix(in srgb,var(--meter-color) 50%,transparent)}
+[data-skin=tone3000] .signal-meter output{background:none;border:0;color:#a0a0a7}
+[data-skin=tone3000] .signal-meter.clipping output{color:#ff7770}
+[data-skin=tone3000] .chain-appearance{border-color:#ffffff19;background:#ffffff08!important;color:#aaa!important;border-radius:5px}
+[data-skin=tone3000] .amp-name{font-weight:400;color:#c5c5cb}
+[data-skin=tone3000] #ampChain #ampArtwork,[data-skin=tone3000] #secondArtwork{filter:drop-shadow(0 18px 20px #0009)}
+[data-skin=tone3000] #chainArrow{color:#8e8e96}
+[data-skin=tone3000] #status.audio-active{background:#193020;border-color:#7cc68c;color:#7cc68c}
+@media(min-width:1001px){
+ [data-skin=tone3000] .controls-panel .dial{width:clamp(40px,8vh,64px)}
+ [data-skin=tone3000] .controls-panel .meter-track{height:clamp(54px,11vh,96px);gap:2px}
+}
+@media(max-width:600px){
+ [data-skin=tone3000] body{border-radius:0}
+ [data-skin=tone3000] .layout>.panel{border-bottom:1px solid #ffffff14}
+ [data-skin=tone3000] .controls-panel .meter-track{gap:1px}
+ [data-skin=tone3000] .knob>span{font-size:10px}
+}
 </style></head><body>
 <header><div><div class="brand"><i>///</i>RPi-Ton3K</div><div class="subtitle">NATIVE GUITAR PROCESSOR</div></div><button id="libraryToggle" type="button" aria-label="Toggle library sidebar" aria-controls="libraryPanel" aria-expanded="true" title="Show or hide library"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg></button><button id="themeToggle" type="button" title="Switch visual theme">Theme</button><div id="currentTitle">Connecting…</div><div class="metrics"><span class="metric">CPU <strong id="cpu" title="CPU utilization: green <30%, amber 30–84%, red ≥85%. Not audio-thread deadline utilization.">—</strong><meter id="cpuMeter" min="0" max="100"></meter></span><span class="metric">TEMP <strong id="temp" title="Temperature: green <55 °C, amber 55–79 °C, red ≥80 °C.">—</strong></span><span class="metric">BUFFER <strong id="latency" title="Nominal ALSA buffer per direction: green <6 ms, amber 6–<12 ms, red ≥12 ms. Not measured round-trip latency.">—</strong></span><span class="metric" id="xrunMetric" title="ALSA recoveries since service start (includes suspend recovery)">XRUNS <strong id="xruns" title="Cumulative ALSA recoveries since service start: green 0 while running, amber 1–4, red ≥5.">—</strong></span></div><button id="status" type="button" aria-pressed="false" disabled>Connecting…</button><button id="poweroff" type="button" title="Shut down the host" aria-label="Shut down the host" disabled><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2v10M6 5a9 9 0 1 0 12 0"/></svg></button></header>
 <main class="layout"><aside class="panel" id="libraryPanel"><h2>Library</h2><div class="library"><input id="filter" type="search" placeholder="Find NAM or IR"><div class="folder-tools"><button id="newFolder" title="Create folder in selected location">+ Folder</button><button id="collapseTree" title="Collapse all folders">Collapse</button></div><small id="folderTarget" title="Upload destination">Import to: /</small><div id="fileTree" aria-label="Local file tree"></div><div id="importDrop" tabindex="0" aria-label="Drop files or folders to import"><span>Drop files or folders here</span><small id="importProgress">NAM / WAV · preserves folder structure</small></div><div class="import-buttons"><button id="uploadBtn" type="button">Import files</button><button id="folderBrowse" type="button" title="Browser may request folder access confirmation">Browse folder</button></div><input id="uploadFolder" type="file" webkitdirectory multiple hidden><input id="upload" type="file" accept=".nam,.wav" multiple hidden><button id="cloudOpen">Browse TONE3000</button></div></aside><div class="layout-resizer" id="resizeLibrary" role="separator" aria-label="Library width" aria-orientation="vertical" tabindex="0" title="Drag to resize · double-click to reset"></div>
@@ -520,7 +575,7 @@ el("cloudNext").onclick=()=>cloudWork(async()=>{cloudPage++;await cloudLoad();})
 
 const levelMeters=["input","output"].map(key=>{
  const root=el(key+"Meter"),track=root.querySelector(".meter-track");
- const segments=Array.from({length:24},(_,i)=>{const d=document.createElement("i");d.className="meter-segment"+(i===23?" clip":i>=20?" warn":"");track.append(d);return d;});
+ const segments=Array.from({length:24},(_,i)=>{const d=document.createElement("i");d.className="meter-segment"+(i===23?" clip":i>=20?" warn":"");const palette=["#0000ff","#2222ff","#4545ff","#6868ff","#9090f0","#b3b3b0","#cccc77","#dddd44","#e8e827","#eeee00","#ffff00","#ffff00","#ffff00","#ffff00","#ffff00","#f6e000","#ecc000","#eaa000","#ed8000","#ef6000","#ff4000","#ff2200","#ff1100","#ff0000"];d.style.setProperty("--meter-color",palette[i]);track.append(d);return d;});
  return {key,root,segments,value:root.querySelector("output"),db:-60,clipUntil:0};
 });
 function drawLevels(data){
