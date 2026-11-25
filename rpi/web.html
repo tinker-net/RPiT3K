@@ -629,6 +629,8 @@ const ampSkins={
  boutique:{name:"American Boutique",w:720,h:510,case:"#563b2d",edge:"#271d17",cloth:"#b4a78c",weave:"silver",panel:"#302925",top:true,knobs:6,channels:["INPUT"],labels:["VOLUME","TREBLE","BASS","REVERB","TONE","MASTER"],mark:"Imperial"},
  generic:{name:"Studio amplifier",w:780,h:350,case:"#303031",edge:"#131314",cloth:"#66645e",weave:"basket",panel:"#202021",top:false,knobs:6,channels:["INPUT"],labels:["GAIN","BASS","MID","TREBLE","LEVEL","MASTER"],mark:"Studio"}
 };
+ampSkins.mesa={...ampSkins.dumble,name:"Mesa/Boogie",mark:"Mark I"};
+ampSkins.gibson={...ampSkins.tweed,name:"Vintage Gibson",mark:"GA-40"};
 function makeAmpArt(key){
  const a=ampSkins[key]||ampSkins.generic,w=a.w,h=a.h;
  const x=42,y=55,cw=w-84,ch=h-90,innerX=x+19,innerW=cw-38,ph=78;
@@ -674,7 +676,11 @@ function makeAmpArt(key){
 }
 function autoAmpSkin(name){
  const n=name.toLowerCase();
- if(/bassman|blbm|tweed|5e[358]/.test(n))return "tweed";
+ if(/gibson|gbsn|ga[-_ ]?40/.test(n))return "gibson";
+ if(/mesa|boogie|mesab|mark[-_ ]?(?:i{1,3}|iv|v)\b/.test(n))return "mesa";
+ if(/soldano|slo[-_ ]?100/.test(n))return "hiewatt";
+ if(/bassman|blbm|tweed|5e[358]|deluxe.*(?:57|1957)|(?:57|1957).*deluxe/.test(n))return "tweed";
+ if(/twin[-_ ]?reverb/.test(n)&&! /blackface|black.face/.test(n))return "silverface";
  if(/silverface|silver.face|sf[-_ ]|197[0-9].*fender/.test(n))return "silverface";
  if(/tone.king|imperial|tkimp/.test(n))return "boutique";
  if(/dumble|double.special|overdrive.special|ods/.test(n))return "dumble";
