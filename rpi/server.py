@@ -36,6 +36,7 @@ class Controller:
         self.proc = None
         self.logs = deque(maxlen=100)
         self.active = None
+        self.tuner_return = None
         self.settingsfile = self.data / "settings.json"
         self.settings = dict(buffer=64, periods=3, last="1")
         if self.settingsfile.exists(): self.settings.update(json.loads(self.settingsfile.read_text()))
@@ -49,12 +50,30 @@ class Controller:
             raise RuntimeError("Compile build-rpi/rpit3k first")
 
     def file(self, name, extensions):
-        if not isinstance(name,str) or not NAME.fullmatch(name) or Path(name).suffix.lower() not in extensions:
-            raise ValueError("Invalid file name or type")
-        p = self.library / name
-        if p.is_symlink():
-            raise ValueError("Symlinks are not allowed")
+        if not isinstance(name,str) or len(name)>1024 or any(not NAME.fullmatch(part) or part in (".","..") for part in name.split("/")) or Path(name).suffix.lower() not in extensions:
+            raise ValueError("Invalid library path or type")
+        p = self.library
+        for part in name.split("/"):
+            p = p / part
+            if p.is_symlink():
+                raise ValueError("Symlinks are not allowed")
+        if not p.resolve().is_relative_to(self.library.resolve()):
+            raise ValueError("Outside library")
         return p
+
+    def library_files(self):
+        files=[]
+        for root, dirs, names in os.walk(self.library, followlinks=False):
+            dirs[:]=[d for d in dirs if not (Path(root)/d).is_symlink()]
+            for name in names:
+                p=Path(root)/name
+                rel=p.relative_to(self.library).as_posix()
+                try:
+                    if self.file(rel,(".nam",".wav")).is_file():
+                        files.append(rel)
+                except (ValueError,OSError):
+                    pass
+        return sorted(files,key=str.casefold)
 
     def validate(self, preset):
         if not isinstance(preset,dict):
@@ -214,8 +233,7 @@ class Controller:
     def status(self):
         return dict(presets=self.presets,active=self.active,settings=self.settings,telemetry=self.telemetry(),
                     running=self.proc is not None and self.proc.poll() is None,
-                    files=sorted(p.name for p in self.library.iterdir()
-                                 if p.is_file() and not p.is_symlink() and p.suffix.lower() in (".nam",".wav")),
+                    files=self.library_files(),
                     logs=list(self.logs), tuner=next((line for line in reversed(list(self.logs)) if line.startswith("TUNER ")), ""))
 
 class Handler(BaseHTTPRequestHandler):
@@ -273,6 +291,7 @@ class Handler(BaseHTTPRequestHandler):
             with c.lock:
                 if u.path=="/api/upload":
                     name=parse_qs(u.query).get("name",[""])[0]
+                    if "/" in name: raise ValueError("Upload must be a filename")
                     p=c.file(name,(".nam",".wav"))
                     if p.exists(): raise ValueError("File already exists")
                     data=self.body(LIMIT)
@@ -286,9 +305,24 @@ class Handler(BaseHTTPRequestHandler):
                 elif u.path=="/api/settings":
                     c.configure(json.loads(self.body(65536)))
                 elif u.path=="/api/tuner":
-                    c.stop()
-                    c.logs.clear()
-                    c.start([str(c.exe),"--device",c.args.device,"--tuner"]+c.audio_args(),None)
+                    if c.proc and c.proc.poll() is None and c.active is None:
+                        previous=c.tuner_return
+                        c.stop()
+                        c.tuner_return=None
+                        if previous:
+                            c.apply(previous,c.presets[previous],benchmark=False)
+                    else:
+                        c.tuner_return=c.active if c.proc and c.proc.poll() is None else None
+                        c.stop()
+                        c.logs.clear()
+                        try:
+                            c.start([str(c.exe),"--device",c.args.device,"--tuner"]+c.audio_args(),None)
+                        except Exception:
+                            previous=c.tuner_return
+                            c.stop()
+                            c.tuner_return=None
+                            if previous: c.apply(previous,c.presets[previous],benchmark=False)
+                            raise
                 elif u.path=="/api/stop":
                     c.stop()
                 elif u.path in ("/api/save","/api/apply"):
