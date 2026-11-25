@@ -13,6 +13,7 @@ import secrets
 import signal
 import subprocess
 import threading
+import struct
 import time
 from collections import deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -36,6 +37,7 @@ class Controller:
         self.lock = threading.RLock()
         self.cloud = ToneCloud(self)
         self.proc = None
+        self.meter = None
         self.logs = deque(maxlen=100)
         self.active = None
         self.tuner_return = None
@@ -142,6 +144,7 @@ class Controller:
                     self.proc.wait()
             self.proc=None
         self.active=None
+        self.meter=None
 
     def drain(self,proc):
         for line in proc.stdout:
@@ -176,9 +179,40 @@ class Controller:
                     self.logs.append("Restore failed: "+str(e))
             raise
 
+    def drain_meter(self,proc,fd):
+        try:
+            with os.fdopen(fd,"rb",buffering=0) as f:
+                pending=b""
+                while True:
+                    chunk=f.read(4096)
+                    if not chunk: break
+                    pending+=chunk
+                    while len(pending)>=8:
+                        a,b=struct.unpack("=ff",pending[:8])
+                        pending=pending[8:]
+                        if self.proc is proc:
+                            self.meter=(proc,time.monotonic(),a,b)
+        except OSError:
+            pass
+
+    def levels(self):
+        m=self.meter
+        if m and m[0] is self.proc and self.proc.poll() is None and time.monotonic()-m[1]<.5:
+            return dict(valid=True,input=m[2],output=m[3])
+        return dict(valid=False,input=0,output=0)
+
     def start(self,cmd,slot):
-        self.proc=subprocess.Popen(cmd+["--live-controls"],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,
-                                   text=True,bufsize=1)
+        rd,wr=os.pipe()
+        self.meter=None
+        try:
+            self.proc=subprocess.Popen(cmd+["--live-controls","--meter-fd",str(wr)],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,
+                                       text=True,bufsize=1,pass_fds=(wr,))
+        except Exception:
+            os.close(rd)
+            raise
+        finally:
+            os.close(wr)
+        threading.Thread(target=self.drain_meter,args=(self.proc,rd),daemon=True).start()
         threading.Thread(target=self.drain,args=(self.proc,),daemon=True).start()
         time.sleep(.35)
         if self.proc.poll() is not None:
@@ -276,6 +310,8 @@ class Handler(BaseHTTPRequestHandler):
         path=urlsplit(self.path).path
         if path=="/":
             self.send(200,(ROOT/"rpi/web.html").read_bytes(),"text/html; charset=utf-8")
+        elif path=="/api/levels":
+            self.send(200,self.server.controller.levels())
         elif path=="/api/status":
             with self.server.controller.lock:
                 self.send(200,self.server.controller.status())
