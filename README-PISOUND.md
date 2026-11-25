@@ -127,3 +127,7 @@ If installed, disable the hotspot timer and remove the RPiT3K-fallback connectio
 See [technical report and reproducible tests](rpi/README.md). On Pi 5 the latest native DSP suite and bypass verification passed, including the soft-knee expander. Full/Lite NAM and IR numerical comparison results refer to earlier tested builds. Long sessions, final integrated performance, fresh installation, other Pi boards, physical button and live cloud login/download still require testing. This is a preview, not a production-certified pedal.
 
 Original project and reused EQ: TONE3000 × Daisy DIY Pedal, [MIT license](LICENSE). NAM Core and its dependencies retain their own licenses. Capture/IR authors retain their rights; do not redistribute downloaded or commercial assets without permission. TONE3000 API usage is subject to its terms; the optional integration is not a claim of official endorsement.
+
+## Optional host shutdown button
+
+After installing the service, run `bash rpi/install-poweroff.sh` as its normal user and confirm. The top-left power button asks for confirmation before stopping audio and requesting a systemd poweroff. The helper installs a root-owned sudoers rule limited to the exact poweroff command and a service environment flag. On unauthenticated LAN mode, anyone with API access can shut down the host: enable only on a trusted isolated network. Disable with `bash rpi/install-poweroff.sh --disable` before uninstalling the service. The button does not physically disconnect power or switch the device back on.
