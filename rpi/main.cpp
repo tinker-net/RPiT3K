@@ -68,10 +68,11 @@ PCM open_pcm(const char* device, snd_pcm_stream_t stream,unsigned channels) {
     return pcm;
 }
 struct Options {
-    std::string device = "default", model, second, ir, render_in, render_out;
+    std::string device = "default", model, second, ir, ir2, render_in, render_out;
     double slim = 1., slim2 = 1.;
     float input = 1., output = .25f, bass = 0., mid = 0., treble = 0.;
     float gate = -81.f;
+    float ir_mix=.5f;
     float comp=0, comp_post=0, reverb=0, decay=1.5f, reverb_type=0;
     int meter_fd = -1;
     unsigned input_channel=1, input_channels=2, output_channels=2, output_left=1, output_right=2;
@@ -102,6 +103,8 @@ Options parse(int argc, char** argv) {
         else if(k=="--model") o.model=v;
         else if(k=="--second") o.second=v;
         else if(k=="--ir") o.ir=v;
+        else if(k=="--ir2") o.ir2=v;
+        else if(k=="--ir_mix") o.ir_mix=std::stof(v);
         else if(k=="--slim") o.slim=std::stod(v);
         else if(k=="--slim2") o.slim2=std::stod(v);
         else if(k=="--comp") o.comp=std::stof(v);
@@ -125,6 +128,7 @@ Options parse(int argc, char** argv) {
     if(!std::isfinite(o.gate)||!(o.gate==-81.f||(o.gate>=-80.f&&o.gate<=-30.f)))throw std::runtime_error("Invalid gate threshold");
     if(!std::isfinite(o.comp)||o.comp<0||o.comp>1||!(o.comp_post==0||o.comp_post==1)||!std::isfinite(o.reverb)||o.reverb<0||o.reverb>1||!std::isfinite(o.decay)||o.decay<.2f||o.decay>5||!(o.reverb_type==0||o.reverb_type==1||o.reverb_type==2))throw std::runtime_error("Invalid effects controls");
     if(o.input_channels<1||o.input_channels>64||o.output_channels<1||o.output_channels>64||o.input_channel<1||o.input_channel>o.input_channels||o.output_left<1||o.output_left>o.output_channels||o.output_right<1||o.output_right>o.output_channels)throw std::runtime_error("Invalid ALSA channel mapping");
+    if(!std::isfinite(o.ir_mix)||o.ir_mix<0||o.ir_mix>1)throw std::runtime_error("Invalid IR mix");
     return o;
 }
 std::unique_ptr<nam::DSP> load(const std::string& path,double slim) {
@@ -173,7 +177,8 @@ std::unique_ptr<CabinetConvolver> load_ir(const std::string& path) {
 }
 struct Chain {
     std::unique_ptr<nam::DSP> a,b;
-    std::unique_ptr<CabinetConvolver> ir;
+    std::unique_ptr<CabinetConvolver> ir,ir2;
+    float ir_mix,target_ir_mix;
     Eq3Band eq;
     GuitarTuner tuner;
     NoiseGate gate;
@@ -183,7 +188,7 @@ struct Chain {
     float input,output;
     float target_input,target_output,bass,mid,treble,target_bass,target_mid,target_treble;
     NAM_SAMPLE x[512]{}, y[512]{}, z[512]{};
-    Chain(const Options& o):a((o.bypass||o.tuner) ? nullptr : load(o.model,o.slim)),b((o.bypass||o.tuner||is_wav(o.second)) ? nullptr : load(o.second,o.slim2)),ir((o.bypass||o.tuner)?nullptr:load_ir(o.ir.empty()&&is_wav(o.second)?o.second:o.ir)),tuning(o.tuner),input(o.input),output(o.output),target_input(o.input),target_output(o.output),bass(o.bass),mid(o.mid),treble(o.treble),target_bass(o.bass),target_mid(o.mid),target_treble(o.treble) {
+    Chain(const Options& o):a((o.bypass||o.tuner) ? nullptr : load(o.model,o.slim)),b((o.bypass||o.tuner||is_wav(o.second)) ? nullptr : load(o.second,o.slim2)),ir((o.bypass||o.tuner)?nullptr:load_ir(o.ir.empty()&&is_wav(o.second)?o.second:o.ir)),ir2((o.bypass||o.tuner)?nullptr:load_ir(o.ir2)),ir_mix(o.ir_mix),target_ir_mix(o.ir_mix),tuning(o.tuner),input(o.input),output(o.output),target_input(o.input),target_output(o.output),bass(o.bass),mid(o.mid),treble(o.treble),target_bass(o.bass),target_mid(o.mid),target_treble(o.treble) {
         gate.set(o.gate);
         effects(o.comp,o.comp_post,o.reverb,o.decay,o.reverb_type);
         eq.Init(rate);eq.SetBass(o.bass);eq.SetMid(o.mid);eq.SetTreble(o.treble);
@@ -192,10 +197,11 @@ struct Chain {
         if(!std::isfinite(c)||c<0||c>1||!(pos==0||pos==1)||!std::isfinite(wet)||wet<0||wet>1||!std::isfinite(d)||d<.2f||d>5||!(type==0||type==1||type==2))return;
         pre.set(pos==0?c:0);post.set(pos==1?c:0);verb.set(wet,d,int(type));
     }
-    void controls(float i,float o,float b,float m,float t,float g=-81.f,float c=0,float pos=0,float wet=0,float d=1.5f,float type=0) {
+    void controls(float i,float o,float b,float m,float t,float g=-81.f,float c=0,float pos=0,float wet=0,float d=1.5f,float type=0,float mix=-1) {
         if(!std::isfinite(i)||!std::isfinite(o)||!std::isfinite(b)||!std::isfinite(m)||!std::isfinite(t))return;
         if(i<0||i>2||o<0||o>1||std::abs(b)>20||std::abs(m)>15||std::abs(t)>10)return;
         if(!std::isfinite(g)||!(g==-81.f||(g>=-80.f&&g<=-30.f)))return;
+        if(std::isfinite(mix)&&mix>=0&&mix<=1)target_ir_mix=mix;
         gate.set(g);
         effects(c,pos,wet,d,type);
         target_input=i;target_output=o;target_bass=b;target_mid=m;target_treble=t;
@@ -228,8 +234,12 @@ struct Chain {
         if(a) a->process(&in,&out,block);
         else std::copy_n(x,block,y);
         if(b){in=y;out=z;b->process(&in,&out,block);}
-        float cab[512];
-        if(ir){for(unsigned i=0;i<block;i+=64)ir->process(out+i,cab+i);out=cab;}
+        float cab[512],cab2[512];
+        if(ir)for(unsigned i=0;i<block;i+=64)ir->process(out+i,cab+i);
+        if(ir2)for(unsigned i=0;i<block;i+=64)ir2->process(out+i,cab2+i);
+        if(ir&&ir2){for(unsigned i=0;i<block;++i){ir_mix+=gain_alpha*(target_ir_mix-ir_mix);if(std::abs(ir_mix-target_ir_mix)<1e-6f)ir_mix=target_ir_mix;cab[i]=cab[i]+ir_mix*(cab2[i]-cab[i]);}out=cab;}
+        else if(ir)out=cab;
+        else if(ir2)out=cab2;
         for(unsigned i=0;i<block;++i){
             output+=gain_alpha*(target_output-output);
             if(std::abs(output-target_output)<1e-6f)output=target_output;
@@ -281,7 +291,7 @@ int main(int argc,char** argv) {
                 std::cout<<"frequency="<<hz<<" rms="<<std::sqrt(sum/count)<<" clipped="<<clipped<<"\n";
                 return std::sqrt(sum/count);
             };
-            std::cout<<"VERIFY NAM="<<bool(chain.a)<<" NAM2="<<bool(chain.b)<<" IR="<<bool(chain.ir)<<"\n";
+            std::cout<<"VERIFY NAM="<<bool(chain.a)<<" NAM2="<<bool(chain.b)<<" IR="<<bool(chain.ir)<<" IR2="<<bool(chain.ir2)<<"\n";
             if(o.tuner)throw std::runtime_error("Verify requires audio mode");
             chain.controls(1,.25,0,0,0);double base=measure(440);
             chain.controls(1,.125,0,0,0);double half=measure(440);
@@ -330,8 +340,9 @@ int main(int argc,char** argv) {
             if(n<=0)return;
             for(ssize_t k=0;k<n;++k){
                 if(buf[k]=='\n'){
-                    if(!overflow){line[used]=0;float i,o,b,m,t,g,c,pos,wet,d,type;char extra;
-                        if(std::sscanf(line,"%f %f %f %f %f %f %f %f %f %f %f %c",&i,&o,&b,&m,&t,&g,&c,&pos,&wet,&d,&type,&extra)==11)chain.controls(i,o,b,m,t,g,c,pos,wet,d,type);}
+                    if(!overflow){line[used]=0;float i,o,b,m,t,g,c,pos,wet,d,type,mix;char extra;
+                        if(std::sscanf(line,"%f %f %f %f %f %f %f %f %f %f %f %f %c",&i,&o,&b,&m,&t,&g,&c,&pos,&wet,&d,&type,&mix,&extra)==12)chain.controls(i,o,b,m,t,g,c,pos,wet,d,type,mix);
+                        else if(std::sscanf(line,"%f %f %f %f %f %f %f %f %f %f %f %c",&i,&o,&b,&m,&t,&g,&c,&pos,&wet,&d,&type,&extra)==11)chain.controls(i,o,b,m,t,g,c,pos,wet,d,type);}
                     used=0;overflow=false;
                 }else if(used<sizeof(line)-1)line[used++]=buf[k];else overflow=true;
             }
@@ -388,7 +399,7 @@ int main(int argc,char** argv) {
             if(!failed && o.meter_fd>=0){meter_frames+=block;if(meter_frames>=2400){const auto n=write(o.meter_fd,meter,sizeof(meter));if(n<0&&errno!=EAGAIN&&errno!=EWOULDBLOCK&&errno!=EINTR){close(o.meter_fd);o.meter_fd=-1;}meter[0]=meter[1]=0;meter_frames=0;}}
             auto now=std::chrono::steady_clock::now();
             if(measured && now-report_at>=std::chrono::seconds(5)){
-                std::cerr<<"DSP mean_us="<<total_us/measured<<" max_us="<<worst_us<<" deadline_us="<<1e6*block/rate<<" blocks="<<measured<<" late="<<late<<" xruns="<<xruns<<" in_peak="<<in_peak<<" out_peak="<<out_peak<<" clipped_samples="<<clipped<<" NAM="<<bool(chain.a)<<" IR="<<bool(chain.ir)<<"\n";
+                std::cerr<<"DSP mean_us="<<total_us/measured<<" max_us="<<worst_us<<" deadline_us="<<1e6*block/rate<<" blocks="<<measured<<" late="<<late<<" xruns="<<xruns<<" in_peak="<<in_peak<<" out_peak="<<out_peak<<" clipped_samples="<<clipped<<" NAM="<<bool(chain.a)<<" IR="<<bool(chain.ir)<<" IR2="<<bool(chain.ir2)<<"\n";
                 measured=late=clipped=0;total_us=worst_us=in_peak=out_peak=0;report_at=now;
             }
             if(failed && running){
