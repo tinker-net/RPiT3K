@@ -53,3 +53,7 @@ Updates: stop service, git pull --ff-only origin rpi-general, rebuild, run ctest
 ## Validation
 
 The existing Pi 5 DSP results are documented in the main README and are inherited, not new measurements for this branch. Compile and run regression tests on each architecture, verify selected capture and output routing, measure live xruns and timing, and test analog latency and calibration. Performance and compatibility with arbitrary interfaces cannot be guaranteed by class compliance alone.
+
+## Optional host shutdown button
+
+After installing the service, run `bash rpi/install-poweroff.sh` as its normal user and confirm. The top-left power button asks for confirmation before stopping audio and requesting a systemd poweroff. The helper installs a root-owned sudoers rule limited to the exact poweroff command and a service environment flag. On unauthenticated LAN mode, anyone with API access can shut down the host: enable only on a trusted isolated network. Disable with `bash rpi/install-poweroff.sh --disable` before uninstalling the service. The button does not physically disconnect power or switch the device back on.
