@@ -644,8 +644,18 @@ const ampSkins={
 ampSkins.mesa={...ampSkins.dumble,name:"Mesa/Boogie",mark:"Mark I"};
 ampSkins.gibson={...ampSkins.tweed,name:"Vintage Gibson",mark:"GA-40"};
 ampSkins.pedal={name:"Drive pedal"};
+ampSkins.rat={name:"ProCo RAT",pedal:true};
+ampSkins.ts808={name:"Ibanez Tube Screamer",pedal:true};
+ampSkins.centaur={name:"Klon Centaur",pedal:true};
+ampSkins.bluesbreaker={name:"Marshall Bluesbreaker",pedal:true};
+ampSkins.tonebender={name:"Tone Bender",pedal:true};
+ampSkins.bigmuff={name:"EHX Big Muff",pedal:true};
+ampSkins.morningglory={name:"JHS Morning Glory",pedal:true};
+ampSkins.distortionplus={name:"MXR Distortion+",pedal:true};
+ampSkins.pedal.pedal=true;
+function isPedalSkin(key){return !!ampSkins[key]?.pedal;}
 function makeAmpArt(key){
- if(key==="pedal")return '<svg viewBox="0 0 180 280" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="pedalBody" x2="1" y2="1"><stop stop-color="#55514b"/><stop offset="1" stop-color="#252525"/></linearGradient></defs><rect x="18" y="8" width="144" height="264" rx="14" fill="url(#pedalBody)" stroke="#a99b87" stroke-width="3"/><rect x="30" y="19" width="120" height="240" rx="8" fill="none" stroke="#181818"/>'+[52,90,128].map(x=>'<circle cx="'+x+'" cy="58" r="15" fill="#161616" stroke="#ada59a" stroke-width="2"/><path d="M'+x+' 45v9" stroke="#eee" stroke-width="2"/>').join("")+'<circle cx="90" cy="111" r="5" fill="#e9613d"/><text x="90" y="153" text-anchor="middle" fill="#e2d5c3" font-size="16" font-family="sans-serif">DRIVE</text><circle cx="90" cy="218" r="17" fill="#777" stroke="#d8d1c5" stroke-width="4"/><circle cx="90" cy="218" r="10" fill="#bbb"/></svg>';
+ if(isPedalSkin(key))return '<svg viewBox="0 0 180 280" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="pedalBody" x2="1" y2="1"><stop stop-color="#55514b"/><stop offset="1" stop-color="#252525"/></linearGradient></defs><rect x="18" y="8" width="144" height="264" rx="14" fill="url(#pedalBody)" stroke="#a99b87" stroke-width="3"/><rect x="30" y="19" width="120" height="240" rx="8" fill="none" stroke="#181818"/>'+[52,90,128].map(x=>'<circle cx="'+x+'" cy="58" r="15" fill="#161616" stroke="#ada59a" stroke-width="2"/><path d="M'+x+' 45v9" stroke="#eee" stroke-width="2"/>').join("")+'<circle cx="90" cy="111" r="5" fill="#e9613d"/><text x="90" y="153" text-anchor="middle" fill="#e2d5c3" font-size="16" font-family="sans-serif">DRIVE</text><circle cx="90" cy="218" r="17" fill="#777" stroke="#d8d1c5" stroke-width="4"/><circle cx="90" cy="218" r="10" fill="#bbb"/></svg>';
 
  const a=ampSkins[key]||ampSkins.generic,w=a.w,h=a.h;
  const x=42,y=55,cw=w-84,ch=h-90,innerX=x+19,innerW=cw-38,ph=78;
@@ -691,7 +701,15 @@ function makeAmpArt(key){
 }
 function autoAmpSkin(name){
  const n=name.toLowerCase();
- if(/\b(?:rat|ts808|ts9|centaur|klon|fuzz|bender|octavio|overdrive pedal|boost pedal|kingsley|pedals?)\b|bluesbreaker|tube.screamer|whiteface|bb.mki/.test(n))return "pedal";
+ if(/\b(?:rat|whiteface|proco)\b/.test(n))return "rat";
+ if(/ts[-_ ]?808|ts[-_ ]?9\b|tube.screamer/.test(n))return "ts808";
+ if(/centaur|klon/.test(n))return "centaur";
+ if(/blues.?breaker|bb[-_ ]?mk[-_ ]?i\b/.test(n))return "bluesbreaker";
+ if(/tone.?bender|twin.?bender/.test(n))return "tonebender";
+ if(/big.?muff|\bmuff\b/.test(n))return "bigmuff";
+ if(/morning.?glory/.test(n))return "morningglory";
+ if(/distortion\s*\+|distortion.?plus|mxr.*distortion|m104/.test(n))return "distortionplus";
+ if(/\b(?:fuzz|bender|octavio|octavia|overdrive pedal|boost pedal|kingsley|pedals?)\b/.test(n))return "pedal";
  if(/gibson|gbsn|ga[-_ ]?40/.test(n))return "gibson";
  if(/mesa|boogie|mesab|mark[-_ ]?(?:i{1,3}|iv|v)\b/.test(n))return "mesa";
  if(/soldano|slo[-_ ]?100/.test(n))return "hiewatt";
@@ -712,7 +730,7 @@ let ampArtworkKey="";
 function putAmpArt(target,key){
  target.replaceChildren();const version=state?.amp_art?.[key];
  if(!version){target.innerHTML=makeAmpArt(key);return;}
- const img=document.createElement("img");img.alt=ampSkins[key].name+" amplifier";img.src="/api/amp-art/"+key+"?v="+encodeURIComponent(version);img.onerror=()=>{if(img.parentElement===target)target.innerHTML=makeAmpArt(key);};target.append(img);
+ const img=document.createElement("img");img.alt=ampSkins[key].name;img.src="/api/amp-art/"+key+"?v="+encodeURIComponent(version);img.onerror=()=>{if(img.parentElement===target)target.innerHTML=makeAmpArt(key);};target.append(img);
 }
 let secondArtworkKey="",appearanceTarget="model";
 function artworkChoice(name){
@@ -723,11 +741,11 @@ function updateAmpArtwork(name){
  const second=el("second").value,show=!!name&&/\.nam$/i.test(second)&&!el("bypass").checked;
  el("secondUnit").hidden=!show;el("chainArrow").hidden=!show;
  const key=artworkChoice(name),signature=key+":"+(state?.amp_art?.[key]||"svg");
- el("firstUnit").classList.toggle("is-pedal",show&&key==="pedal");
+ el("firstUnit").classList.toggle("is-pedal",show&&isPedalSkin(key));
  if(ampArtworkKey!==signature){putAmpArt(el("ampArtwork"),key);ampArtworkKey=signature;}
  el("ampAppearance").title="Appearance: "+ampSkins[key].name;
  if(show){const k=artworkChoice(second),sig=k+":"+(state?.amp_art?.[k]||"svg");
- el("secondUnit").classList.toggle("is-pedal",k==="pedal");
+ el("secondUnit").classList.toggle("is-pedal",isPedalSkin(k));
  el("secondName").textContent=second.split("/").pop().replace(/\.nam$/i,"");
  if(secondArtworkKey!==sig){putAmpArt(el("secondArtwork"),k);secondArtworkKey=sig;}
  el("secondAppearance").title="Appearance: "+ampSkins[k].name;
