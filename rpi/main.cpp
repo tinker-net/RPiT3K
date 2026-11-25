@@ -24,8 +24,8 @@ namespace {
 volatile std::sig_atomic_t running = 1;
 void stop(int) { running = 0; }
 constexpr unsigned rate = 48000;
-constexpr unsigned block = 64;
-constexpr unsigned periods = 3;
+unsigned block = 64;
+unsigned periods = 3;
 void check(int rc, const char* what) {
     if (rc < 0) throw std::runtime_error(std::string(what)+": "+snd_strerror(rc));
 }
@@ -70,6 +70,8 @@ Options parse(int argc, char** argv) {
         if(i+1>=argc) throw std::runtime_error("Missing value: "+k);
         std::string v=argv[++i];
         if(k=="--device") o.device=v;
+        else if(k=="--buffer") { if(v!="64"&&v!="128"&&v!="256"&&v!="512") throw std::runtime_error("Invalid buffer"); block=std::stoul(v); }
+        else if(k=="--periods") { if(v!="2"&&v!="3"&&v!="4") throw std::runtime_error("Invalid periods"); periods=std::stoul(v); }
         else if(k=="--model") o.model=v;
         else if(k=="--second") o.second=v;
         else if(k=="--ir") o.ir=v;
@@ -140,7 +142,7 @@ struct Chain {
     GuitarTuner tuner;
     bool tuning;
     float input,output;
-    NAM_SAMPLE x[block]{}, y[block]{}, z[block]{};
+    NAM_SAMPLE x[512]{}, y[512]{}, z[512]{};
     Chain(const Options& o):a((o.bypass||o.tuner) ? nullptr : load(o.model,o.slim)),b((o.bypass||o.tuner||is_wav(o.second)) ? nullptr : load(o.second,o.slim2)),ir((o.bypass||o.tuner)?nullptr:load_ir(o.ir.empty()&&is_wav(o.second)?o.second:o.ir)),tuning(o.tuner),input(o.input),output(o.output) {
         eq.Init(rate);eq.SetBass(o.bass);eq.SetMid(o.mid);eq.SetTreble(o.treble);
     }
@@ -152,13 +154,13 @@ struct Chain {
             }
             std::fill_n(y,block,0.f);return;
         }
-        for(auto& s:x)s*=input;
+        for(unsigned i=0;i<block;++i)x[i]*=input;
         NAM_SAMPLE* in=x;NAM_SAMPLE* out=y;
         if(a) a->process(&in,&out,block);
         else std::copy_n(x,block,y);
         if(b){in=y;out=z;b->process(&in,&out,block);}
-        float cab[block];
-        if(ir){ir->process(out,cab);out=cab;}
+        float cab[512];
+        if(ir){for(unsigned i=0;i<block;i+=64)ir->process(out+i,cab+i);out=cab;}
         for(unsigned i=0;i<block;++i){
             float s=eq.Process(out[i])*output;
             y[i]=std::isfinite(s)?std::clamp(s,-1.f,1.f):0.f;
@@ -172,19 +174,20 @@ int main(int argc,char** argv) {
         if(o.benchmark) {
             using clock=std::chrono::steady_clock;
             double worst=0, total=0;
-            for(unsigned i=0;i<7500;++i){
+            const unsigned iterations=480000/block;
+            for(unsigned i=0;i<iterations;++i){
                 for(unsigned j=0;j<block;++j) chain.x[j]=.05f*std::sin(6.2831853f*220.f*(i*block+j)/rate);
                 auto t=clock::now();chain.process();
                 double us=std::chrono::duration<double,std::micro>(clock::now()-t).count();
                 total+=us;worst=std::max(worst,us);
             }
-            std::cout<<"mean_us="<<total/7500<<" max_us="<<worst<<" deadline_us="<<1e6*block/rate<<"\n";
+            std::cout<<"mean_us="<<total/iterations<<" max_us="<<worst<<" deadline_us="<<1e6*block/rate<<"\n";
             return 0;
         }
         std::signal(SIGINT,stop);std::signal(SIGTERM,stop);
         auto cap=open_pcm(o.device.c_str(),SND_PCM_STREAM_CAPTURE);
         auto play=open_pcm(o.device.c_str(),SND_PCM_STREAM_PLAYBACK);
-        int32_t buf[block*2]{};
+        int32_t buf[1024]{};
         sched_param sp{};
         sp.sched_priority=60;
         if(sched_setscheduler(0,SCHED_FIFO,&sp)<0)
@@ -197,7 +200,7 @@ int main(int argc,char** argv) {
             check(snd_pcm_start(cap.get()),"start capture");
         };
         restart();
-        std::cerr<<"ALSA started: 48 kHz / 64 frames / 3 periods; Ctrl+C to stop\n";
+        std::cerr<<"ALSA started: 48 kHz / "<<block<<" frames / "<<periods<<" periods; Ctrl+C to stop\n";
         while(running){
             unsigned got=0;
             bool failed=false;
