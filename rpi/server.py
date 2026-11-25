@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import re
 import secrets
+import shutil
 import signal
 import subprocess
 import threading
@@ -144,21 +145,12 @@ class Controller:
             return value==path or (kind=="folder" and value.startswith(path+"/"))
         used=[slot for slot,preset in self.presets.items() if any(contains(preset[k]) for k in ("model","second","ir"))]
         if used: raise ValueError("Used by preset(s) "+", ".join(used)+". Change those presets before removing this item.")
-        # Move to a private recoverable trash directory outside the library.
-        trash=self.data/"trash"
-        trash.mkdir(mode=0o700,exist_ok=True)
-        if trash.is_symlink() or not trash.is_dir(): raise ValueError("Invalid trash directory")
-        entry=trash/(str(time.time_ns())+"-"+secrets.token_hex(4))
-        entry.mkdir(mode=0o700)
-        dst=entry/src.name
-        self.write_json(entry/"origin.json",dict(path=path,kind=kind))
         updated={f for f in self.favorites if not contains(f)}
-        src.rename(dst)
-        try:
-            self.write_json(self.favoritesfile,sorted(updated))
-        except OSError:
-            dst.rename(src)
-            raise
+        if kind=="folder":
+            shutil.rmtree(src)
+        else:
+            src.unlink()
+        self.write_json(self.favoritesfile,sorted(updated))
         self.favorites=updated
 
     def library_folders(self):
