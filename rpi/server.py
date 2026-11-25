@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """LAN controller for the native RPiT3K engine. Standard library only."""
 import argparse
+from tonecloud import ToneCloud
 import base64
 import hmac
 import json
@@ -33,6 +34,7 @@ class Controller:
         self.library.mkdir(parents=True, exist_ok=True)
         self.statefile = self.data / "presets.json"
         self.lock = threading.RLock()
+        self.cloud = ToneCloud(self)
         self.proc = None
         self.logs = deque(maxlen=100)
         self.active = None
@@ -288,6 +290,11 @@ class Handler(BaseHTTPRequestHandler):
         c=self.server.controller
         u=urlsplit(self.path)
         try:
+            if u.path.startswith('/api/tone3000/'):
+                v=json.loads(self.body(65536))
+                if not isinstance(v,dict): raise ValueError('Expected object')
+                self.send(200,c.cloud.action(u.path.rsplit('/',1)[-1],v))
+                return
             with c.lock:
                 if u.path=="/api/upload":
                     name=parse_qs(u.query).get("name",[""])[0]
