@@ -296,6 +296,7 @@ class Controller:
     def status(self):
         return dict(presets=self.presets,active=self.active,settings=self.settings,telemetry=self.telemetry(),
                     cloud_enabled=not self.args.disable_cloud,
+                    poweroff_enabled=os.environ.get("RPIT3K_ENABLE_POWEROFF")=="1",
                     running=self.proc is not None and self.proc.poll() is None,
                     files=self.library_files(),
                     logs=list(self.logs), tuner=next((line for line in reversed(list(self.logs)) if line.startswith("TUNER ")), ""))
@@ -361,6 +362,18 @@ class Handler(BaseHTTPRequestHandler):
         c=self.server.controller
         u=urlsplit(self.path)
         try:
+            if u.path=="/api/poweroff":
+                if os.environ.get("RPIT3K_ENABLE_POWEROFF")!="1":
+                    self.send(403,dict(error="Power off is not enabled on this installation"));return
+                if json.loads(self.body(1024))!={"confirm":"poweroff"}:
+                    raise ValueError("Explicit power-off confirmation required")
+                with c.lock:
+                    c.stop()
+                    result=subprocess.run(["/usr/bin/sudo","-n","/usr/bin/systemctl","poweroff"],capture_output=True,text=True,timeout=10)
+                    if result.returncode:
+                        raise ValueError("Power off failed: "+(result.stderr.strip() or "Permission denied"))
+                    self.send(200,dict(powering_off=True))
+                return
             if u.path=="/api/calibrate":
                 v=json.loads(self.body(65536))
                 ref=v["reference_dbu"]
