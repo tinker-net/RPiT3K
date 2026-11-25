@@ -54,13 +54,14 @@ struct Options {
     std::string device = "hw:pisound", model, second;
     double slim = 1., slim2 = 1.;
     float input = 1., output = .25f, bass = 0., mid = 0., treble = 0.;
-    bool benchmark = false;
+    bool benchmark = false, bypass = false;
 };
 Options parse(int argc, char** argv) {
     Options o;
     for(int i=1;i<argc;++i) {
         std::string k=argv[i];
         if(k=="--benchmark") {o.benchmark=true;continue;}
+        if(k=="--bypass") {o.bypass=true;continue;}
         if(i+1>=argc) throw std::runtime_error("Missing value: "+k);
         std::string v=argv[++i];
         if(k=="--device") o.device=v;
@@ -75,7 +76,7 @@ Options parse(int argc, char** argv) {
         else if(k=="--treble") o.treble=std::stof(v);
         else throw std::runtime_error("Unknown option: "+k);
     }
-    if(o.model.empty()) throw std::runtime_error("--model FILE required");
+    if(o.model.empty() && !o.bypass) throw std::runtime_error("--model FILE required");
     for(double x:{o.slim,o.slim2}) if(!std::isfinite(x)||x<0||x>1) throw std::runtime_error("Slim must be 0..1");
     for(float x:{o.input,o.output,o.bass,o.mid,o.treble}) if(!std::isfinite(x)) throw std::runtime_error("Nonfinite control");
     if(o.input<0||o.input>2||o.output<0||o.output>1) throw std::runtime_error("Gain outside range");
@@ -98,13 +99,14 @@ struct Chain {
     Eq3Band eq;
     float input,output;
     NAM_SAMPLE x[block]{}, y[block]{}, z[block]{};
-    Chain(const Options& o):a(load(o.model,o.slim)),b(load(o.second,o.slim2)),input(o.input),output(o.output) {
+    Chain(const Options& o):a(o.bypass ? nullptr : load(o.model,o.slim)),b(o.bypass ? nullptr : load(o.second,o.slim2)),input(o.input),output(o.output) {
         eq.Init(rate);eq.SetBass(o.bass);eq.SetMid(o.mid);eq.SetTreble(o.treble);
     }
     void process() {
         for(auto& s:x)s*=input;
         NAM_SAMPLE* in=x;NAM_SAMPLE* out=y;
-        a->process(&in,&out,block);
+        if(a) a->process(&in,&out,block);
+        else std::copy_n(x,block,y);
         if(b){in=y;out=z;b->process(&in,&out,block);}
         for(unsigned i=0;i<block;++i){
             float s=eq.Process(out[i])*output;
