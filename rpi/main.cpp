@@ -37,7 +37,7 @@ void check(int rc, const char* what) {
 }
 struct Close { void operator()(snd_pcm_t* p) const { if(p) snd_pcm_close(p); } };
 using PCM = std::unique_ptr<snd_pcm_t, Close>;
-PCM open_pcm(const char* device, snd_pcm_stream_t stream) {
+PCM open_pcm(const char* device, snd_pcm_stream_t stream,unsigned channels) {
     snd_pcm_t* raw = nullptr;
     check(snd_pcm_open(&raw, device, stream, 0), "open PCM");
     PCM pcm(raw);
@@ -46,11 +46,18 @@ PCM open_pcm(const char* device, snd_pcm_stream_t stream) {
     check(snd_pcm_hw_params_any(raw, hw), "hw params");
     check(snd_pcm_hw_params_set_access(raw, hw, SND_PCM_ACCESS_RW_INTERLEAVED), "access");
     check(snd_pcm_hw_params_set_format(raw, hw, SND_PCM_FORMAT_S32_LE), "format");
-    check(snd_pcm_hw_params_set_channels(raw, hw, 2), "channels");
+    check(snd_pcm_hw_params_set_channels(raw, hw, channels), "channels");
     check(snd_pcm_hw_params_set_rate(raw, hw, rate, 0), "rate");
     check(snd_pcm_hw_params_set_period_size(raw, hw, block, 0), "period");
     check(snd_pcm_hw_params_set_buffer_size(raw, hw, block*periods), "buffer");
     check(snd_pcm_hw_params(raw, hw), "apply hw");
+    snd_pcm_uframes_t actual_period=0,actual_buffer=0;unsigned actual_rate=0,actual_channels=0;int dir=0;
+    check(snd_pcm_hw_params_get_period_size(hw,&actual_period,&dir),"read period");
+    check(snd_pcm_hw_params_get_buffer_size(hw,&actual_buffer),"read buffer");
+    check(snd_pcm_hw_params_get_rate(hw,&actual_rate,&dir),"read rate");
+    check(snd_pcm_hw_params_get_channels(hw,&actual_channels),"read channels");
+    if(actual_period!=block||actual_buffer!=block*periods||actual_rate!=rate||actual_channels!=channels)throw std::runtime_error("ALSA negotiated settings differ from requested settings");
+    std::cerr<<(stream==SND_PCM_STREAM_CAPTURE?"Capture":"Playback")<<" PCM "<<device<<" channels="<<actual_channels<<" rate="<<actual_rate<<" period="<<actual_period<<" buffer="<<actual_buffer<<"\n";
     snd_pcm_sw_params_t* sw;
     snd_pcm_sw_params_alloca(&sw);
     check(snd_pcm_sw_params_current(raw, sw), "sw params");
@@ -61,12 +68,13 @@ PCM open_pcm(const char* device, snd_pcm_stream_t stream) {
     return pcm;
 }
 struct Options {
-    std::string device = "hw:pisound", model, second, ir, render_in, render_out;
+    std::string device = "default", model, second, ir, render_in, render_out;
     double slim = 1., slim2 = 1.;
     float input = 1., output = .25f, bass = 0., mid = 0., treble = 0.;
     float gate = -81.f;
     float comp=0, comp_post=0, reverb=0, decay=1.5f, reverb_type=0;
     int meter_fd = -1;
+    unsigned input_channel=1, input_channels=2, output_channels=2, output_left=1, output_right=2;
     bool benchmark = false, bypass = false, tuner = false, live = false, verify = false;
 };
 Options parse(int argc, char** argv) {
@@ -83,6 +91,11 @@ Options parse(int argc, char** argv) {
         if(k=="--render-in") o.render_in=v;
         else if(k=="--render-out") o.render_out=v;
         else if(k=="--device") o.device=v;
+        else if(k=="--input-channel") o.input_channel=std::stoul(v);
+        else if(k=="--input-channels") o.input_channels=std::stoul(v);
+        else if(k=="--output-channels") o.output_channels=std::stoul(v);
+        else if(k=="--output-left") o.output_left=std::stoul(v);
+        else if(k=="--output-right") o.output_right=std::stoul(v);
         else if(k=="--meter-fd") { o.meter_fd=std::stoi(v); if(o.meter_fd<3)throw std::runtime_error("Invalid meter fd"); }
         else if(k=="--buffer") { if(v!="64"&&v!="128"&&v!="256"&&v!="512") throw std::runtime_error("Invalid buffer"); block=std::stoul(v); }
         else if(k=="--periods") { if(v!="2"&&v!="3"&&v!="4") throw std::runtime_error("Invalid periods"); periods=std::stoul(v); }
@@ -111,6 +124,7 @@ Options parse(int argc, char** argv) {
     if(std::abs(o.bass)>20||std::abs(o.mid)>15||std::abs(o.treble)>10) throw std::runtime_error("EQ outside range");
     if(!std::isfinite(o.gate)||!(o.gate==-81.f||(o.gate>=-80.f&&o.gate<=-30.f)))throw std::runtime_error("Invalid gate threshold");
     if(!std::isfinite(o.comp)||o.comp<0||o.comp>1||!(o.comp_post==0||o.comp_post==1)||!std::isfinite(o.reverb)||o.reverb<0||o.reverb>1||!std::isfinite(o.decay)||o.decay<.2f||o.decay>5||!(o.reverb_type==0||o.reverb_type==1||o.reverb_type==2))throw std::runtime_error("Invalid effects controls");
+    if(o.input_channels<1||o.input_channels>64||o.output_channels<1||o.output_channels>64||o.input_channel<1||o.input_channel>o.input_channels||o.output_left<1||o.output_left>o.output_channels||o.output_right<1||o.output_right>o.output_channels)throw std::runtime_error("Invalid ALSA channel mapping");
     return o;
 }
 std::unique_ptr<nam::DSP> load(const std::string& path,double slim) {
@@ -300,9 +314,9 @@ int main(int argc,char** argv) {
             return 0;
         }
         std::signal(SIGINT,stop);std::signal(SIGTERM,stop);
-        auto cap=open_pcm(o.device.c_str(),SND_PCM_STREAM_CAPTURE);
-        auto play=open_pcm(o.device.c_str(),SND_PCM_STREAM_PLAYBACK);
-        int32_t buf[1024]{};
+        auto cap=open_pcm(o.device.c_str(),SND_PCM_STREAM_CAPTURE,o.input_channels);
+        auto play=open_pcm(o.device.c_str(),SND_PCM_STREAM_PLAYBACK,o.output_channels);
+        std::vector<int32_t> capture(block*o.input_channels), playback(block*o.output_channels);
         sched_param sp{};
         sp.sched_priority=60;
         if(sched_setscheduler(0,SCHED_FIFO,&sp)<0)
@@ -339,7 +353,7 @@ int main(int argc,char** argv) {
             unsigned got=0;
             bool failed=false;
             while(got<block && running){
-                auto n=snd_pcm_readi(cap.get(),buf+got*2,block-got);
+                auto n=snd_pcm_readi(cap.get(),capture.data()+got*o.input_channels,block-got);
                 if(n==-EINTR)continue;
                 if(n==-EPIPE || n==-ESTRPIPE){failed=true;break;}
                 if(n<0)check(static_cast<int>(n),"capture");
@@ -348,7 +362,7 @@ int main(int argc,char** argv) {
             }
             if(!running)break;
             if(!failed){
-                for(unsigned i=0;i<block;++i)chain.x[i]=buf[i*2]/2147483648.0;
+                for(unsigned i=0;i<block;++i)chain.x[i]=capture[i*o.input_channels+o.input_channel-1]/2147483648.0;
                 for(unsigned i=0;i<block;++i){const float p=std::abs(chain.x[i]);in_peak=std::max(in_peak,double(p));meter[0]=std::max(meter[0],p);}
                 auto dsp_start=std::chrono::steady_clock::now();
                 poll_controls();
@@ -358,11 +372,12 @@ int main(int argc,char** argv) {
                 for(unsigned i=0;i<block;++i){meter[1]=std::max(meter[1],std::abs(chain.y[i]));out_peak=std::max(out_peak,double(std::abs(chain.y[i])));if(std::abs(chain.y[i])>=.99999f)++clipped;}
                 for(unsigned i=0;i<block;++i) {
                     auto s=static_cast<int32_t>(std::clamp(double(chain.y[i])*2147483648.,-2147483648.,2147483647.));
-                    buf[i*2]=buf[i*2+1]=s;
+                    playback[i*o.output_channels+o.output_left-1]=s;
+                    playback[i*o.output_channels+o.output_right-1]=s;
                 }
                 unsigned done=0;
                 while(done<block&&running){
-                    auto w=snd_pcm_writei(play.get(),buf+done*2,block-done);
+                    auto w=snd_pcm_writei(play.get(),playback.data()+done*o.output_channels,block-done);
                     if(w==-EINTR)continue;
                     if(w==-EPIPE || w==-ESTRPIPE){failed=true;break;}
                     if(w<0)check(static_cast<int>(w),"playback");
