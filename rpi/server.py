@@ -23,9 +23,9 @@ ROOT = Path(__file__).resolve().parent.parent
 LIMIT = 32 * 1024 * 1024
 NAME = re.compile(r"[\w .()+@-]{1,180}", re.UNICODE)
 DEFAULT = dict(model="", second="", ir="", slim=1, slim2=1, input=1, output=.15,
-               bass=0, mid=0, treble=0, bypass=True)
+               bass=0, mid=0, treble=0, gate=-81, bypass=True)
 RANGES = dict(slim=(0,1), slim2=(0,1), input=(0,2), output=(0,1),
-              bass=(-20,20), mid=(-15,15), treble=(-10,10))
+              bass=(-20,20), mid=(-15,15), treble=(-10,10), gate=(-81,-30))
 
 class Controller:
     def __init__(self, args):
@@ -94,6 +94,8 @@ class Controller:
             v = p[k]
             if type(v) not in (int,float) or not math.isfinite(v) or not lo <= v <= hi:
                 raise ValueError("Invalid "+k)
+        if p["gate"] != -81 and p["gate"] < -80:
+            raise ValueError("Invalid gate threshold")
         for k,ext in (("model",(".nam",)),("second",(".nam",".wav")),("ir",(".wav",))):
             if p[k] != "" and not self.file(p[k],ext).is_file():
                 raise ValueError("Missing "+k)
@@ -245,7 +247,7 @@ class Controller:
     def live_controls(self,slot,values):
         if slot!=self.active or self.proc is None or self.proc.poll() is not None:
             raise ValueError("Select the running preset first")
-        keys=("input","output","bass","mid","treble")
+        keys=("input","output","bass","mid","treble","gate")
         p=dict(self.presets[slot])
         for k in keys:
             if k not in values: raise ValueError("Missing "+k)
