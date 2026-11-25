@@ -1,3 +1,9 @@
+# RPiT3K — Native Linux port
+
+**For Raspberry Pi and Pisound, see the [RPiT3K technical report, installation and reproducible tests](rpi/README.md).** This branch preserves the original upstream firmware documentation below for attribution and reference. Its Daisy-specific features and performance figures are not claims about RPiT3K.
+
+---
+
 # TONE3000 × Daisy DIY Pedal
 
 The TONE3000 × Daisy DIY Pedal Kit is an open source guitar and bass pedal that runs
