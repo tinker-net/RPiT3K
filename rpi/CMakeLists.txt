@@ -21,3 +21,9 @@ add_executable(rpit3k-dsp-test dsp_test.cpp)
 target_compile_options(rpit3k-dsp-test PRIVATE $<$<CONFIG:Release>:-O3>)
 enable_testing()
 add_test(NAME native_dsp COMMAND rpit3k-dsp-test)
+
+# Separate opt-in build of upstream default sample type and backend.
+# No production A2-fast define or Cortex-A76 flags.
+add_executable(nam-reference EXCLUDE_FROM_ALL nam_reference.cpp ${NAM_SOURCES})
+target_include_directories(nam-reference PRIVATE "${NAM_ROOT}" "${NAM_ROOT}/Dependencies/eigen" "${NAM_ROOT}/Dependencies/nlohmann")
+target_compile_options(nam-reference PRIVATE $<$<CONFIG:Release>:-O3>)
