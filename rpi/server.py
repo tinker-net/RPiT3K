@@ -111,6 +111,27 @@ class Controller:
             if not name or name in (".",".."): raise ValueError("Invalid new name")
             dst=self.file(str(Path(old).with_name(name+ext)),(".nam",".wav"))
         else: raise ValueError("Invalid item")
+        return self.relocate_library(src,dst,old,kind)
+
+    def move_library(self,old,destination,kind):
+        if not isinstance(old,str) or not old: raise ValueError("Cannot move library root")
+        if not isinstance(destination,str): raise ValueError("Invalid destination")
+        parent=self.folder(destination)
+        if not parent.is_dir(): raise ValueError("Destination folder not found")
+        if kind=="folder":
+            src=self.folder(old)
+            if not src.is_dir(): raise ValueError("Folder not found")
+            if destination==old or destination.startswith(old+"/"):
+                raise ValueError("Cannot move a folder into itself")
+        elif kind=="file":
+            src=self.file(old,(".nam",".wav"))
+            if not src.is_file(): raise ValueError("File not found")
+        else: raise ValueError("Invalid item")
+        new=(destination+"/" if destination else "")+src.name
+        dst=self.folder(new) if kind=="folder" else self.file(new,(".nam",".wav"))
+        return self.relocate_library(src,dst,old,kind)
+
+    def relocate_library(self,src,dst,old,kind):
         if src==dst: return old
         if dst.exists() or dst.is_symlink(): raise ValueError("Destination already exists")
         new=dst.relative_to(self.library).as_posix()
@@ -535,6 +556,9 @@ class Handler(BaseHTTPRequestHandler):
                 elif u.path=="/api/rename":
                     v=json.loads(self.body(65536))
                     c.rename_library(v["path"],v["name"],v["kind"])
+                elif u.path=="/api/move":
+                    v=json.loads(self.body(65536))
+                    c.move_library(v["path"],v["destination"],v["kind"])
                 elif u.path=="/api/folder":
                     v=json.loads(self.body(65536))
                     name=v["path"]
