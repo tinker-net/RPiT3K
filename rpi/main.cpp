@@ -13,6 +13,8 @@
 #include <vector>
 #include <string>
 #include <cstdint>
+#include <cerrno>
+#include <sched.h>
 
 namespace {
 volatile std::sig_atomic_t running = 1;
@@ -39,6 +41,13 @@ PCM open_pcm(const char* device, snd_pcm_stream_t stream) {
     check(snd_pcm_hw_params_set_period_size(raw, hw, block, 0), "period");
     check(snd_pcm_hw_params_set_buffer_size(raw, hw, block*periods), "buffer");
     check(snd_pcm_hw_params(raw, hw), "apply hw");
+    snd_pcm_sw_params_t* sw;
+    snd_pcm_sw_params_alloca(&sw);
+    check(snd_pcm_sw_params_current(raw, sw), "sw params");
+    check(snd_pcm_sw_params_set_avail_min(raw, sw, block), "avail min");
+    if(stream == SND_PCM_STREAM_PLAYBACK)
+        check(snd_pcm_sw_params_set_start_threshold(raw, sw, block*periods), "playback start threshold");
+    check(snd_pcm_sw_params(raw, sw), "apply sw");
     return pcm;
 }
 struct Options {
@@ -123,26 +132,55 @@ int main(int argc,char** argv) {
         auto cap=open_pcm(o.device.c_str(),SND_PCM_STREAM_CAPTURE);
         auto play=open_pcm(o.device.c_str(),SND_PCM_STREAM_PLAYBACK);
         int32_t buf[block*2]{};
-        check(snd_pcm_prepare(cap.get()),"prepare capture");
-        check(snd_pcm_prepare(play.get()),"prepare playback");
+        sched_param sp{};
+        sp.sched_priority=60;
+        if(sched_setscheduler(0,SCHED_FIFO,&sp)<0)
+            std::cerr<<"Realtime scheduling unavailable; continuing with normal priority\n";
+        unsigned xruns=0;
+        auto restart=[&] {
+            snd_pcm_drop(play.get());snd_pcm_drop(cap.get());
+            check(snd_pcm_prepare(cap.get()),"prepare capture");
+            check(snd_pcm_prepare(play.get()),"prepare playback");
+            check(snd_pcm_start(cap.get()),"start capture");
+        };
+        restart();
+        std::cerr<<"ALSA started: 48 kHz / 64 frames / 3 periods; Ctrl+C to stop\n";
         while(running){
-            auto n=snd_pcm_readi(cap.get(),buf,block);
-            if(n<0) throw std::runtime_error(std::string("capture stopped: ")+snd_strerror(n));
-            if(n!=block) throw std::runtime_error("Short capture block");
-            for(unsigned i=0;i<block;++i)chain.x[i]=buf[i*2]/2147483648.0;
-            chain.process();
-            for(unsigned i=0;i<block;++i) {
-                auto s=static_cast<int32_t>(std::clamp(double(chain.y[i])*2147483648.,-2147483648.,2147483647.));
-                buf[i*2]=buf[i*2+1]=s;
+            unsigned got=0;
+            bool failed=false;
+            while(got<block && running){
+                auto n=snd_pcm_readi(cap.get(),buf+got*2,block-got);
+                if(n==-EINTR)continue;
+                if(n==-EPIPE || n==-ESTRPIPE){failed=true;break;}
+                if(n<0)check(static_cast<int>(n),"capture");
+                if(n==0)continue;
+                got+=n;
             }
-            unsigned done=0;
-            while(done<block&&running){
-                auto w=snd_pcm_writei(play.get(),buf+done*2,block-done);
-                if(w<0)throw std::runtime_error(std::string("playback stopped: ")+snd_strerror(w));
-                if(w==0)throw std::runtime_error("Zero playback write");
-                done+=w;
+            if(!running)break;
+            if(!failed){
+                for(unsigned i=0;i<block;++i)chain.x[i]=buf[i*2]/2147483648.0;
+                chain.process();
+                for(unsigned i=0;i<block;++i) {
+                    auto s=static_cast<int32_t>(std::clamp(double(chain.y[i])*2147483648.,-2147483648.,2147483647.));
+                    buf[i*2]=buf[i*2+1]=s;
+                }
+                unsigned done=0;
+                while(done<block&&running){
+                    auto w=snd_pcm_writei(play.get(),buf+done*2,block-done);
+                    if(w==-EINTR)continue;
+                    if(w==-EPIPE || w==-ESTRPIPE){failed=true;break;}
+                    if(w<0)check(static_cast<int>(w),"playback");
+                    if(w==0)continue;
+                    done+=w;
+                }
+            }
+            if(failed && running){
+                ++xruns;
+                if(xruns<=5 || xruns%100==0)std::cerr<<"ALSA xrun/restart #"<<xruns<<"\n";
+                restart();
             }
         }
+        std::cerr<<"ALSA xruns/restarts: "<<xruns<<"\n";
         snd_pcm_drop(play.get());snd_pcm_drop(cap.get());
     } catch(const std::exception& e){std::cerr<<e.what()<<"\n";return 1;}
 }
