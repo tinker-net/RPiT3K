@@ -62,6 +62,7 @@ struct Options {
     std::string device = "hw:pisound", model, second, ir, render_in, render_out;
     double slim = 1., slim2 = 1.;
     float input = 1., output = .25f, bass = 0., mid = 0., treble = 0.;
+    int meter_fd = -1;
     bool benchmark = false, bypass = false, tuner = false, live = false, verify = false;
 };
 Options parse(int argc, char** argv) {
@@ -78,6 +79,7 @@ Options parse(int argc, char** argv) {
         if(k=="--render-in") o.render_in=v;
         else if(k=="--render-out") o.render_out=v;
         else if(k=="--device") o.device=v;
+        else if(k=="--meter-fd") { o.meter_fd=std::stoi(v); if(o.meter_fd<3)throw std::runtime_error("Invalid meter fd"); }
         else if(k=="--buffer") { if(v!="64"&&v!="128"&&v!="256"&&v!="512") throw std::runtime_error("Invalid buffer"); block=std::stoul(v); }
         else if(k=="--periods") { if(v!="2"&&v!="3"&&v!="4") throw std::runtime_error("Invalid periods"); periods=std::stoul(v); }
         else if(k=="--model") o.model=v;
@@ -291,6 +293,8 @@ int main(int argc,char** argv) {
                 }else if(used<sizeof(line)-1)line[used++]=buf[k];else overflow=true;
             }
         };
+        if(o.meter_fd>=0){int flags=fcntl(o.meter_fd,F_GETFL);if(flags<0||fcntl(o.meter_fd,F_SETFL,flags|O_NONBLOCK)<0)throw std::runtime_error("Cannot configure meter pipe");std::signal(SIGPIPE,SIG_IGN);}
+        float meter[2]{}; unsigned meter_frames=0;
         unsigned xruns=0, measured=0, late=0, clipped=0;
         double total_us=0,worst_us=0,in_peak=0,out_peak=0;
         auto report_at=std::chrono::steady_clock::now();
@@ -316,13 +320,13 @@ int main(int argc,char** argv) {
             if(!running)break;
             if(!failed){
                 for(unsigned i=0;i<block;++i)chain.x[i]=buf[i*2]/2147483648.0;
-                for(unsigned i=0;i<block;++i)in_peak=std::max(in_peak,double(std::abs(chain.x[i])));
+                for(unsigned i=0;i<block;++i){const float p=std::abs(chain.x[i]);in_peak=std::max(in_peak,double(p));meter[0]=std::max(meter[0],p);}
                 auto dsp_start=std::chrono::steady_clock::now();
                 poll_controls();
                 chain.process();
                 double us=std::chrono::duration<double,std::micro>(std::chrono::steady_clock::now()-dsp_start).count();
                 total_us+=us;worst_us=std::max(worst_us,us);++measured;if(us>1e6*block/rate)++late;
-                for(unsigned i=0;i<block;++i){out_peak=std::max(out_peak,double(std::abs(chain.y[i])));if(std::abs(chain.y[i])>=.99999f)++clipped;}
+                for(unsigned i=0;i<block;++i){meter[1]=std::max(meter[1],std::abs(chain.y[i]));out_peak=std::max(out_peak,double(std::abs(chain.y[i])));if(std::abs(chain.y[i])>=.99999f)++clipped;}
                 for(unsigned i=0;i<block;++i) {
                     auto s=static_cast<int32_t>(std::clamp(double(chain.y[i])*2147483648.,-2147483648.,2147483647.));
                     buf[i*2]=buf[i*2+1]=s;
@@ -337,6 +341,7 @@ int main(int argc,char** argv) {
                     done+=w;
                 }
             }
+            if(!failed && o.meter_fd>=0){meter_frames+=block;if(meter_frames>=2400){const auto n=write(o.meter_fd,meter,sizeof(meter));if(n<0&&errno!=EAGAIN&&errno!=EWOULDBLOCK&&errno!=EINTR){close(o.meter_fd);o.meter_fd=-1;}meter[0]=meter[1]=0;meter_frames=0;}}
             auto now=std::chrono::steady_clock::now();
             if(measured && now-report_at>=std::chrono::seconds(5)){
                 std::cerr<<"DSP mean_us="<<total_us/measured<<" max_us="<<worst_us<<" deadline_us="<<1e6*block/rate<<" blocks="<<measured<<" late="<<late<<" xruns="<<xruns<<" in_peak="<<in_peak<<" out_peak="<<out_peak<<" clipped_samples="<<clipped<<" NAM="<<bool(chain.a)<<" IR="<<bool(chain.ir)<<"\n";
