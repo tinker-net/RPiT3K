@@ -189,7 +189,9 @@ struct Chain {
         approach(bass,target_bass,[&](float v){eq.SetBass(v);});
         approach(mid,target_mid,[&](float v){eq.SetMid(v);});
         approach(treble,target_treble,[&](float v){eq.SetTreble(v);});
-        if(gate.enabled())for(unsigned i=0;i<block;++i)x[i]=gate.process(x[i]);
+        float gate_gain[512];
+        const bool gated=gate.enabled();
+        if(gated)for(unsigned i=0;i<block;++i){gate.process(x[i]);gate_gain[i]=gate.gain();}
         constexpr float gain_alpha=.0020811647f;
         for(unsigned i=0;i<block;++i){input+=gain_alpha*(target_input-input);if(std::abs(input-target_input)<1e-6f)input=target_input;x[i]*=input;}
         NAM_SAMPLE* in=x;NAM_SAMPLE* out=y;
@@ -202,6 +204,7 @@ struct Chain {
             output+=gain_alpha*(target_output-output);
             if(std::abs(output-target_output)<1e-6f)output=target_output;
             float s=eq.Process(out[i])*output;
+            if(gated)s*=gate_gain[i];
             y[i]=std::isfinite(s)?std::clamp(s,-1.f,1.f):0.f;
         }
     }
