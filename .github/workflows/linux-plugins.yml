@@ -1,0 +1,57 @@
+name: TON3K Linux preview
+on:
+  push:
+    branches: [vst3]
+    paths:
+      - 'vst3/**'
+      - 'rpi/**'
+      - 'eq3band.h'
+      - '.github/workflows/linux-plugins.yml'
+  workflow_dispatch:
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            arch: x86_64
+          - os: ubuntu-24.04-arm
+            arch: aarch64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake pkg-config libasound2-dev libfreetype6-dev libfontconfig1-dev libx11-dev libxcomposite-dev libxcursor-dev libxext-dev libxinerama-dev libxrandr-dev libxrender-dev libgl1-mesa-dev libgtk-3-dev libwebkit2gtk-4.1-dev libcurl4-openssl-dev xvfb lv2-dev lilv-utils
+      - name: Test streaming rate adapter
+        run: g++ -std=c++20 -O2 vst3/tests/rate_adapter_test.cpp -o /tmp/ton3k-rate-test && /tmp/ton3k-rate-test
+      - name: Fetch pinned NAM
+        run: |
+          git clone https://github.com/sdatkinson/NeuralAmpModelerCore.git
+          git -C NeuralAmpModelerCore checkout d3189ed482ded880c128bf312941266c4fa5ceec
+          git -C NeuralAmpModelerCore submodule update --init --recursive
+      - name: Configure
+        run: cmake -S vst3 -B build-linux -DCMAKE_BUILD_TYPE=Release
+      - name: Build VST3 and LV2
+        run: xvfb-run -a cmake --build build-linux --config Release --target TON3K_VST3 TON3K_LV2 --parallel 2
+      - name: Inspect bundles
+        run: |
+          set -eux
+          base=build-linux/TON3K_artefacts/Release
+          test -d "$base/VST3/TON3K.vst3"
+          test -d "$base/LV2/TON3K.lv2"
+          test -f "$base/LV2/TON3K.lv2/manifest.ttl"
+          find "$base" -name '*.so' -exec file {} \;
+          LV2_PATH="$PWD/$base/LV2" lv2info urn:tinkernet:ton3k
+      - name: Package
+        run: |
+          base=build-linux/TON3K_artefacts/Release
+          tar -czf TON3K-Linux-${{ matrix.arch }}-VST3.tar.gz -C "$base/VST3" TON3K.vst3
+          tar -czf TON3K-Linux-${{ matrix.arch }}-LV2.tar.gz -C "$base/LV2" TON3K.lv2
+      - uses: actions/upload-artifact@v5
+        with:
+          name: TON3K-Linux-${{ matrix.arch }}
+          path: TON3K-Linux-*.tar.gz
+          if-no-files-found: error

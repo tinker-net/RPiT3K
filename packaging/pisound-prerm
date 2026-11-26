@@ -1,0 +1,11 @@
+#!/bin/sh
+set -e
+if [ "$1" = remove ]; then
+ if [ -d /run/systemd/system ]; then
+  deb-systemd-invoke stop rpi-ton3k-pisound.service rpi-ton3k-pisound-hotspot.timer
+  systemctl stop rpi-ton3k-pisound-hotspot.service || true
+  /usr/lib/rpi-ton3k/pisound/setup restore
+  systemctl restart pisound-btn.service
+ fi
+ rm -f /etc/sudoers.d/rpi-ton3k-pisound
+fi

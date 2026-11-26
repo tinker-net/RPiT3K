@@ -6,3 +6,15 @@ hardware/enclosure/cad/enclosure.glb
 hardware/3d/board-full.glb
 hardware/renders/out/
 __pycache__/
+
+# Native local build, dependency checkout and private runtime assets
+/build-rpi*/
+/NeuralAmpModelerCore/
+*.nam
+*.namb
+*.wav
+*.log
+.env
+.env.*
+/rpi/presets.json
+/rpi/settings.json

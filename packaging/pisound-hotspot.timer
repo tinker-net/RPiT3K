@@ -1,0 +1,9 @@
+[Unit]
+Description=Ton3K Pisound fallback Wi-Fi timer
+
+[Timer]
+OnBootSec=60s
+OnUnitActiveSec=30s
+
+[Install]
+WantedBy=timers.target

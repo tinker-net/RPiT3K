@@ -1,0 +1,7 @@
+#!/bin/sh
+set -e
+if [ "$1" = purge ]; then
+ deb-systemd-helper purge rpi-ton3k-pisound.service rpi-ton3k-pisound-hotspot.timer >/dev/null || true
+fi
+if [ -d /run/systemd/system ]; then systemctl daemon-reload; fi
+# Preserve library, presets, and private integration state.

@@ -1,0 +1,81 @@
+name: TON3K VST3 and AU preview
+on:
+  push:
+    branches: [vst3]
+  workflow_dispatch:
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2022
+            name: Windows-x64
+            extra: '-A x64'
+          - os: macos-15-intel
+            name: macOS-universal
+            extra: '-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64'
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Fetch pinned NAM
+        shell: bash
+        run: |
+          git clone https://github.com/sdatkinson/NeuralAmpModelerCore.git
+          git -C NeuralAmpModelerCore checkout d3189ed482ded880c128bf312941266c4fa5ceec
+          git -C NeuralAmpModelerCore submodule update --init --recursive
+      - name: Install WebView2 SDK
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: nuget install Microsoft.Web.WebView2 -Version 1.0.1901.177 -OutputDirectory webview2-sdk -NonInteractive
+      - name: macOS toolchain diagnostics
+        if: runner.os == 'macOS'
+        run: |
+          uname -m
+          sw_vers
+          xcodebuild -version
+          xcrun --sdk macosx --show-sdk-version
+      - name: Configure
+        shell: bash
+        run: |
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            cmake -S vst3 -B build-vst3 -A x64 "-DJUCE_WEBVIEW2_PACKAGE_LOCATION=$GITHUB_WORKSPACE/webview2-sdk"
+          else
+            cmake -S vst3 -B build-vst3 -DCMAKE_BUILD_TYPE=Release '-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64'
+          fi
+      - name: Build VST3
+        run: cmake --build build-vst3 --config Release --target TON3K_VST3 --parallel 2
+      - name: Build Audio Unit
+        if: runner.os == 'macOS'
+        run: cmake --build build-vst3 --config Release --target TON3K_AU --parallel 2
+      - name: Package macOS
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          cd build-vst3/TON3K_artefacts/Release/VST3
+          lipo -archs "TON3K.vst3/Contents/MacOS/TON3K"
+          lipo "TON3K.vst3/Contents/MacOS/TON3K" -verify_arch arm64 x86_64
+          codesign --force --deep --sign - TON3K.vst3
+          ditto -c -k --keepParent TON3K.vst3 "$GITHUB_WORKSPACE/TON3K-macOS-universal.zip"
+          cd ../AU
+          lipo -archs "TON3K.component/Contents/MacOS/TON3K"
+          lipo "TON3K.component/Contents/MacOS/TON3K" -verify_arch arm64 x86_64
+          codesign --force --deep --sign - TON3K.component
+          ditto -c -k --keepParent TON3K.component "$GITHUB_WORKSPACE/TON3K-macOS-AU-universal.zip"
+      - name: Validate Audio Unit (Intel slice)
+        continue-on-error: true
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          mkdir -p "$HOME/Library/Audio/Plug-Ins/Components"
+          ditto build-vst3/TON3K_artefacts/Release/AU/TON3K.component "$HOME/Library/Audio/Plug-Ins/Components/TON3K.component"
+          auval -v aufx T3k1 Tnkr
+      - name: Package Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Compress-Archive -Path build-vst3/TON3K_artefacts/Release/VST3/TON3K.vst3 -DestinationPath TON3K-Windows-x64.zip
+      - uses: actions/upload-artifact@v5
+        with:
+          name: TON3K-${{ matrix.name }}
+          path: TON3K-*.zip
+          if-no-files-found: error

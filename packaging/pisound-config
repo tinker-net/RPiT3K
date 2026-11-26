@@ -1,0 +1,5 @@
+# Dedicated appliance profile. Unauthenticated API: trusted isolated LAN only.
+# Set BIND=127.0.0.1 for SSH-only access (hotspot browser access then unavailable).
+BIND=0.0.0.0
+# Set CLOUD=--disable-cloud to disable optional TONE3000 account integration.
+CLOUD=
