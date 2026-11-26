@@ -2,6 +2,7 @@
 """LAN controller for the native RPiT3K engine. Standard library only."""
 import argparse
 from tonecloud import ToneCloud
+from calibration import calibration, valid_number
 import base64
 import hmac
 import json
@@ -47,6 +48,7 @@ class Controller:
         self.logs = deque(maxlen=100)
         self.active = None
         self.tuner_return = None
+        self.metronome = dict(enabled=False,bpm=120,beats=4,volume=.15)
         self.settingsfile = self.data / "settings.json"
         self.settings = dict(buffer=256, periods=3, last="1", device=args.device, input_channel=args.input_channel, input_channels=args.input_channels, output_channels=args.output_channels, output_left=args.output_left, output_right=args.output_right, reference_dbu=None)
         if self.settingsfile.exists(): self.settings.update(json.loads(self.settingsfile.read_text()))
@@ -435,6 +437,27 @@ class Controller:
         if self.proc.poll() is not None:
             raise ValueError("Audio engine stopped: "+"; ".join(list(self.logs)[-5:]))
         self.active=slot
+        self.send_metronome()
+
+    def send_metronome(self):
+        if self.proc and self.proc.poll() is None:
+            m=self.metronome
+            self.proc.stdin.write(f"METRO {int(m['enabled'])} {m['bpm']} {m['beats']} {m['volume']}\n")
+            self.proc.stdin.flush()
+
+    def set_metronome(self,v):
+        if not isinstance(v,dict): raise ValueError("Expected metronome settings")
+        m=dict(self.metronome,**v)
+        if set(m)!=set(self.metronome) or type(m["enabled"]) is not bool or type(m["bpm"]) is not int or not 30<=m["bpm"]<=300 or type(m["beats"]) is not int or not 1<=m["beats"]<=12 or not valid_number(m["volume"],0,.5):
+            raise ValueError("Invalid metronome settings")
+        if m["enabled"] and (not self.proc or self.proc.poll() is not None or self.active is None):
+            raise ValueError("Turn Audio ON to hear the metronome")
+        old=self.metronome
+        self.metronome=m
+        try: self.send_metronome()
+        except OSError:
+            self.metronome=old
+            raise
 
     def replace_rig(self,cmd,slot):
         # Caller holds the controller lock, so there is only one outstanding request.
@@ -551,7 +574,7 @@ class Controller:
                     poweroff_enabled=os.environ.get("RPIT3K_ENABLE_POWEROFF")=="1",
                     running=self.proc is not None and self.proc.poll() is None,
                     files=self.library_files(),folders=self.library_folders(),favorites=sorted(self.favorites),amp_art=self.amp_art_versions(),
-                    logs=list(self.logs), tuner=self.tuner_reading())
+                    logs=list(self.logs), tuner=self.tuner_reading(), metronome=self.metronome)
 
 class Handler(BaseHTTPRequestHandler):
     def send(self,code,data,mime="application/json"):
@@ -647,21 +670,15 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if u.path=="/api/calibrate":
                 v=json.loads(self.body(65536))
-                ref=c.settings.get("reference_dbu")
-                if ref is None: raise ValueError("Set the ADC full-scale reference in Audio settings first")
-                if type(ref) not in (int,float) or not math.isfinite(ref) or not -60<=ref<=30:
-                    raise ValueError("Invalid hardware reference in dBu")
-                path=c.file(v["model"],(".nam",))
-                if path.stat().st_size>LIMIT: raise ValueError("Model too large")
-                model=json.loads(path.read_text())
-                metadata=model.get("metadata") or {}
-                level=metadata.get("input_level_dbu")
-                if type(level) not in (int,float) or not math.isfinite(level) or not -60<=level<=60:
-                    raise ValueError("Capture has no valid input_level_dbu metadata")
-                db=ref-level
-                gain=10**(db/20)
-                if gain>2 or gain<.000001: raise ValueError("Calibration outside available input gain range")
-                self.send(200,dict(gain=gain,db=db,model_dbu=level,reference_dbu=ref));return
+                slim=v.get("slim",1)
+                if not valid_number(slim,0,1): raise ValueError("Invalid quality selection")
+                with c.lock:
+                    ref=c.settings.get("reference_dbu")
+                    path=c.file(v["model"],(".nam",))
+                    if path.stat().st_size>LIMIT: raise ValueError("Model too large")
+                    model=json.loads(path.read_text())
+                    self.send(200,calibration(model,ref,slim))
+                return
             if u.path.startswith('/api/tone3000/'):
                 if c.args.disable_cloud:
                     self.send(403,dict(error='Experimental TONE3000 integration disabled'));return
@@ -710,6 +727,8 @@ class Handler(BaseHTTPRequestHandler):
                 elif u.path=="/api/controls":
                     v=json.loads(self.body(65536))
                     c.live_controls(v["slot"],v["controls"])
+                elif u.path=="/api/metronome":
+                    c.set_metronome(json.loads(self.body(4096)))
                 elif u.path=="/api/settings":
                     c.configure(json.loads(self.body(65536)))
                 elif u.path=="/api/tuner":
@@ -728,6 +747,7 @@ class Handler(BaseHTTPRequestHandler):
                             c.start(cmd,None)
                         c.tuner_return=previous
                 elif u.path=="/api/stop":
+                    c.metronome["enabled"]=False
                     c.stop()
                     c.tuner_return=None
                 elif u.path in ("/api/save","/api/apply"):
