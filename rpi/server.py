@@ -312,6 +312,15 @@ class Controller:
         # recovery. Count deltas, not log lines, to avoid double counting.
         for line in proc.stdout:
             line=line.rstrip()
+            if line.startswith("TUNER "):
+                try:
+                    _,hz,confidence=line.split()
+                    hz,confidence=float(hz),float(confidence)
+                    if not math.isfinite(hz) or not math.isfinite(confidence): raise ValueError("Invalid pitch")
+                    proc.rpit3k_pitch=(time.monotonic(),hz,confidence)
+                except ValueError:
+                    proc.rpit3k_pitch=None
+                continue
             self.logs.append(line)
             match=(re.search(r"\bxruns=(\d+)\b",line) if line.startswith("DSP ") else
                    re.fullmatch(r"ALSA (?:xrun/restart #|xruns/restarts: )(\d+)",line))
@@ -376,11 +385,21 @@ class Controller:
         except OSError:
             pass
 
+    def tuner_reading(self):
+        proc=self.proc
+        if proc is None or self.active is not None or proc.poll() is not None:
+            return dict(valid=False,hz=0,confidence=0)
+        pitch=getattr(proc,"rpit3k_pitch",None)
+        if pitch and time.monotonic()-pitch[0]<.35:
+            _,hz,confidence=pitch
+            return dict(valid=30<=hz<=1200 and confidence>=.8,hz=hz,confidence=confidence)
+        return dict(valid=False,hz=0,confidence=0)
+
     def levels(self):
         m=self.meter
         if m and m[0] is self.proc and self.proc.poll() is None and time.monotonic()-m[1]<.5:
-            return dict(valid=True,input=m[2],output=m[3])
-        return dict(valid=False,input=0,output=0)
+            return dict(valid=True,input=m[2],output=m[3],pitch=self.tuner_reading())
+        return dict(valid=False,input=0,output=0,pitch=self.tuner_reading())
 
     def start(self,cmd,slot):
         rd,wr=os.pipe()
@@ -394,6 +413,7 @@ class Controller:
         finally:
             os.close(wr)
         self.proc.rpit3k_xruns=0
+        self.proc.rpit3k_pitch=None
         threading.Thread(target=self.drain_meter,args=(self.proc,rd),daemon=True).start()
         threading.Thread(target=self.drain,args=(self.proc,),daemon=True).start()
         time.sleep(.35)
@@ -456,7 +476,7 @@ class Controller:
                     poweroff_enabled=os.environ.get("RPIT3K_ENABLE_POWEROFF")=="1",
                     running=self.proc is not None and self.proc.poll() is None,
                     files=self.library_files(),folders=self.library_folders(),favorites=sorted(self.favorites),amp_art=self.amp_art_versions(),
-                    logs=list(self.logs), tuner=next((line for line in reversed(list(self.logs)) if line.startswith("TUNER ")), ""))
+                    logs=list(self.logs), tuner=self.tuner_reading())
 
 class Handler(BaseHTTPRequestHandler):
     def send(self,code,data,mime="application/json"):
@@ -623,6 +643,7 @@ class Handler(BaseHTTPRequestHandler):
                             raise
                 elif u.path=="/api/stop":
                     c.stop()
+                    c.tuner_return=None
                 elif u.path in ("/api/save","/api/apply"):
                     v=json.loads(self.body(65536))
                     if u.path=="/api/save":
@@ -643,7 +664,7 @@ def main():
     p.add_argument("--device",default="hw:pisound,0")
     p.add_argument("--data",default="~/.local/share/rpit3k")
     p.add_argument("--no-auth",action="store_true")
-    p.add_argument("--autostart",action="store_true")
+    p.add_argument("--autostart",action="store_true",help="Deprecated; audio always starts stopped")
     p.add_argument("--disable-cloud",action="store_true")
     a=p.parse_args()
     c=Controller(a)
@@ -654,12 +675,8 @@ def main():
     server.username=os.getenv("RPIT3K_USERNAME","rpit3k")
     print(f"RPiT3K http://{a.bind}:{a.port}  "+("no authentication (trusted LAN only)" if password is None else f"user={server.username}"),flush=True)
     if password and not os.getenv("RPIT3K_PASSWORD"): print("Temporary password: "+password,flush=True)
-    if a.autostart:
-        try:
-            slot=c.settings["last"];c.apply(slot,c.presets[slot],benchmark=False)
-        except Exception as e:
-            c.logs.append("Autostart failed: "+str(e))
-            print("Autostart failed: "+str(e),flush=True)
+    # Always boot silently, including existing service units with --autostart.
+    if a.autostart: print("--autostart ignored: audio starts stopped",flush=True)
     def stop(*_): raise KeyboardInterrupt
     signal.signal(signal.SIGTERM,stop)
     try: server.serve_forever()
