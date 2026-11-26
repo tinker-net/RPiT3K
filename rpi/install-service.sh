@@ -43,14 +43,7 @@ fi
 printf '[Unit]\nDescription=RPiT3K native pedal\nAfter=sound.target\n\n[Service]\nType=simple\nUser=%s\nSupplementaryGroups=audio\nWorkingDirectory=%s\nExecStart=/usr/bin/python3 %s/rpi/server.py --device hw:CARD=pisound,DEV=0 --bind %s --no-auth %s --data %s/.local/share/rpit3k\nLimitRTPRIO=60\nRestart=on-failure\nRestartSec=3\nUMask=0077\n\n[Install]\nWantedBy=multi-user.target\n' "$user" "$root" "$root" "$bind" "$cloud" "$home" | sudo tee /etc/systemd/system/rpit3k.service >/dev/null
 sudo install -m 755 "$root/rpi/next-preset.sh" /usr/local/bin/rpit3k-next
 if [[ "$button" == yes ]]; then
- if systemctl cat pisound-btn.service >/dev/null 2>&1 && [[ -f /etc/pisound.conf ]]; then
-  sudo cp -an /etc/pisound.conf /etc/pisound.conf.rpit3k-backup
-  sudo sed -i -E '/^[[:space:]]*CLICK_1[[:space:]]/d' /etc/pisound.conf
-  printf '\nCLICK_1 /usr/local/bin/rpit3k-next\n' | sudo tee -a /etc/pisound.conf >/dev/null
-  sudo systemctl restart pisound-btn.service
- else
-  echo "Pisound button service/config not found; button not configured."
- fi
+ bash "$root/rpi/install-button.sh"
 fi
 sudo systemctl daemon-reload
 sudo systemctl enable rpit3k.service

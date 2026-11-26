@@ -29,7 +29,7 @@ LIMIT = 32 * 1024 * 1024
 AMP_ART_KEYS = frozenset(("blackface","silverface","tweed","vox","orange","plexi","matchless","dumble","hiewatt","boutique","generic","mesa","gibson","pedal","rat","ts808","centaur","bluesbreaker","tonebender","bigmuff","morningglory","distortionplus"))
 AMP_ART_LIMIT = 2 * 1024 * 1024
 NAME = re.compile(r"[\w .()+@-]{1,180}", re.UNICODE)
-DEFAULT = dict(model="", second="", ir="", ir2="", ir_mix=.5, hiz=0, hiz_amount=.9, hiz_profile=0, slim=1, slim2=1, input=1, output=.15,
+DEFAULT = dict(nam1_enabled=True, model="", second="", ir="", ir2="", ir_mix=.5, hiz=0, hiz_amount=.9, hiz_profile=0, slim=1, slim2=1, input=1, output=.15,
                bass=0, mid=0, treble=0, gate=-81, comp=0, comp_post=0, reverb=0, decay=1.5, reverb_type=0, comp_amount=.35, chorus_amount=.35, delay_amount=.25, reverb_amount=.25, chorus=0, chorus_rate=0.8, chorus_depth=0.5, delay=0, delay_ms=350, delay_feedback=0.35, bypass=True)
 RANGES = dict(hiz=(0,1), hiz_profile=(0,3), ir_mix=(0,1), slim=(0,1), slim2=(0,1), input=(0,2), output=(0,1),
               bass=(-20,20), mid=(-15,15), treble=(-10,10), gate=(-81,-30), comp=(0,1), comp_post=(0,1), reverb=(0,1), decay=(.2,5), reverb_type=(0,2), chorus=(0,1), chorus_rate=(0.1,5), chorus_depth=(0,1), delay=(0,1), delay_ms=(20,1000), delay_feedback=(0,0.85))
@@ -272,6 +272,7 @@ class Controller:
             p["hiz_amount"]=p["hiz"]
         if type(p["hiz_amount"]) not in (int,float) or not math.isfinite(p["hiz_amount"]) or not 0<=p["hiz_amount"]<=1:
             raise ValueError("Invalid Hi-Z amount")
+        if type(p["nam1_enabled"]) is not bool: raise ValueError("Invalid NAM 1 state")
         if type(p["bypass"]) is not bool:
             raise ValueError("Invalid bypass")
         for k,(lo,hi) in RANGES.items():
@@ -312,6 +313,7 @@ class Controller:
                 cmd+=["--ir",str(self.library/p["ir"])]
             if p["ir2"]:
                 cmd+=["--ir2",str(self.library/p["ir2"])]
+        if not p["nam1_enabled"]: cmd+=["--nam1-off"]
         for k in RANGES:
             cmd+=["--"+k,str(p[k])]
         return cmd
@@ -549,10 +551,31 @@ class Controller:
             if k+"_amount" in values:p[k+"_amount"]=values[k+"_amount"]
             elif p[k]>0:p[k+"_amount"]=p[k]
         if "hiz_amount" in values: p["hiz_amount"]=values["hiz_amount"]
+        if "nam1_enabled" in values:p["nam1_enabled"]=values["nam1_enabled"]
         p=self.validate(p)
+        self.proc.stdin.write("STOMP "+str(int(p["nam1_enabled"]))+"\n")
         self.proc.stdin.write(" ".join(str(p[k]) for k in keys)+"\n")
         self.proc.stdin.flush()
         self.save(slot,p)
+
+    def toggle_stomp(self):
+        slot=self.active or self.settings["last"]
+        p=dict(self.presets[slot])
+        if not p["model"] or p["bypass"]:raise ValueError("Select NAM 1 and disable global bypass first")
+        p["nam1_enabled"]=not p["nam1_enabled"]
+        if self.proc and self.proc.poll() is None and self.active==slot:
+            self.proc.stdin.write("STOMP "+str(int(p["nam1_enabled"]))+"\n")
+            self.proc.stdin.flush()
+        self.save(slot,p)
+
+    def toggle_audio(self):
+        if self.proc and self.proc.poll() is None:
+            self.metronome["enabled"]=False
+            self.stop()
+            self.tuner_return=None
+        else:
+            slot=self.settings["last"]
+            self.apply(slot,self.presets[slot])
 
     def next_preset(self):
         slot=str(int(self.settings["last"])%4+1)
@@ -751,6 +774,10 @@ class Handler(BaseHTTPRequestHandler):
                     if not name: raise ValueError("Choose a folder name")
                     p=c.folder(name)
                     p.mkdir(parents=True,exist_ok=True)
+                elif u.path in ("/api/stomp","/api/audio-toggle"):
+                    if self.client_address[0] not in ("127.0.0.1","::1"): raise ValueError("Local button endpoint only")
+                    if u.path=="/api/stomp":c.toggle_stomp()
+                    else:c.toggle_audio()
                 elif u.path=="/api/next":
                     if self.client_address[0] not in ("127.0.0.1","::1"): raise ValueError("Local button endpoint only")
                     c.next_preset()

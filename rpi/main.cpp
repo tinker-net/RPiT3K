@@ -74,6 +74,7 @@ struct Options {
     float comp=0, comp_post=0, reverb=0, decay=1.5f, reverb_type=0;
     float chorus=0.0f, chorus_rate=0.8f, chorus_depth=0.5f, delay=0.0f, delay_ms=350.0f, delay_feedback=0.35f;
     int meter_fd = -1, rig_fd = -1, rig_ack_fd = -1;
+    bool nam1_enabled = true;
     bool benchmark = false, bypass = false, tuner = false, live = false, verify = false;
 };
 bool is_wav(const std::string& path);
@@ -86,6 +87,7 @@ Options parse(int argc, char** argv, bool rig_only=false) {
         if(k=="--benchmark") {o.benchmark=true;continue;}
         if(k=="--tuner") {o.tuner=true;continue;}
         if(k=="--bypass") {o.bypass=true;continue;}
+        if(k=="--nam1-off") {o.nam1_enabled=false;continue;}
         if(i+1>=argc) throw std::runtime_error("Missing value: "+k);
         std::string v=argv[++i];
         if(k=="--render-in") o.render_in=v;
@@ -175,6 +177,9 @@ struct Chain {
     std::unique_ptr<hybrid::Model> a,b;
     std::unique_ptr<CabinetConvolver> ir,ir2;
     float ir_mix,target_ir_mix;
+    bool has_nam1=false;
+    float nam1_mix=1.f,nam1_target=1.f;
+    void set_stomp(bool enabled){nam1_target=enabled?1.f:0.f;}
     Eq3Band eq;
     GuitarTuner tuner;
     NoiseGate gate;
@@ -188,6 +193,8 @@ struct Chain {
     float target_input,target_output,bass,mid,treble,target_bass,target_mid,target_treble;
     NAM_SAMPLE x[512]{}, y[512]{}, z[512]{};
     Chain(const Options& o):a((o.bypass||o.tuner) ? nullptr : (o.model.empty()&&!is_wav(o.second)?load(o.second,o.slim2):load(o.model,o.slim))),b((o.bypass||o.tuner||o.model.empty()||is_wav(o.second)) ? nullptr : load(o.second,o.slim2)),ir((o.bypass||o.tuner)?nullptr:load_ir(o.ir.empty()&&is_wav(o.second)?o.second:o.ir)),ir2((o.bypass||o.tuner)?nullptr:load_ir(o.ir2)),ir_mix(o.ir_mix),target_ir_mix(o.ir_mix),tuning(o.tuner),input(o.input),output(o.output),target_input(o.input),target_output(o.output),bass(o.bass),mid(o.mid),treble(o.treble),target_bass(o.bass),target_mid(o.mid),target_treble(o.treble) {
+        has_nam1=!o.model.empty()&&bool(a);
+        nam1_mix=nam1_target=o.nam1_enabled?1.f:0.f;
         hiz.set(o.hiz,int(o.hiz_profile));
         gate.set(o.gate);
         effects(o.comp,o.comp_post,o.reverb,o.decay,o.reverb_type);
@@ -234,7 +241,14 @@ struct Chain {
         constexpr float gain_alpha=.0020811647f;
         for(unsigned i=0;i<block;++i){input+=gain_alpha*(target_input-input);if(std::abs(input-target_input)<1e-6f)input=target_input;x[i]=hiz.process(x[i])*input;x[i]=pre.process(x[i]);}
         NAM_SAMPLE* in=x;NAM_SAMPLE* out=y;
-        if(a) a->process(&in,&out,block);
+        if(a) {
+            a->process(&in,&out,block);
+            if(has_nam1)for(unsigned i=0;i<block;++i){
+                const float step=1.f/480.f;
+                nam1_mix+=std::clamp(nam1_target-nam1_mix,-step,step);
+                y[i]=nam1_mix<=0.f?x[i]:nam1_mix>=1.f?y[i]:x[i]+nam1_mix*(y[i]-x[i]);
+            }
+        }
         else std::copy_n(x,block,y);
         if(b){in=y;out=z;b->process(&in,&out,block);}
         float cab[512],cab2[512];
@@ -358,7 +372,8 @@ int main(int argc,char** argv) {
                 if(buf[k]=='\n'){
                     if(!overflow){line[used]=0;float i,o,b,m,t,g,c,pos,wet,d,type,mix,hz,profile,ch,cr,cd,dl,dm,df;char extra;
                         unsigned enabled,bpm,beats;float level;
-                        if(std::sscanf(line,"METRO %u %u %u %f %c",&enabled,&bpm,&beats,&level,&extra)==4&&enabled<=1)metronome.set(enabled!=0,bpm,beats,level);
+                        if(std::sscanf(line,"STOMP %u %c",&enabled,&extra)==1&&enabled<=1)current->set_stomp(enabled!=0);
+                        else if(std::sscanf(line,"METRO %u %u %u %f %c",&enabled,&bpm,&beats,&level,&extra)==4&&enabled<=1)metronome.set(enabled!=0,bpm,beats,level);
                         else if(std::sscanf(line,"%f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %c",&i,&o,&b,&m,&t,&g,&c,&pos,&wet,&d,&type,&mix,&hz,&profile,&ch,&cr,&cd,&dl,&dm,&df,&extra)==20)current->controls(i,o,b,m,t,g,c,pos,wet,d,type,mix,hz,profile,ch,cr,cd,dl,dm,df);
                         else if(std::sscanf(line,"%f %f %f %f %f %f %f %f %f %f %f %f %f %f %c",&i,&o,&b,&m,&t,&g,&c,&pos,&wet,&d,&type,&mix,&hz,&profile,&extra)==14)current->controls(i,o,b,m,t,g,c,pos,wet,d,type,mix,hz,profile);
                         else if(std::sscanf(line,"%f %f %f %f %f %f %f %f %f %f %f %f %c",&i,&o,&b,&m,&t,&g,&c,&pos,&wet,&d,&type,&mix,&extra)==12)current->controls(i,o,b,m,t,g,c,pos,wet,d,type,mix);

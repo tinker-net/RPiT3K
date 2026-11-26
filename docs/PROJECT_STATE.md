@@ -18,3 +18,6 @@ Pi 5/Pisound, aarch64 Linux 6.18.60+rpt-rpi-2712, GCC 14.2.0: incremental build 
 
 ## Open validation
 Clean SD installation, real browser rendering, live audio stability/latency and audible transitions with latest effects, hardware button/hotspot, real OAuth authorization/download/restart/reboot, generic USB/x86 hardware, and physical ADC/Hi-Z measurement. Documentation and code inspection do not establish these results. No changes to DSP algorithms in documentation consolidation.
+
+## Autonomous controls (pending physical validation)
+- Per-preset NAM 1 stomp with 10 ms linear dry/wet transition, model remains processing to preserve state; NAM 2 and IR untouched. Shared editions. Pisound-only optional install maps six gestures and uses Blokas LED feedback after successful API responses. Existing service configuration unchanged by standalone button installer. Fallback hotspot manual-off inhibit lasts until reboot or manual on. Native build and physical LED/button/ALSA tests pending.

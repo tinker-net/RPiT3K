@@ -40,7 +40,7 @@ Library search, folders, favorites, import/move/rename, confirmed permanent dele
 
 Optional power menu: run bash rpi/install-poweroff.sh as service user and confirm; exact systemctl poweroff and reboot sudo privileges only, no general root access. Existing poweroff-only installs must rerun helper for reboot. Disable with bash rpi/install-poweroff.sh --disable. On LAN anyone with API access can invoke confirmed power actions. No physical power switching.
 
-Optional single-click preset cycle: bash rpi/install-service.sh --button (add desired --lan/--cloud). Backs up /etc/pisound.conf and replaces CLICK_1 only; physical button still needs validation. Optional NetworkManager fallback: bash rpi/install-hotspot.sh, enter WPA2 password; requires LAN mode, SSID RPiT3K at 10.42.0.1, activates without other connectivity. Disable timer and connection with sudo systemctl disable --now rpit3k-hotspot.timer and sudo nmcli connection down RPiT3K-fallback.
+Optional autonomous Pisound controls: `bash rpi/install-button.sh` (or `--button` on service installation). Single click toggles NAM 1, double cycles presets, triple toggles hotspot, HOLD_1S identifies the current preset with 1–4 LED flashes, HOLD_3S toggles audio, HOLD_5S invokes Blokas shutdown. Audio starts OFF; stomp is saved per preset, only NAM 1 is bypassed with a 10 ms ramp. Hotspot uses existing RPiT3K-fallback if installed, otherwise Blokas script; manual off suppresses fallback until reboot or manual on. Existing config backed up. Hardware verification pending.
 
 ## Update and troubleshoot
 
