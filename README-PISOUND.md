@@ -87,3 +87,7 @@ Update an existing source install without changing its network/service configura
     sudo systemctl restart rpit3k.service pisound-btn.service
 
 Audio starts OFF after restart. Hard-refresh the browser.
+
+### Capture artwork persistence
+
+Manual pedal and amplifier appearance assignments are saved on the controller in `appearance.json`, keyed by capture library path. Existing browser assignments are imported when the browser reconnects (server choices take priority). Automatic is an explicit saved choice. No audio restart is required to change appearance.

@@ -90,6 +90,8 @@ class Controller:
             self.presets.update({k:dict(DEFAULT, **normalize_fx(v)) for k,v in json.loads(self.statefile.read_text()).items()})
         self.favoritesfile=self.data/"favorites.json"
         self.favorites=set(json.loads(self.favoritesfile.read_text())) if self.favoritesfile.exists() else set()
+        self.appearancefile=self.data/"appearance.json"
+        self.appearance=json.loads(self.appearancefile.read_text()) if self.appearancefile.exists() else {}
         self.exe = ROOT / "build-rpi/rpit3k"
         if not self.exe.is_file():
             raise RuntimeError("Compile build-rpi/rpit3k first")
@@ -217,6 +219,18 @@ class Controller:
         path=folder/(key+".webp")
         if path.is_symlink(): raise ValueError("Invalid artwork path")
         return path
+
+    def set_appearance(self,values,merge=False):
+        if not isinstance(values,dict): raise ValueError("Invalid appearance map")
+        updated=dict(self.appearance)
+        for name,key in values.items():
+            if key not in AMP_ART_KEYS and key!="auto": raise ValueError("Unknown artwork")
+            if not self.file(name,(".nam",)).is_file():
+                if merge: continue
+                raise ValueError("Capture not found")
+            if not merge or name not in updated: updated[name]=key
+        self.write_json(self.appearancefile,updated)
+        self.appearance=updated
 
     def amp_art_versions(self):
         versions={}
@@ -628,7 +642,7 @@ class Controller:
                     cloud_enabled=not self.args.disable_cloud,
                     poweroff_enabled=os.environ.get("RPIT3K_ENABLE_POWEROFF")=="1",
                     running=self.proc is not None and self.proc.poll() is None,
-                    files=self.library_files(),folders=self.library_folders(),favorites=sorted(self.favorites),amp_art=self.amp_art_versions(),
+                    files=self.library_files(),folders=self.library_folders(),favorites=sorted(self.favorites),amp_art=self.amp_art_versions(),appearance=dict(self.appearance),
                     logs=list(self.logs), tuner=self.tuner_reading(), metronome=self.metronome)
 
 class Handler(BaseHTTPRequestHandler):
@@ -792,6 +806,11 @@ class Handler(BaseHTTPRequestHandler):
                 elif u.path=="/api/delete":
                     v=json.loads(self.body(65536))
                     c.delete_library(v["path"],v["kind"])
+                elif u.path=="/api/appearance":
+                    v=json.loads(self.body(65536))
+                    c.set_appearance(v["values"],merge=v.get("merge") is True)
+                    self.send(200,dict(appearance=dict(c.appearance)))
+                    return
                 elif u.path=="/api/favorite":
                     v=json.loads(self.body(65536))
                     c.set_favorite(v["path"],v["enabled"])
