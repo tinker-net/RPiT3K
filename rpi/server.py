@@ -4,6 +4,7 @@ import argparse
 from tonecloud import ToneCloud
 from calibration import calibration, valid_number
 from capture_info import capture_info
+from ir_info import ir_info
 import base64
 import hmac
 import json
@@ -699,6 +700,14 @@ class Handler(BaseHTTPRequestHandler):
                     if result.returncode:
                         raise ValueError("Power action failed: "+(result.stderr.strip() or "Permission denied"))
                     self.send(200,dict(operation=operation,accepted=True))
+                return
+            if u.path=="/api/ir-info":
+                v=json.loads(self.body(65536))
+                with c.lock:
+                    path=c.file(v["model"],(".wav",))
+                    if path.stat().st_size>LIMIT: raise ValueError("IR too large")
+                    raw=path.read_bytes()
+                self.send(200,ir_info(raw))
                 return
             if u.path=="/api/capture-info":
                 v=json.loads(self.body(65536))
