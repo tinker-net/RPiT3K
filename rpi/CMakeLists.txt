@@ -23,6 +23,9 @@ add_executable(rpit3k-dsp-test dsp_test.cpp)
 target_compile_options(rpit3k-dsp-test PRIVATE $<$<CONFIG:Release>:-O3>)
 enable_testing()
 add_test(NAME native_dsp COMMAND rpit3k-dsp-test)
+add_executable(rpit3k-live-rig-test live_rig_test.cpp)
+target_link_libraries(rpit3k-live-rig-test PRIVATE Threads::Threads)
+add_test(NAME live_rig_exchange COMMAND rpit3k-live-rig-test)
 
 # Separate opt-in build of upstream default sample type and backend.
 # No production A2-fast define or Cortex-A76 flags.
