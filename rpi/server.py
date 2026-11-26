@@ -561,17 +561,23 @@ class Handler(BaseHTTPRequestHandler):
         c=self.server.controller
         u=urlsplit(self.path)
         try:
-            if u.path=="/api/poweroff":
+            if u.path in ("/api/poweroff","/api/reboot"):
                 if os.environ.get("RPIT3K_ENABLE_POWEROFF")!="1":
-                    self.send(403,dict(error="Power off is not enabled on this installation"));return
-                if json.loads(self.body(1024))!={"confirm":"poweroff"}:
-                    raise ValueError("Explicit power-off confirmation required")
+                    self.send(403,dict(error="Power controls are not enabled on this installation"));return
+                operation="reboot" if u.path=="/api/reboot" else "poweroff"
+                if json.loads(self.body(1024))!={"confirm":operation}:
+                    raise ValueError("Explicit power confirmation required")
                 with c.lock:
+                    # Check exact sudo permission before interrupting audio.
+                    command=["/usr/bin/sudo","-n","/usr/bin/systemctl",operation]
+                    permission=subprocess.run(["/usr/bin/sudo","-n","-l","/usr/bin/systemctl",operation],capture_output=True,text=True,timeout=10)
+                    if permission.returncode:
+                        raise ValueError("Power action not permitted: "+operation)
                     c.stop()
-                    result=subprocess.run(["/usr/bin/sudo","-n","/usr/bin/systemctl","poweroff"],capture_output=True,text=True,timeout=10)
+                    result=subprocess.run(command,capture_output=True,text=True,timeout=10)
                     if result.returncode:
-                        raise ValueError("Power off failed: "+(result.stderr.strip() or "Permission denied"))
-                    self.send(200,dict(powering_off=True))
+                        raise ValueError("Power action failed: "+(result.stderr.strip() or "Permission denied"))
+                    self.send(200,dict(operation=operation,accepted=True))
                 return
             if u.path=="/api/calibrate":
                 v=json.loads(self.body(65536))
