@@ -1,0 +1,52 @@
+name: TON3K VST3 preview
+on:
+  push:
+    branches: [vst3]
+  workflow_dispatch:
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2022
+            name: Windows-x64
+            extra: '-A x64'
+          - os: macos-15
+            name: macOS-universal
+            extra: '-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64'
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch pinned NAM
+        shell: bash
+        run: |
+          git clone https://github.com/sdatkinson/NeuralAmpModelerCore.git
+          git -C NeuralAmpModelerCore checkout d3189ed482ded880c128bf312941266c4fa5ceec
+          git -C NeuralAmpModelerCore submodule update --init --recursive
+      - name: Configure
+        shell: bash
+        run: |
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            cmake -S vst3 -B build-vst3 -A x64
+          else
+            cmake -S vst3 -B build-vst3 -DCMAKE_BUILD_TYPE=Release '-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64'
+          fi
+      - name: Build
+        run: cmake --build build-vst3 --config Release --target TON3K_VST3 --parallel 2
+      - name: Package macOS
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          cd build-vst3/TON3K_artefacts/Release/VST3
+          codesign --force --deep --sign - TON3K.vst3
+          ditto -c -k --keepParent TON3K.vst3 "$GITHUB_WORKSPACE/TON3K-macOS-universal.zip"
+      - name: Package Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Compress-Archive -Path build-vst3/TON3K_artefacts/Release/VST3/TON3K.vst3 -DestinationPath TON3K-Windows-x64.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TON3K-${{ matrix.name }}
+          path: TON3K-*.zip
+          if-no-files-found: error
