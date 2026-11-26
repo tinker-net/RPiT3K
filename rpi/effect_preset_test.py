@@ -52,8 +52,8 @@ class FXTests(unittest.TestCase):
         for i in (6,8,14,17):self.assertAlmostEqual(values[i],.73)
     def test_physical_stomp(self):
         import json
-        self.c.file=lambda *args: self.statefile
-        self.statefile.touch()
+        self.c.file=lambda *args: self.c.statefile
+        self.c.statefile.touch()
         self.c.settings={"last":"1"}
         self.c.presets["1"].update(model="drive.nam",second="amp.nam",bypass=False)
         before=dict(self.c.presets["1"])
@@ -65,8 +65,8 @@ class FXTests(unittest.TestCase):
         self.assertEqual(self.c.proc.stdin.getvalue(),"STOMP 0\nSTOMP 1\n")
         self.assertEqual(self.c.presets["1"],before)
     def test_physical_stomp_audio_off(self):
-        self.c.file=lambda *args: self.statefile
-        self.statefile.touch()
+        self.c.file=lambda *args: self.c.statefile
+        self.c.statefile.touch()
         self.c.settings={"last":"1"}
         self.c.presets["1"].update(model="drive.nam",bypass=False)
         self.c.proc=None
