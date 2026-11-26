@@ -68,3 +68,12 @@ target_include_directories(rpit3k-daisysp PUBLIC
 target_compile_options(rpit3k-daisysp PRIVATE $<$<CONFIG:Release>:-O3>)
 target_link_libraries(rpit3k PRIVATE rpit3k-daisysp)
 target_link_libraries(rpit3k-dsp-test PRIVATE rpit3k-daisysp)
+
+add_executable(rpit3k-daisysp-characterization daisysp_test.cpp)
+target_link_libraries(rpit3k-daisysp-characterization PRIVATE rpit3k-daisysp)
+target_compile_options(rpit3k-daisysp-characterization PRIVATE $<$<CONFIG:Release>:-O3>)
+add_test(NAME daisysp_characterization COMMAND rpit3k-daisysp-characterization)
+set_tests_properties(daisysp_characterization PROPERTIES TIMEOUT 120)
+if(Python3_Interpreter_FOUND)
+  add_test(NAME tonecloud_session COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tonecloud_test.py")
+endif()
