@@ -97,3 +97,20 @@ All three current server.py files explicitly ignore --autostart and start audio 
 Current general installer and packaging/build-deb.sh invoke CMake without disabling RPIT3K_EMBEDDED. Thus the default A76 source selection is requested on AMD64 too; this does not establish the compiled implementation or actual runtime routing. CI run retrieval attempted but rejected by connector; no successful run claimed. Inspect upstream engine source and actual build logs before proposing architecture changes.
 
 No new builds or hardware tests; only documentation updated.
+
+## Live rig experiment — 2026-11-26
+
+User requirements: retain the complete York Audio IR within the supported duration; optimize convolution without truncation, lowering the sample rate, or adding callback delay; apply all rig changes automatically, keep Audio ON/OFF exclusively for audio power, and clarify ADC calibration. Preserve silent boot and the stable deployment branches.
+
+Experimental branch: [live-rig](https://github.com/tinker-net/RPiT3K/tree/live-rig), forked from rpi-ui at 7034920a35720163bd0106ef61fe17aa0df0a1e9. No promotion to rpi-ui, rpi-general or deb-packaging yet.
+
+- f74463f: packed, padded split real/imaginary FFT spectra and precomputed permutation; all original taps retained; 64-frame partitions, 128-point FFT, 48000-sample maximum at 48 kHz; oversize IRs rejected, never silently shortened. Pinned NAM WAV decoder reads entire valid mono PCM/float WAV; non-48 kHz IRs resampled at full duration.
+- 797f294 / 4ce2c57 / 293449e / f92a8a9: worker builds new rig off the audio thread; atomic pointer exchange, 64-sample fade out and fade in, old rig destroyed by worker, independent acknowledgement channel. No ALSA reopen for NAM/IR/quality/bypass/preset/tuner switching while running; not gapless in the strict sense, tails and model state reset on structural swaps. Hardware buffer/period settings still reopen ALSA.
+- e9cf868 / 9772368: acknowledged controller switching, automatic browser edits and persistent presets including when audio is off; no implicit audio start. Explicit ON/OFF retained. Hardware changes apply automatically; reference-only changes do not reopen ALSA.
+- 81f52b8: display ADC and capture references, target correction and current input gain; calibration remains deliberate, not forced on every capture. +1.14 dBu is nominal, derived from Blokas 2.5 Vpp at minimum gain, not a physical measurement. Formula ADC dBu minus NAM input_level_dbu, convert to linear amplitude; current implementation calibrates first NAM only. No inter-model output calibration; missing metadata cannot be corrected. See https://www.tone3000.com/guides/nam-calibration and https://blokas.io/pisound/docs/audio/.
+- 219f270 / a671c02: synthetic worker regression and CTest registration.
+- f0984df: isolated experimental ARM64 and AMD64 build workflow, results not yet verified.
+
+Actual local isolated tests on x86_64, GCC 14.2, -O3: convolution tested with 1, 63, 64, 65, 2048, 9600, 24000 and 48000 taps; impulse reconstruction including last sample and initial 512-frame direct reference, max errors 5.22e-8 and 6.46e-8 respectively. New packed accumulation faster in preliminary isolated timing for long IRs; no controlled Pi comparison yet. LiveRigLoader mock: 20 successful exchanges, old-object destruction off audio thread, invalid rig rejected with current object unchanged. Local git blob hashes matched published convolution.h, live_rig.h and live_rig_test.cpp. These tests do not validate the complete engine, real NAM loads, browser/server integration, actual ALSA streams, concurrent inference/loading, switching under CPU load, or audible transitions. Full build, existing numerical regression, real Pisound test, comparison of DSP timing/xruns with long York IRs and migration across deployment branches remain required before promotion.
+
+Known prior installer readiness inconsistency remains out of scope. No code was changed on stable branches.
