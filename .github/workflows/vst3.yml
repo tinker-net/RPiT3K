@@ -36,8 +36,11 @@ jobs:
           else
             cmake -S vst3 -B build-vst3 -DCMAKE_BUILD_TYPE=Release '-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64'
           fi
-      - name: Build
+      - name: Build VST3
         run: cmake --build build-vst3 --config Release --target TON3K_VST3 --parallel 2
+      - name: Build Audio Unit
+        if: runner.os == 'macOS'
+        run: cmake --build build-vst3 --config Release --target TON3K_AU --parallel 2
       - name: Package macOS
         if: runner.os == 'macOS'
         shell: bash
@@ -45,6 +48,16 @@ jobs:
           cd build-vst3/TON3K_artefacts/Release/VST3
           codesign --force --deep --sign - TON3K.vst3
           ditto -c -k --keepParent TON3K.vst3 "$GITHUB_WORKSPACE/TON3K-macOS-universal.zip"
+          cd ../AU
+          codesign --force --deep --sign - TON3K.component
+          ditto -c -k --keepParent TON3K.component "$GITHUB_WORKSPACE/TON3K-macOS-AU-universal.zip"
+      - name: Validate Audio Unit
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          mkdir -p "$HOME/Library/Audio/Plug-Ins/Components"
+          ditto build-vst3/TON3K_artefacts/Release/AU/TON3K.component "$HOME/Library/Audio/Plug-Ins/Components/TON3K.component"
+          auval -v aufx T3k1 Tnkr
       - name: Package Windows
         if: runner.os == 'Windows'
         shell: pwsh

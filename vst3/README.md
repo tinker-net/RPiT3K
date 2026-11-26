@@ -22,3 +22,7 @@ cmake -S vst3 -B build-linux -DCMAKE_BUILD_TYPE=Release
 xvfb-run -a cmake --build build-linux --target TON3K_VST3 TON3K_LV2 --parallel 2
 ```
 After downloading and extracting the matching architecture package, install the complete TON3K.vst3 bundle under ~/.vst3/ or TON3K.lv2 under ~/.lv2/. LV2 URI: urn:tinkernet:ton3k. Set host to 48 kHz. Use a low monitoring level. Linux CI inspects bundle layout and LV2 metadata; this is not an audio or GUI runtime test. Ubuntu-built binaries are not guaranteed to run on older Debian or Raspberry Pi OS. Rebuild locally when necessary. Do not redistribute combined binaries until dependency licensing compliance is resolved.
+
+## Logic Pro (Audio Units)
+
+macOS also builds the AUv2 effect as TON3K.component for Logic Pro and GarageBand, with the same DSP and editor. Install the complete bundle under ~/Library/Audio/Plug-Ins/Components/. Set the project to 48 kHz for this preview. In Logic, rescan using Plug-in Manager if necessary and insert TinkerNet > TON3K as an Audio FX. Local build: cmake --build build-vst3 --config Release --target TON3K_AU. CI runs auval -v aufx T3k1 Tnkr after installing the ad-hoc signed component; passing this check is not equivalent to testing in Logic. macOS runner availability and runtime validation remain unconfirmed.
