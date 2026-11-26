@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 #include <juce_audio_utils/juce_audio_utils.h>
 #include "../rpi/plugin_chain.h"
+#include "rate_adapter.h"
 #include <atomic>
 #include <mutex>
 #include <array>
@@ -47,7 +48,7 @@ public:
         auto i=l.getMainInputChannelSet(),o=l.getMainOutputChannelSet();
         return (i==juce::AudioChannelSet::mono()||i==juce::AudioChannelSet::stereo())&&(o==juce::AudioChannelSet::mono()||o==juce::AudioChannelSet::stereo());}
     void prepareToPlay(double sr,int) override{
-        supported.store(std::abs(sr-48000.)<.01);setLatencySamples(supported.load()?64:0);
+        bool valid=std::isfinite(sr)&&sr>=8000&&sr<=384000;hostRate.store(sr);direct=std::abs(sr-48000.)<.01;setLatencySamples(valid?(direct?64:adapter.prepare(sr)):0);supported.store(valid);
         pos=0;std::fill_n(out,64,0.f);std::fill_n(in,64,0.f);
     }
     void releaseResources() override{}
@@ -58,27 +59,22 @@ public:
             return;
         }
         for(int i=0;i<buf.getNumSamples();++i){
-            in[pos]=buf.getSample(0,i); if(!std::isfinite(in[pos])) in[pos]=0.f; inputPeak.store(std::max(inputPeak.load(),std::abs(in[pos]))); outputPeak.store(std::max(outputPeak.load(),std::abs(out[pos])));
-            for(int c=0;c<getTotalNumOutputChannels();++c)buf.setSample(c,i,out[pos]);
-            if(++pos==64){
-                bool fade=false;
-                if(!retired.load(std::memory_order_acquire)){
-                    if(auto* next=pending.exchange(nullptr,std::memory_order_acq_rel)){
-                        retired.store(current,std::memory_order_release);current=next;fade=true;
-                    }
-                }
-                current->controls(v(0),v(1),v(2),v(3),v(4),v(5),v(6),v(7),v(8),v(9),v(10),v(11),v(12),v(13),v(14),v(15),v(16),v(17),v(18),v(19));
-                current->set_stomp(v(20)>.5f);
-                std::copy_n(in,64,current->x);current->process();
-                for(int j=0;j<64;++j)out[j]=current->y[j]*(fade?float(j)/63.f:1.f);
-                pos=0;
-            }
+            float x=buf.getSample(0,i);if(!std::isfinite(x))x=0;
+            float y=0;
+            if(direct){
+                in[pos]=x;y=out[pos];
+                if(++pos==64){renderBlock(in,out);pos=0;}
+            }else y=adapter.push(x,[this](const float* src,float* dst){renderBlock(src,dst);});
+            inputPeak.store(std::max(inputPeak.load(),std::abs(x)));
+            outputPeak.store(std::max(outputPeak.load(),std::abs(y)));
+            for(int c=0;c<getTotalNumOutputChannels();++c)buf.setSample(c,i,y);
         }
     }
+
     bool hasEditor() const override{return true;}
     juce::AudioProcessorEditor* createEditor() override;
     void getStateInformation(juce::MemoryBlock& b) override{
-        auto tree=state.copyState();{std::lock_guard<std::mutex> lock(configLock);
+        auto tree=state.copyState();{std::lock_guard<std::mutex> lock(configLock);savedSlots[std::to_string(activeSlot)]=webPreset();
         for(int i=0;i<4;++i)tree.setProperty("file"+juce::String(i),paths[i],nullptr); tree.setProperty("webSlots",juce::String(savedSlots.dump()),nullptr); tree.setProperty("webActive",activeSlot,nullptr); nlohmann::json lib=nlohmann::json::object();for(const auto& [k,v]:library)lib[k.toStdString()]=v.toStdString();tree.setProperty("webLibrary",juce::String(lib.dump()),nullptr);}
         if(auto xml=tree.createXml())copyXmlToBinary(*xml,b);
     }
@@ -88,7 +84,7 @@ public:
                 state.replaceState(t);
                 std::lock_guard<std::mutex> lock(configLock);
                 for(int i=0;i<4;++i)paths[i]=t.getProperty("file"+juce::String(i)).toString();
-                try{savedSlots=nlohmann::json::parse(t.getProperty("webSlots","{}").toString().toStdString());activeSlot=juce::jlimit(1,4,int(t.getProperty("webActive",1)));auto lib=nlohmann::json::parse(t.getProperty("webLibrary","{}").toString().toStdString());for(auto it=lib.begin();it!=lib.end();++it)library[juce::String(it.key())]=juce::String(it.value().get<std::string>());}catch(...){savedSlots=nlohmann::json::object();}dirty=true;wake.notify_one();
+                try{savedSlots=nlohmann::json::parse(t.getProperty("webSlots","{}").toString().toStdString());activeSlot=juce::jlimit(1,4,int(t.getProperty("webActive",1)));if(savedSlots.contains(std::to_string(activeSlot))){auto& pr=savedSlots[std::to_string(activeSlot)];slim=pr.value("slim",1.0);slim2=pr.value("slim2",1.0);}auto lib=nlohmann::json::parse(t.getProperty("webLibrary","{}").toString().toStdString());for(auto it=lib.begin();it!=lib.end();++it)library[juce::String(it.key())]=juce::String(it.value().get<std::string>());}catch(...){savedSlots=nlohmann::json::object();}dirty=true;wake.notify_one();
             }
         }
     }
@@ -155,7 +151,7 @@ public:
         loadLibrary(); auto currentPreset=webPreset();savedSlots[std::to_string(activeSlot)]=currentPreset;
         for(int i=1;i<=4;++i){auto key=std::to_string(i);if(!savedSlots.contains(key)){auto empty=currentPreset;for(auto* k:{"model","second","ir","ir2"})empty[k]="";savedSlots[key]=empty;}}
         Json files=Json::array(), fs=Json::array(), fav=Json::array();for(const auto& kv:library)files.push_back(kv.first.toStdString());for(auto& k:folders)fs.push_back(k.toStdString());for(auto& k:favorites)fav.push_back(k.toStdString());
-        return Json{{"files",files},{"folders",fs},{"favorites",fav},{"presets",savedSlots},{"active",std::to_string(activeSlot)},{"settings",{{"last",std::to_string(activeSlot)},{"reference_dbu",nullptr}}},{"running",supported.load()},{"logs",Json::array({message.toStdString()})},{"cloud_enabled",false},{"poweroff_enabled",false},{"amp_art",Json::object()}};
+        return Json{{"files",files},{"folders",fs},{"favorites",fav},{"presets",savedSlots},{"active",std::to_string(activeSlot)},{"settings",{{"last",std::to_string(activeSlot)},{"reference_dbu",nullptr}}},{"running",supported.load()},{"host_rate",hostRate.load()},{"host_latency",getLatencySamples()},{"logs",Json::array({message.toStdString()})},{"cloud_enabled",false},{"poweroff_enabled",false},{"amp_art",Json::object()}};
     }
     Json webRequest(const juce::String& path,const juce::String& body){
         if(path=="/api/status")return webStatus();
@@ -188,13 +184,28 @@ public:
 
     std::atomic<float> inputPeak{0},outputPeak{0};
     void select(int slot,juce::String file){std::lock_guard<std::mutex> lock(configLock);paths[slot]=file;dirty=true;wake.notify_one();}
-    juce::String status(){std::lock_guard<std::mutex> lock(configLock);return juce::String(supported.load()?"48 kHz | ":"Set DAW to 48 kHz (dry bypass) | ")+message;}
+    juce::String status(){std::lock_guard<std::mutex> lock(configLock);return juce::String(supported.load()?juce::String(hostRate.load()/1000.,1)+" kHz | ":juce::String("Unsupported rate (dry bypass) | "))+message;}
     juce::String filename(int i){std::lock_guard<std::mutex> lock(configLock);return paths[i].isEmpty()?"Empty":juce::File(paths[i]).getFileName();}
 private:
     static constexpr const char* ids[]={"input","output","bass","mid","treble","gate","comp","compPost","reverb","decay","reverbType","mix","hiz","profile","chorus","chorusRate","chorusDepth","delay","delayMs","feedback","stomp","amp","cab"};
     std::vector<std::atomic<float>*> params;
     float v(int i) const{return params[i]->load(std::memory_order_relaxed);}
     std::atomic<bool> supported{false};
+    std::atomic<double> hostRate{0};
+    bool direct=true;
+    ton3k::RateAdapter adapter;
+    void renderBlock(const float* src,float* dst) noexcept{
+        bool fade=false;
+        if(!retired.load(std::memory_order_acquire)){
+            if(auto* next=pending.exchange(nullptr,std::memory_order_acq_rel)){
+                retired.store(current,std::memory_order_release);current=next;fade=true;
+            }
+        }
+        current->controls(v(0),v(1),v(2),v(3),v(4),v(5),v(6),v(7),v(8),v(9),v(10),v(11),v(12),v(13),v(14),v(15),v(16),v(17),v(18),v(19));
+        current->set_stomp(v(20)>.5f);
+        std::copy_n(src,64,current->x);current->process();
+        for(int j=0;j<64;++j)dst[j]=current->y[j]*(fade?float(j)/63.f:1.f);
+    }
     ton3k::Chain* current=nullptr;
     std::atomic<ton3k::Chain*> pending{nullptr},retired{nullptr};
     float in[64]{},out[64]{};unsigned pos=0;
