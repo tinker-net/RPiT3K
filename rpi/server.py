@@ -2,6 +2,7 @@
 """LAN controller for the native RPiT3K engine. Standard library only."""
 import argparse
 import mimetypes
+from practice import Practice, duration as practice_duration, waveform as practice_waveform
 import tempfile
 from tonecloud import ToneCloud
 from calibration import calibration, valid_number
@@ -82,6 +83,8 @@ class Controller:
         self.active = None
         self.tuner_return = None
         self.metronome = dict(enabled=False,bpm=120,beats=4,volume=.15)
+        self.practice=Practice()
+        self.practice_analysis=threading.Lock()
         self.settingsfile = self.data / "settings.json"
         self.settings = dict(buffer=64, periods=3, last="1", reference_dbu=1.14)
         if self.settingsfile.exists(): self.settings.update(json.loads(self.settingsfile.read_text()))
@@ -351,6 +354,7 @@ class Controller:
         return p
 
     def stop(self):
+        self.practice.stop(self.proc)
         if self.proc is not None:
             if self.proc.poll() is None:
                 self.proc.terminate()
@@ -359,7 +363,7 @@ class Controller:
                 except subprocess.TimeoutExpired:
                     self.proc.kill()
                     self.proc.wait()
-            for fd in (getattr(self.proc,'rig_write',None),getattr(self.proc,'rig_ack',None)):
+            for fd in (getattr(self.proc,'rig_write',None),getattr(self.proc,'rig_ack',None),getattr(self.proc,'practice_write',None)):
                 if fd is not None:
                     try: os.close(fd)
                     except OSError: pass
@@ -471,15 +475,17 @@ class Controller:
         rd,wr=os.pipe()
         req_rd,req_wr=os.pipe()
         ack_rd,ack_wr=os.pipe()
+        practice_rd,practice_wr=os.pipe()
         self.meter=None
         try:
-            self.proc=subprocess.Popen(cmd+["--live-controls","--meter-fd",str(wr),"--rig-fd",str(req_rd),"--rig-ack-fd",str(ack_wr)],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,
-                                       text=True,bufsize=1,pass_fds=(wr,req_rd,ack_wr))
+            self.proc=subprocess.Popen(cmd+["--live-controls","--meter-fd",str(wr),"--rig-fd",str(req_rd),"--rig-ack-fd",str(ack_wr),"--practice-fd",str(practice_rd)],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,
+                                       text=True,bufsize=1,pass_fds=(wr,req_rd,ack_wr,practice_rd))
         except Exception:
-            for fd in (rd,req_wr,ack_rd): os.close(fd)
+            for fd in (rd,req_wr,ack_rd,practice_wr): os.close(fd)
             raise
         finally:
-            for fd in (wr,req_rd,ack_wr): os.close(fd)
+            for fd in (wr,req_rd,ack_wr,practice_rd): os.close(fd)
+        self.proc.practice_write=practice_wr
         self.proc.rig_write=req_wr
         self.proc.rig_ack=ack_rd
         self.proc.rpit3k_xruns=0
@@ -738,6 +744,18 @@ class Handler(BaseHTTPRequestHandler):
                         if self.practice_path(p.name).is_file():files.append(p.name)
                     except ValueError:pass
             self.send(200,dict(files=sorted(files,key=str.casefold)))
+        elif path=="/api/practice/status":
+            self.send(200,self.server.controller.practice.status())
+        elif path=="/api/practice/waveform":
+            c=self.server.controller
+            try:
+                p=self.practice_path(parse_qs(urlsplit(self.path).query).get("name",[""])[0])
+                if not p.is_file():raise ValueError("Track not found")
+                if not c.practice_analysis.acquire(blocking=False):raise ValueError("Analysis busy")
+                try:result=practice_waveform(p,c.data/"practice-waveforms")
+                finally:c.practice_analysis.release()
+                self.send(200,result)
+            except (ValueError,OSError,subprocess.SubprocessError) as e:self.send(400,dict(error=str(e)))
         elif path=="/api/practice/audio":
             try:
                 p=self.practice_path(parse_qs(urlsplit(self.path).query).get("name",[""])[0])
@@ -777,6 +795,23 @@ class Handler(BaseHTTPRequestHandler):
         c=self.server.controller
         u=urlsplit(self.path)
         try:
+            if u.path=="/api/practice/transport":
+                v=json.loads(self.body(4096))
+                action=v.get("action")
+                if action=="stop":
+                    with c.lock:c.practice.stop(c.proc)
+                elif action=="play":
+                    p=self.practice_path(v["name"])
+                    if not p.is_file():raise ValueError("Track not found")
+                    length=practice_duration(p)
+                    anchor,speed,pitch,volume,end=(v[k] for k in ("anchor","speed","pitch","volume","end"))
+                    if not all(type(n) in (float,int) and math.isfinite(n) for n in (anchor,speed,pitch,volume,end)) or not (0<=anchor<end<=length+.01 and .5<=speed<=1.5 and -12<=pitch<=12 and 0<=volume<=1):
+                        raise ValueError("Invalid playback controls")
+                    with c.lock:
+                        if not c.proc or c.proc.poll() is not None or c.active is None:raise ValueError("Turn Audio ON first")
+                        c.practice.start(c.proc,p,anchor,speed,pitch,volume,min(end,length))
+                else:raise ValueError("Unknown transport action")
+                self.send(200,c.practice.status());return
             if u.path=="/api/practice/import":
                 p=self.practice_path(parse_qs(u.query).get("name",[""])[0])
                 n=int(self.headers.get("Content-Length","0"))
@@ -908,6 +943,7 @@ class Handler(BaseHTTPRequestHandler):
                 elif u.path=="/api/settings":
                     c.configure(json.loads(self.body(65536)))
                 elif u.path=="/api/tuner":
+                    c.practice.stop(c.proc)
                     if c.proc and c.proc.poll() is None and c.active is None:
                         previous=c.tuner_return
                         if previous:

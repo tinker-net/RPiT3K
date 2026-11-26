@@ -73,7 +73,7 @@ struct Options {
     float ir_mix=.5f, hiz=0, hiz_profile=0;
     float comp=0, comp_post=0, reverb=0, decay=1.5f, reverb_type=0;
     float chorus=0.0f, chorus_rate=0.8f, chorus_depth=0.5f, delay=0.0f, delay_ms=350.0f, delay_feedback=0.35f;
-    int meter_fd = -1, rig_fd = -1, rig_ack_fd = -1;
+    int meter_fd = -1, rig_fd = -1, rig_ack_fd = -1, practice_fd = -1;
     bool nam1_enabled = true;
     bool benchmark = false, bypass = false, tuner = false, live = false, verify = false;
 };
@@ -93,6 +93,7 @@ Options parse(int argc, char** argv, bool rig_only=false) {
         if(k=="--render-in") o.render_in=v;
         else if(k=="--render-out") o.render_out=v;
         else if(k=="--device") o.device=v;
+        else if(k=="--practice-fd"){ if(rig_only)throw std::runtime_error("Invalid practice fd"); o.practice_fd=std::stoi(v); if(o.practice_fd<3)throw std::runtime_error("Invalid practice fd"); }
         else if(k=="--meter-fd") { o.meter_fd=std::stoi(v); if(o.meter_fd<3)throw std::runtime_error("Invalid meter fd"); }
         else if(k=="--rig-fd"||k=="--rig-ack-fd") { if(rig_only)throw std::runtime_error("Invalid rig fd"); auto fd=std::stoi(v);if(fd<3)throw std::runtime_error("Invalid rig fd");(k=="--rig-fd"?o.rig_fd:o.rig_ack_fd)=fd; }
         else if(k=="--buffer") { if(v!="64"&&v!="128"&&v!="256"&&v!="512") throw std::runtime_error("Invalid buffer"); auto b=std::stoul(v);if(rig_only){if(b!=block)throw std::runtime_error("ALSA period requires reopening");}else block=b; }
@@ -363,6 +364,8 @@ int main(int argc,char** argv) {
         // Private nonblocking stdin pipe from the controller; fixed storage, bounded work.
         if(o.live){int flags=fcntl(STDIN_FILENO,F_GETFL);if(flags<0||fcntl(STDIN_FILENO,F_SETFL,flags|O_NONBLOCK)<0)throw std::runtime_error("Cannot configure live controls");}
         PracticeMetronome metronome;
+        if(o.practice_fd>=0){int flags=fcntl(o.practice_fd,F_GETFL);if(flags<0||fcntl(o.practice_fd,F_SETFL,flags|O_NONBLOCK)<0)throw std::runtime_error("Practice pipe");}
+        float backing[1024]{}; unsigned backing_used=0; bool backing_enabled=false; float backing_gain=.25f;
         char line[512]{}; unsigned used=0; bool overflow=false;
         auto poll_controls=[&]{
             if(!o.live)return;
@@ -373,6 +376,7 @@ int main(int argc,char** argv) {
                     if(!overflow){line[used]=0;float i,o,b,m,t,g,c,pos,wet,d,type,mix,hz,profile,ch,cr,cd,dl,dm,df;char extra;
                         unsigned enabled,bpm,beats;float level;
                         if(std::sscanf(line,"STOMP %u %c",&enabled,&extra)==1&&enabled<=1)current->set_stomp(enabled!=0);
+                        else if(std::sscanf(line,"PRACTICE %u %f %c",&enabled,&level,&extra)==2&&enabled<=1&&std::isfinite(level)&&level>=0&&level<=1){backing_enabled=enabled!=0;backing_gain=level;if(!backing_enabled){backing_used=0;if(o.practice_fd>=0){char discard[4096];for(int j=0;j<32&&read(o.practice_fd,discard,sizeof(discard))>0;++j){}}}}
                         else if(std::sscanf(line,"METRO %u %u %u %f %c",&enabled,&bpm,&beats,&level,&extra)==4&&enabled<=1)metronome.set(enabled!=0,bpm,beats,level);
                         else if(std::sscanf(line,"%f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %c",&i,&o,&b,&m,&t,&g,&c,&pos,&wet,&d,&type,&mix,&hz,&profile,&ch,&cr,&cd,&dl,&dm,&df,&extra)==20)current->controls(i,o,b,m,t,g,c,pos,wet,d,type,mix,hz,profile,ch,cr,cd,dl,dm,df);
                         else if(std::sscanf(line,"%f %f %f %f %f %f %f %f %f %f %f %f %f %f %c",&i,&o,&b,&m,&t,&g,&c,&pos,&wet,&d,&type,&mix,&hz,&profile,&extra)==14)current->controls(i,o,b,m,t,g,c,pos,wet,d,type,mix,hz,profile);
@@ -421,9 +425,23 @@ int main(int argc,char** argv) {
                 double us=std::chrono::duration<double,std::micro>(std::chrono::steady_clock::now()-dsp_start).count();
                 total_us+=us;worst_us=std::max(worst_us,us);++measured;if(us>1e6*block/rate)++late;
                 for(unsigned i=0;i<block;++i){meter[1]=std::max(meter[1],std::abs(current->y[i]));out_peak=std::max(out_peak,double(std::abs(current->y[i])));if(std::abs(current->y[i])>=.99999f)++clipped;}
-                for(unsigned i=0;i<block;++i) {
-                    auto s=static_cast<int32_t>(std::clamp(double(current->y[i])*2147483648.,-2147483648.,2147483647.));
-                    buf[i*2]=buf[i*2+1]=s;
+                if(o.practice_fd>=0&&backing_enabled&&!current->tuning){
+                    const unsigned wanted=block*2*sizeof(float);
+                    auto n=read(o.practice_fd,reinterpret_cast<char*>(backing)+backing_used,wanted-backing_used);
+                    if(n>0)backing_used+=static_cast<unsigned>(n);
+                    if(backing_used==wanted){
+                        for(unsigned i=0;i<block;++i)for(unsigned ch=0;ch<2;++ch){
+                            float v=backing[2*i+ch];
+                            if(!std::isfinite(v))v=0;
+                            const double mix=double(current->y[i])+double(v)*backing_gain;
+                            buf[2*i+ch]=static_cast<int32_t>(std::clamp(mix*2147483648.,-2147483648.,2147483647.));
+                            meter[1]=std::max(meter[1],float(std::min(1.,std::abs(mix))));
+                        }
+                        backing_used=0;
+                    }else for(unsigned i=0;i<block;++i)buf[2*i]=buf[2*i+1]=static_cast<int32_t>(std::clamp(double(current->y[i])*2147483648.,-2147483648.,2147483647.));
+                }else for(unsigned i=0;i<block;++i){
+                    auto sample=static_cast<int32_t>(std::clamp(double(current->y[i])*2147483648.,-2147483648.,2147483647.));
+                    buf[i*2]=buf[i*2+1]=sample;
                 }
                 if(replacement){
                     auto* old=current.release();current.reset(replacement);loader.retire(old);fade_in=true;
