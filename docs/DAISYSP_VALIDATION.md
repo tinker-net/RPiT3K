@@ -119,3 +119,9 @@ All eight mocked tests PASS: corrupt file, disconnect, expired without refresh, 
 
 ### Remaining
 Real service restart/reboot OAuth, real NAM/IR/preset and audio-device testing, listening/recording, xrun and per-block deadline validation, clean build, and independent generic ALSA hardware validation remain open. No new branches.
+
+## Decay calibration and independent effect bypass — pending measured verification
+
+Invert the three measured T30 RT60 anchors per voicing using piecewise linear interpolation in the previous decay parameter, with slight extrapolation at 5 s. Preserve upstream ReverbSc unchanged. Minimum nominal decay now 0.3 s (previous 0.2 s measured about 0.30 s); old presets below 0.3 s migrate to 0.3 s. 24 test points (.3/.5/1/1.5/2/3/4/5 s × three voices); acceptance absolute error <= max(0.08 s, 12% of target), monotonic decay. This is a proposed calibration, not measured until the next test run. T30 is an extrapolated broadband impulse metric, not frequency-independent physical RT60.
+
+Compressor/chorus/delay/reverb now store independent remembered nonzero amounts in *_amount. Existing effective amount keys and 20-float native protocol unchanged; zero means bypass. Legacy positive amounts migrate as active; legacy zero remains off and gets default remembered amount (.35 compressor/chorus, .25 delay/reverb). Toolbar opens dialogs; each dialog has explicit Enable switch and disabled parameters while off. Active icon yellow. Added effect_preset_state tests for migration, invalid inputs, persisted bypass/restore and effective native values. No runtime test yet.

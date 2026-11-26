@@ -46,11 +46,23 @@ public:
     RigReverb& operator=(const RigReverb&)=delete;
     void set(float mix,float decay,int type) {
         target_=mix;
-        // Voicing controls damping only. Decay is an approximate RT60 mapping
-        // using the mean upstream delay (~60 ms), not a measured RT60.
         constexpr std::array<float,3> cutoffs{3800.f,10000.f,6200.f};
         target_cutoff_=cutoffs[std::clamp(type,0,2)];
-        target_feedback_=std::clamp(std::pow(.001f,.060f/std::max(.2f,decay)),0.f,.99f);
+        // Invert the measured ARM64 T30 anchors of the previous mapping.
+        // Piecewise linear in legacy decay parameter, per voicing. The shortest
+        // supported nominal target is .30 s; below this, the network's onset
+        // dominates the decay estimate. Extrapolate only slightly above 4.7 s.
+        constexpr std::array<std::array<float,3>,3> measured{{
+            {{.2983129f,1.4231f,4.690807f}},
+            {{.2985754f,1.435634f,4.739346f}},
+            {{.3010704f,1.428496f,4.718306f}}
+        }};
+        const auto& m=measured[std::clamp(type,0,2)];
+        const float requested=std::clamp(decay,.3f,5.f);
+        const float legacy=requested<=m[1]
+            ? .2f+1.3f*(requested-m[0])/(m[1]-m[0])
+            : 1.5f+3.5f*(requested-m[1])/(m[2]-m[1]);
+        target_feedback_=std::clamp(std::pow(.001f,.060f/std::max(.2f,legacy)),0.f,.99f);
         if(mix>0)tail_=0;
     }
     float process(float x) {
