@@ -24,7 +24,7 @@ With the dedicated artifact extracted:
 
     sudo apt install ./rpi-ton3k-pisound_*.deb
 
-On the booted target the package configures and enables rpi-ton3k-pisound.service, installs the six physical button mappings in /etc/pisound.conf (previous mappings backed up), sets up a fallback NetworkManager hotspot and timer, and grants the dedicated service user only the two exact sudo power commands. Audio starts OFF, fixed hardware PCM hw:CARD=pisound,DEV=0, 48 kHz, left input/dual mono output, initial 64 x 3 and nominal ADC reference +1.14 dBu. Web profile exposes port 8080 on the trusted LAN and enables optional cloud login. WARNING: unauthenticated API including power actions; never expose to the Internet or untrusted network. Change BIND in /etc/default/rpi-ton3k-pisound to 127.0.0.1 for SSH-only access.
+On the booted target the package configures and enables rpi-ton3k-pisound.service, installs the six physical button mappings in /etc/pisound.conf (previous mappings backed up), sets up a fallback NetworkManager hotspot and timer, and grants the dedicated service user only the two exact sudo power commands. Audio starts OFF, fixed hardware PCM hw:CARD=pisound,DEV=0, 48 kHz, left input/dual mono output, initial 64 x 3 and nominal ADC reference +1.14 dBu. Web profile exposes HTTP port 80 on the trusted LAN and enables optional cloud login. WARNING: unauthenticated API including power actions; never expose to the Internet or untrusted network. Change BIND in /etc/default/rpi-ton3k-pisound to 127.0.0.1 for SSH-only access.
 
 | Gesture | Action |
 | --- | --- |
@@ -35,7 +35,7 @@ On the booted target the package configures and enables rpi-ton3k-pisound.servic
 | Hold 3 s | Audio on/off, one confirmation flash |
 | Hold 5 s | Vendor shutdown |
 
-Hotspot RPiT3K, 10.42.0.1:8080, only when disconnected or manually enabled. Existing RPiT3K-fallback profile is reused without changing credentials. A new profile uses a unique generated WPA2 password: sudo cat /var/lib/rpi-ton3k-pisound-integration/hotspot-password (do not share it). Existing profile credentials are not copied. The timer does not intentionally interrupt working network connections. Manual OFF inhibits automatic fallback until reboot/manual ON.
+Hotspot RPiT3K, http://10.42.0.1, only when disconnected or manually enabled. Existing RPiT3K-fallback profile is reused without changing credentials. A new profile uses a unique generated WPA2 password: sudo cat /var/lib/rpi-ton3k-pisound-integration/hotspot-password (do not share it). Existing profile credentials are not copied. The timer does not intentionally interrupt working network connections. Manual OFF inhibits automatic fallback until reboot/manual ON.
 
 Data: /var/lib/rpi-ton3k-pisound. Migration is manual with both source and package services stopped; back up ~/.local/share/rpit3k, copy only the desired library/settings/presets/favorites/artwork and set owner rpi-ton3k-pisound. Do not copy credentials into a distributable package. Remove with sudo apt remove rpi-ton3k-pisound; removal on a booted system restores replaced button mappings, removes package-owned hotspot and power permission, retains personal data. Source service is not re-enabled automatically. If configured in a chroot, boot the target and run sudo dpkg-reconfigure rpi-ton3k-pisound. Pi 4 Pisound package is not produced yet.
 
