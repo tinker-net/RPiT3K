@@ -170,3 +170,6 @@ All within 2e-6 tolerance. Distinct IR response check passed. Identity NAM compa
 
 ## TONE3000 HTTP 302 download fix
 User reported HTTP 302 during model download. NoRedirect prevented binary download redirects. Allow up to five HTTPS redirects for binary GET only, retain authorization only on same hostname, remove it permanently when crossing host; external destinations must resolve to global addresses. DNS precheck does not pin the resolved IP, so it is not a complete DNS-rebinding defense. OAuth/API redirects remain blocked. Six mocked regression tests added; actual CDN hostname and live download remain to be verified. No DSP changes.
+
+### Observed download origin and authorization correction
+Real user error after redirect fix: HTTP 403 (download; host=files.tone3000.com; redirects=1). The previous host-change rule removed the OAuth bearer before the official file origin. Explicitly allow the exact files.tone3000.com host to retain the credential on HTTPS port 443, alongside existing API origins. Unrelated hosts still strip authorization permanently, even on return to a trusted origin. Added two mock regression tests; actual authenticated download and new tests pending. No DSP changes.
