@@ -59,3 +59,63 @@ Record commit, kernel, compiler, all output and hardware separately. Never inclu
 - Change effect parameters during sustained notes, toggle effects and swap presets while listening; document clicks, dropouts, tail behavior, perceived gain and clipping.
 - Save/reload a preset and restart service; verify effect values, both NAMs, IRs, Hi-Z. Authorize TONE3000 once, restart service and then reboot, browse/download a capture without reauthorization; logout must clear persisted session. Check token file permissions using stat only, never cat.
 - Offline recordings / spectrograms and listening comparisons; no claim of sonic quality or calibrated RT60 until measured. 
+
+
+## Extended ARM64 characterization — measured 2026-11-26
+
+Source: user-provided terminal log validation-daisysp-extended.log, HWW-RPiT3K, rpi-ui 502e38b76e8e4ace2dfb87f3388913de68d2ee42. Incremental build including characterization target successful. CTest 6/6 PASS, 0 failures, total 1.92 s. Existing four regression groups unchanged (0.00, 0.06, 0.30, 0.02 s); characterization 1.18 s; OAuth group 0.34 s (eight unittest cases in 0.172 s). CMake 3.31 warns about deprecated FetchContent_Populate(t3kembedded), nonfatal.
+
+### Compressor
+All 15 static DC points pass. Input levels -60/-40/-24/-12/-6 dBFS:
+| Amount | Threshold dBFS | Ratio | Measured outputs dBFS |
+|---|---:|---:|---|
+| .25 | -18 | 2.25 | -60 / -40 / -24 / -15.33718 / -12.67064 |
+| .50 | -24 | 3.5 | -60 / -40 / -24.00448 / -20.5762 / -18.86199 |
+| 1 | -36 | 6 | -60 / -40 / -34.0049 / -32.00464 / -31.00401 |
+
+Maximum absolute static curve error 0.004901886 dB (tolerance 0.5 dB). Gain during rising step at 5 ms/50 ms/1 s: -16.18971/-24.98497/-24.98548 dB; falling step at 150 ms/750 ms/2 s: -17.89001/0/0 dB. These are measured step responses, not independently fitted attack/release time constants.
+
+### Delay
+All 12 combinations (20/100/350/1000 ms, feedback 0/.35/.85) pass. First echoes at 960/4800/16800/48000 samples; subsequent echoes at exact integer multiples. Identical amplitude sequences for all four times, input impulse .5, mix .5:
+| Feedback | Echo 1 | Echo 2 | Echo 3 |
+|---:|---:|---:|---:|
+| 0 | .2499964 | 8.407791e-44 | 0 |
+| .35 | .2499964 | .08749875 | .03062456 |
+| .85 | .2499964 | .2124934 | .1806163 |
+
+Maximum absolute amplitude error .0000087 (rounded logged values); off-index energy criterion passed. Does not characterize fractional delay or maximum discontinuity while changing time.
+
+### Chorus
+Zero-depth impulse: delay 576 samples (12 ms).
+| Wrapper mix | Dry impulse | Delayed impulse |
+|---:|---:|---:|
+| .25 | .4375009 | .06249911 |
+| .50 | .3750018 | .1249982 |
+| 1 | .2500036 | .2499964 |
+
+Modulation .5 Hz: observed lag 291–854 samples; recurrence mean error .1 sample. 2 Hz: observed lag 330–770 samples; recurrence mean error .03636364 sample. Sparse impulse sampling does not determine exact continuous extrema. Mix 100% intentionally yields upstream ChorusEngine 50/50 blend. Exact bypass recovery passes.
+
+### ReverbSc
+T30 extrapolated RT60, first-difference-energy ratio (brightness proxy), and total impulse energy:
+| Voice | Requested s | RT60 s | Brightness | Energy |
+|---|---:|---:|---:|---:|
+| Dark | .2 | .2983129 | .6067853 | .00005534589 |
+| Dark | 1.5 | 1.4231 | .382298 | .003546281 |
+| Dark | 5 | 4.690807 | .2230183 | .009732536 |
+| Bright | .2 | .2985754 | 1.09064 | .0001122822 |
+| Bright | 1.5 | 1.435634 | .7770095 | .007279516 |
+| Bright | 5 | 4.739346 | .5099261 | .01996665 |
+| Neutral | .2 | .3010704 | .8498453 | .00008224736 |
+| Neutral | 1.5 | 1.428496 | .5705739 | .005244294 |
+| Neutral | 5 | 4.718306 | .3536531 | .01422334 |
+
+Monotonic decay and brightness ordering confirmed; minimum requested .2 s measures ~.30 s, so do not claim calibrated RT60. No changes to DSP or tolerance in this documentation commit. Brightness proxy is not a frequency response measurement.
+
+### Combined automation and performance
+10 seconds / 480000 samples synthetic signal and parameter changes: 0.09216136 s elapsed, 0.9216136% of audio duration (~108.5x realtime), peak .4476328, energy checksum 3626.6. DSP-only wall clock, not per-block worst-case timing, CPU utilization, or end-to-end ALSA latency. Finite output and bounded peak pass; audible click-free switching not established.
+
+### OAuth
+All eight mocked tests PASS: corrupt file, disconnect, expired without refresh, invalid grant, network failure keeps session, refresh rotation persists, refresh without rotation, restart and permissions. No real OAuth server or reboot tested.
+
+### Remaining
+Real service restart/reboot OAuth, real NAM/IR/preset and audio-device testing, listening/recording, xrun and per-block deadline validation, clean build, and independent generic ALSA hardware validation remain open. No new branches.
