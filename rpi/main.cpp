@@ -5,7 +5,7 @@
 #include "../eq3band.h"
 #include "convolution.h"
 #include "live_rig.h"
-#include <nlohmann/json.hpp>
+#include "json.hpp"
 #include "tuner.h"
 #include "noise_gate.h"
 #include "effects.h"
