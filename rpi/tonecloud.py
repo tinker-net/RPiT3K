@@ -80,7 +80,11 @@ class ToneCloud:
         u = urlsplit(url)
         if u.scheme != "https" or u.hostname not in ("www.tone3000.com","tone3000.com") or u.port not in (None,443) or u.username or u.password:
             raise ValueError("Unsupported TONE3000 download host")
-        headers = {"Accept": "application/json" if not binary else "application/octet-stream"}
+        # Verified on ARM64 against files.tone3000.com: binary downloads
+        # returned 403 with the default urllib headers, but 200 with this pair.
+        headers = {"Accept": "application/json"} if not binary else {
+            "Accept": "*/*", "User-Agent": "Mozilla/5.0"
+        }
         if token: headers["Authorization"] = "Bearer " + token
         data = None
         if form is not None:

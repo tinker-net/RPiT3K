@@ -85,6 +85,14 @@ class DownloadTests(unittest.TestCase):
         self.c.http.open.side_effect=[self.redirect("https://cdn.example.com/signed"),self.response()]
         self.assertEqual(self.c.fetch(self.url,token="fake",binary=True),b"model")
         self.assertIsNone(self.c.http.open.call_args.args[0].get_header("Authorization"))
+    def test_binary_download_headers_on_redirect(self):
+        self.c.http.open.side_effect=[self.redirect("https://files.tone3000.com/model"),self.response()]
+        self.assertEqual(self.c.fetch(self.url,token="fake",binary=True),b"model")
+        for call in self.c.http.open.call_args_list:
+            req=call.args[0]
+            self.assertEqual(req.get_header("User-agent"),"Mozilla/5.0")
+            self.assertEqual(req.get_header("Accept"),"*/*")
+            self.assertEqual(req.get_header("Authorization"),"Bearer fake")
     def test_official_file_origin_keeps_bearer(self):
         self.c.http.open.side_effect=[self.redirect("https://files.tone3000.com/model"),self.response()]
         self.assertEqual(self.c.fetch(self.url,token="fake",binary=True),b"model")
