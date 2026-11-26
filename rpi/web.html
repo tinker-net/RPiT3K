@@ -1174,6 +1174,7 @@ ampSkins.centaur={name:"Klon Centaur",pedal:true};
 ampSkins.bluesbreaker={name:"Marshall Bluesbreaker",pedal:true};
 ampSkins.tonebender={name:"Tone Bender",pedal:true};
 ampSkins.bigmuff={name:"EHX Big Muff",pedal:true};
+ampSkins.ramshead={name:"EHX Ram’s Head",pedal:true};
 ampSkins.morningglory={name:"JHS Morning Glory",pedal:true};
 ampSkins.distortionplus={name:"MXR Distortion+",pedal:true};
 ampSkins.pedal.pedal=true;
@@ -1230,6 +1231,7 @@ function autoAmpSkin(name){
  if(/centaur|klon/.test(n))return "centaur";
  if(/blues.?breaker|bb[-_ ]?mk[-_ ]?i\b/.test(n))return "bluesbreaker";
  if(/tone.?bender|twin.?bender/.test(n))return "tonebender";
+ if(/ram[’\x27]?s[ _-]*head/.test(n))return "ramshead";
  if(/big.?muff|\bmuff\b/.test(n))return "bigmuff";
  if(/morning.?glory/.test(n))return "morningglory";
  if(/distortion\s*\+|distortion.?plus|mxr.*distortion|m104/.test(n))return "distortionplus";
