@@ -1,0 +1,8 @@
+[Unit]
+Description=Ton3K Pisound fallback network check
+After=NetworkManager.service
+Requires=NetworkManager.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/rpi-ton3k/pisound/hotspot-check wlan0
