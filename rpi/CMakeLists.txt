@@ -81,3 +81,8 @@ endif()
 if(Python3_Interpreter_FOUND)
   add_test(NAME effect_preset_state COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/effect_preset_test.py")
 endif()
+
+if(Python3_Interpreter_FOUND)
+  add_test(NAME production_chain COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/production_chain_test.py" "$<TARGET_FILE:rpit3k>")
+  set_tests_properties(production_chain PROPERTIES TIMEOUT 120)
+endif()

@@ -1,129 +1,59 @@
-# RPiT3K for Blokas Pisound
+# RPi-Ton3K — Blokas Pisound user guide
 
-An independent, experimental Raspberry Pi guitar processor derived from the TONE3000 × Daisy DIY Pedal project. This guide is for the native Pisound edition, not the Daisy firmware. No affiliation with Blokas or TONE3000 is implied.
+See [overview](README.md), [technical guide](rpi/README.md) and [validation](docs/DAISYSP_VALIDATION.md). 64-bit Raspberry Pi OS Lite with compatible Pisound; Pi 5 developer-tested, Pi 4/CM4/400 candidate, older Pi experimental. 32-bit and Pisound Micro not supported by this installer.
 
-## What it does
+## Install
 
-- Native Neural Amp Modeler (NAM Core), one or two mono NAM captures, optional mono cabinet WAV IR, three-band EQ, input/output gain and input-keyed soft-knee noise reduction.
-- Browser-controlled four presets, live gain/EQ/gate controls, chromatic tuner, input/output peak meters, ALSA recovery counter and CPU/temperature monitoring.
-- Direct ALSA, 48 kHz, left input and dual mono output. No JACK, LV2 or PipeWire required.
-- Optional Pisound button preset cycling, systemd autostart and offline Wi-Fi hotspot.
-- Local captures work offline. TONE3000 account browsing/import is experimental, disabled by default on new service installations and not yet end-to-end verified; use local file import.
+Normal sudo-enabled user, not root. Reliable power/cooling, preferably 2 GB or more RAM for compiling. Stop competing audio programs and lower monitor volume. Power off before attaching Pisound. Follow Blokas driver installation if necessary.
 
-## Compatibility
-
-| Platform | Status | Initial buffer |
-| --- | --- | --- |
-| Raspberry Pi 5, 64-bit Raspberry Pi OS Lite (Trixie), Pisound | Developer-tested DSP and live audio; fresh automated install not yet tested | 64 × 3 |
-| Pi 4 / CM4 / Pi 400 with compatible Pisound mounting, 64-bit Raspberry Pi OS | Candidate, not hardware-tested | 128 × 3 |
-| Pi 3 / Zero 2 W and other 64-bit Pi models with compatible Pisound | Experimental, CPU/RAM may be insufficient; no real-time guarantee | 256 × 3 |
-| 32-bit OS, Pi 1/2/Zero, Pisound Micro, other distributions | Not supported by this installer |
-
-Use a reliable power supply, adequate cooling and preferably at least 2 GB RAM for compiling. A successful build does not guarantee every model will run in real time. Verify physical compatibility with [Blokas specifications](https://blokas.io/pisound/docs/specs/). No measured analog round-trip latency claim is made.
-
-## Fresh installation
-
-Install Raspberry Pi OS Lite **64-bit** with Raspberry Pi Imager. Configure your own username, network and SSH. Power off before attaching the Pisound. Boot and connect via SSH or terminal as the normal sudo-enabled user (not root).
-
-```bash
+```sh
 sudo apt update
 sudo apt install -y git
 git clone --branch rpi-ui https://github.com/tinker-net/RPiT3K.git
 cd RPiT3K
-bash rpi/install-pisound.sh --install-blokas
-sudo reboot
+# If Blokas driver is not installed:\nbash rpi/install-pisound.sh --install-blokas\n# Reboot, reconnect, then:\n# cd ~/RPiT3K\nbash rpi/install-pisound.sh
 ```
 
-The explicit Blokas step downloads and runs the vendor's current installer from [official documentation](https://blokas.io/pisound/docs/the-pisound-software/). It may ask questions or update system configuration. If already installed, skip this step. Inspect the vendor script first if desired; it is maintained externally and not pinned.
+The optional Blokas step downloads the vendor's current unpinned installer and exits; reboot before running normal installation. Confirm aplay -l and arecord -l show Pisound. Pi 5 initial 64×3, Pi 4 128×3, older Pi 256×3. Fixed left capture/dual mono playback.
 
-After reconnecting, confirm the card appears in both directions:
+Installer installs dependencies, pins NAM Core, compiles, runs CTest and offline verification, installs/enables rpit3k.service. Existing settings/data preserved; initial buffer/routing flags do not overwrite existing settings. New readiness check verifies controller available **with audio stopped**, not ALSA streaming. Fresh installer not yet independently tested. --jobs 1 reduces build memory use. For updates stop service first.
 
-```bash
-aplay -l
-arecord -l
-cd ~/RPiT3K
-bash rpi/install-pisound.sh
+## Access
+
+Default loopback HTTP; SSH tunnel from another computer:
+```sh
+ssh -N -L 8080:127.0.0.1:8080 USER@HOST
 ```
-
-The second step installs build dependencies, checks the card, checks out pinned NAM Core and its submodules, selects CPU flags for the detected Pi, compiles locally, runs CTest and offline verification, and installs/enables the systemd service only after the tests pass. A subsequent readiness check requires live audio telemetry before reporting success. It preserves existing presets, captures and audio settings. It needs Internet for installation, not for local playing.
-
-### Browser access
-
-Default: loopback only. From another computer, substitute your actual username and Pi address:
-
-```bash
-ssh -N -L 8080:127.0.0.1:8080 USER@PI_ADDRESS
-```
-
-Open http://localhost:8080. For a dedicated trusted LAN or fallback hotspot, explicitly opt in to network access:
-
-```bash
-bash rpi/install-service.sh --lan
-```
-
-Then open http://PI_ADDRESS:8080. **LAN mode is unauthenticated HTTP; anyone on that network can operate the pedal and access the connected cloud session. Never expose port 8080 to the Internet or an untrusted network.** Keep loopback mode for shared networks. No public API key, account credentials or Wi-Fi password is bundled.
-
-### Experimental cloud integration
-
-For private development testing only, add --cloud to the service installer (prefer loopback access). A personal publishable key is required; never enter a secret key. Public distribution of the enabled integration must first meet [TONE3000 API terms and design requirements](https://www.tone3000.com/api/terms) and complete end-to-end authentication/download testing.
-
-### Physical button and hotspot (optional)
-
-```bash
-bash rpi/install-service.sh --lan --button
-```
-
-This explicitly replaces the single-click action in /etc/pisound.conf, preserving a backup at /etc/pisound.conf.rpit3k-backup; other actions are left untouched. Omit --lan for SSH-only access. Physical button integration still needs independent hardware confirmation. Restore the original configuration from the backup only if appropriate (it may predate subsequent custom changes), then restart pisound-btn.
-
-On NetworkManager systems with Wi-Fi, optionally run:
-
-```bash
-bash rpi/install-hotspot.sh
-```
-
-Enter your own WPA2 password when prompted. Requires LAN mode to use the web UI. Fallback SSID RPiT3K, address http://10.42.0.1:8080; activates when no Ethernet/Wi-Fi connection is active. It stays active until disconnected or rebooted. Not suitable for every networking setup; optional and not installed by default.
+Open http://localhost:8080. Explicit --lan at install exposes unauthenticated HTTP to the trusted isolated LAN, including library and cloud/power access. Never expose to Internet/untrusted network. For existing build use bash rpi/install-service.sh --lan; repeat --button/--cloud if desired.
 
 ## First use
 
-Start with the physical monitor volume low. Stop other applications that exclusively open Pisound; the installer does not disable JACK, PipeWire, MODEP or PiPedal. Import your own compatible .nam and mono .wav (up to one second after resampling to 48 kHz), select a preset, capture and optional IR, disable bypass and press Start. Choose Full for fixed models; Lite is only for compatible slimmable models. Begin with low output and gate OFF. Adjust input for the capture's calibration; automatic analog calibration is not implemented. Model/preset changes restart audio and are not gapless. No captures or commercial IRs are supplied.
+Audio starts OFF every time. Last preset is selected, not playing. Import your own .nam and mono WAV IRs (up to 1 s after resampling to 48 kHz); use either NAM slot or both serially, optionally two parallel IRs. Choose Full/Lite only meaningfully for slimmable models. Disable NAM/IR bypass, start Audio with low output. Gate at -81 is off. Six knobs control input, gate, bass, mid, treble, output. Preset changes while running swap rigs with a brief fade, not guaranteed gapless; audio hardware setting changes reopen streams. While stopped edits autosave without opening ALSA.
 
-If xruns occur, increase period size or periods in Audio settings. The counter includes ALSA suspend recovery and is cumulative since service start. The displayed buffer duration is per direction, not measured round-trip latency.
+Effects toolbar opens individual dialogs; Enable illuminates icon yellow and unlocks controls. Turning off remembers values. Compressor PRE/POST, chorus mix/rate/depth, delay mix/time/feedback, reverb mix/decay (.3–5 s)/Dark-Bright-Neutral. Hi-Z has independent enable and four pickup profiles; use only for assumed low impedance passive pickup loading, not external buffer or high-Z input. Tuner mutes output; practice metronome requires audio on. Calibration uses first active capture metadata and ADC reference, applies explicit input gain; nominal +1.14 dBu reference is an estimate at minimum analog gain, not measured for your hardware. Do not assume missing metadata means invalid capture.
 
-## Updates and troubleshooting
+Library search, folders, favorites, import/move/rename, confirmed permanent deletion. Sidebars can be hidden/resized; custom amp artwork is visual only. Four slots save automatically. Browser layout stored locally.
 
-```bash
+## Optional cloud and power
+
+--cloud enables experimental TONE3000 device OAuth; use personal publishable key, never secret key. Session persists in private tone3000-session.json; disconnect deletes it. Mock tests pass, actual reboot/login/download not yet independently verified. API terms apply; no official affiliation. Local audio never requires cloud. Original USB Companion cannot control this Linux rig.
+
+Optional power menu: run bash rpi/install-poweroff.sh as service user and confirm; exact systemctl poweroff and reboot sudo privileges only, no general root access. Existing poweroff-only installs must rerun helper for reboot. Disable with bash rpi/install-poweroff.sh --disable. On LAN anyone with API access can invoke confirmed power actions. No physical power switching.
+
+Optional single-click preset cycle: bash rpi/install-service.sh --button (add desired --lan/--cloud). Backs up /etc/pisound.conf and replaces CLICK_1 only; physical button still needs validation. Optional NetworkManager fallback: bash rpi/install-hotspot.sh, enter WPA2 password; requires LAN mode, SSID RPiT3K at 10.42.0.1, activates without other connectivity. Disable timer and connection with sudo systemctl disable --now rpit3k-hotspot.timer and sudo nmcli connection down RPiT3K-fallback.
+
+## Update and troubleshoot
+
+```sh
 cd ~/RPiT3K
-git pull --ff-only origin rpi-ui
 sudo systemctl stop rpit3k
+git pull --ff-only origin rpi-ui
 cmake --build build-rpi -j2
 ctest --test-dir build-rpi --output-on-failure
 ./build-rpi/rpit3k --bypass --verify
 sudo systemctl start rpit3k
 ```
 
-Run the guided installer again for dependency/CPU configuration changes; repeat your desired --lan/--button options (and --cloud only for development). Existing audio settings are retained. Use --jobs 1 on low-memory machines. Check the browser diagnostics and:
+Run sequentially and stop on failures. Service restarts with audio OFF. If audio fails check browser logs, aplay -l, arecord -l, sudo journalctl -u rpit3k -n 100 --no-pager. Increase period size/count if xruns; counter includes suspend recoveries, nominal per-direction buffer not round-trip latency. Audio OFF means no valid live meters; controller can be healthy without audio. 
 
-```bash
-sudo systemctl status rpit3k
-sudo journalctl -u rpit3k -n 100 --no-pager
-aplay -l
-arecord -l
-```
-
-If Pisound is missing, consult Blokas and run sudo pisound-config; reboot if required. If the service starts but audio does not, inspect the browser logs (the service can be up even when ALSA fails). Do not post credentials or private logs without redaction.
-
-## Uninstall
-
-```bash
-sudo systemctl disable --now rpit3k
-sudo rm /etc/systemd/system/rpit3k.service
-sudo systemctl daemon-reload
-```
-
-If installed, disable the hotspot timer and remove the RPiT3K-fallback connection via nmcli; restore the button action as described above and remove /usr/local/bin/rpit3k-next. Blokas software and other applications are intentionally left installed. Your local data remains in ~/.local/share/rpit3k; back it up before deleting it. The source checkout can then be removed.
-
-## Validation and license
-
-See [technical report and reproducible tests](rpi/README.md). On Pi 5 the latest native DSP suite and bypass verification passed, including the soft-knee expander. Full/Lite NAM and IR numerical comparison results refer to earlier tested builds. Long sessions, final integrated performance, fresh installation, other Pi boards, physical button and live cloud login/download still require testing. This is a preview, not a production-certified pedal.
-
-Original project and reused EQ: TONE3000 × Daisy DIY Pedal, [MIT license](LICENSE). NAM Core and its dependencies retain their own licenses. Capture/IR authors retain their rights; do not redistribute downloaded or commercial assets without permission. TONE3000 API usage is subject to its terms; the optional integration is not a claim of official endorsement.
+Data lives in ~/.local/share/rpit3k. Back up privately, including library/settings/presets/favorites/artwork; OAuth file contains secrets, never share. Uninstall by disabling power helper (if enabled), disabling/stopping service, removing service unit and reloading systemd; preserve data unless deliberately deleting it. Restore Pisound button backup if appropriate, remove optional hotspot separately. No commercial models provided. See technical guide for licenses and current test limitations.

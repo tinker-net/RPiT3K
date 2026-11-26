@@ -75,16 +75,19 @@ if not p.exists():
 PY
 user="$(id -un)"
 if [[ "$bind" == 0.0.0.0 ]]; then echo "WARNING: unauthenticated HTTP on trusted isolated LAN only"; fi
-printf '[Unit]\nDescription=RPiT3K General native ALSA guitar processor\nAfter=sound.target\n\n[Service]\nType=simple\nUser=%s\nSupplementaryGroups=audio\nWorkingDirectory=%s\nExecStart=/usr/bin/python3 %s/rpi/server.py --bind %s --no-auth --autostart %s --data %s\nLimitRTPRIO=60\nRestart=on-failure\nRestartSec=3\nUMask=0077\n\n[Install]\nWantedBy=multi-user.target\n' "$user" "$root" "$root" "$bind" "$cloud" "$data" | sudo tee /etc/systemd/system/rpit3k-general.service >/dev/null
+printf '[Unit]\nDescription=RPiT3K General native ALSA guitar processor\nAfter=sound.target\n\n[Service]\nType=simple\nUser=%s\nSupplementaryGroups=audio\nWorkingDirectory=%s\nExecStart=/usr/bin/python3 %s/rpi/server.py --bind %s --no-auth %s --data %s\nLimitRTPRIO=60\nRestart=on-failure\nRestartSec=3\nUMask=0077\n\n[Install]\nWantedBy=multi-user.target\n' "$user" "$root" "$root" "$bind" "$cloud" "$data" | sudo tee /etc/systemd/system/rpit3k-general.service >/dev/null
 sudo systemctl daemon-reload
 sudo systemctl enable rpit3k-general.service
 sudo systemctl restart rpit3k-general.service
 echo "Local UI: http://127.0.0.1:8080 (use Audio settings if the hardware is not configured)"
 aplay -l || true
 arecord -l || true
-for attempt in $(seq 1 15); do
- if curl --noproxy '*' --silent --fail --max-time 2 http://127.0.0.1:8080/api/levels | python3 -c 'import json,sys;sys.exit(not json.load(sys.stdin).get("valid"))' 2>/dev/null; then echo "Live audio telemetry confirmed"; exit 0; fi
+for attempt in $(seq 1 30); do
+ if curl --noproxy '*' --silent --fail --max-time 2 http://127.0.0.1:8080/api/status | python3 -c 'import json,sys; s=json.load(sys.stdin); sys.exit(not (s.get("running") is False and s.get("active") is None and len(s.get("presets",{}))==4))' 2>/dev/null; then
+  echo "Controller ready; audio intentionally OFF. Open http://127.0.0.1:8080 and start audio to verify ALSA."
+  exit 0
+ fi
  sleep 1
 done
-echo "Controller installed, but audio not verified. Configure the correct PCM and channels in Audio settings." >&2
+echo "Controller readiness not confirmed; inspect journalctl -u rpit3k-general." >&2
 exit 1

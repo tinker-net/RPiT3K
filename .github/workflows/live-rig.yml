@@ -1,7 +1,7 @@
-name: Experimental live rig validation
+name: Native Linux regression
 on:
   push:
-    branches: [rpi-ui, rpi-general, live-rig]
+    branches: [rpi-ui, rpi-general]
     paths: ['rpi/**', '.github/workflows/live-rig.yml']
   workflow_dispatch:
 permissions:
@@ -34,14 +34,15 @@ jobs:
           cmake --build build-rpi -j2
           ctest --test-dir build-rpi --output-on-failure
           ./build-rpi/rpit3k --bypass --verify
-          python3 -m py_compile rpi/server.py
+          python3 -m py_compile rpi/*.py
+          for f in rpi/*.sh; do bash -n "$f"; done
       - name: Browser script syntax
         run: |
           python3 - <<'PY'
           import re
           from pathlib import Path
           s = Path("rpi/web.html").read_text()
-          scripts = re.findall(r"<script(?:\\s[^>]*)?>(.*?)</script>", s, flags=re.S)
+          scripts = re.findall(r"<script(?:\s[^>]*)?>(.*?)</script>", s, flags=re.S)
           assert scripts
           Path("/tmp/rpit3k-ui.js").write_text("\n".join(scripts))
           PY
