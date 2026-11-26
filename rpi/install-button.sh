@@ -12,6 +12,7 @@ for action in stomp next identify audio hotspot shutdown; do sudo ln -sfn rpit3k
 # Update an existing fallback helper too, without changing its connection/password.
 if [[ -f /usr/local/bin/rpit3k-hotspot-check ]]; then sudo install -m 755 "$root/rpi/hotspot-check.sh" /usr/local/bin/rpit3k-hotspot-check; fi
 sudo sed -i -E '/^[[:space:]]*(CLICK_1|CLICK_2|CLICK_3|HOLD_1S|HOLD_3S|HOLD_5S)[[:space:]]/d' /etc/pisound.conf
-printf '\nCLICK_1 /usr/local/bin/rpit3k-button-stomp\nCLICK_2 /usr/local/bin/rpit3k-button-next\nCLICK_3 /usr/local/bin/rpit3k-button-hotspot\nHOLD_1S /usr/local/bin/rpit3k-button-identify\nHOLD_3S /usr/local/bin/rpit3k-button-audio\nHOLD_5S /usr/local/bin/rpit3k-button-shutdown\n' | sudo tee -a /etc/pisound.conf >/dev/null
+printf '\n' | sudo tee -a /etc/pisound.conf >/dev/null
+sudo tee -a /etc/pisound.conf < "$root/rpi/pisound-button.conf" >/dev/null
 sudo systemctl restart pisound-btn.service
 echo "Pisound autonomous controls installed."
