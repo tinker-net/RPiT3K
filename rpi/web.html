@@ -751,7 +751,7 @@ async function cloudLoad(){
    const res=await cloud("download",{model_id:item.id});
    const fresh=await request("/api/status");
    state=fresh;status();renderTree(true);
-   cloudMessage("Downloaded");
+   cloudMessage("Saved");
   });list.append(b);
  }
  if(!data.data.length)list.textContent="No items on this page";
