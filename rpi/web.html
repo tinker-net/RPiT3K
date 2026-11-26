@@ -636,12 +636,21 @@ for(const id of ["comp","chorus","delay","reverb"]){el(id+"Open").onclick=()=>el
 function fxLabels(){el("chorusLabel").textContent=Math.round(Number(el("chorus").value)*100)+"%";el("chorus_rateLabel").textContent=Number(el("chorus_rate").value).toFixed(1)+" Hz";el("chorus_depthLabel").textContent=Math.round(Number(el("chorus_depth").value)*100)+"%";el("delayLabel").textContent=Math.round(Number(el("delay").value)*100)+"%";el("delay_msLabel").textContent=Math.round(Number(el("delay_ms").value))+" ms";el("delay_feedbackLabel").textContent=Math.round(Number(el("delay_feedback").value)*100)+"%";const amount=Math.round(Number(el("hiz").value)*100);el("hizLabel").textContent=amount+"%";el("hizSummary").textContent=el("hizToggle").checked?amount+"%":"OFF";el("hiz").disabled=!el("hizToggle").checked;const mix=Math.round(Number(el("ir_mix").value)*100);el("irBlendLabel").textContent=(100-mix)+" / "+mix;updateEffectIndicators();el("compLabel").textContent=Math.round(Number(el("comp").value)*100)+"%";el("reverbLabel").textContent=Math.round(Number(el("reverb").value)*100)+"%";el("decayLabel").textContent=Number(el("decay").value).toFixed(1)+" s";}
 for(const k of fxKeys)el(k).addEventListener("input",()=>{fxLabels();queueLive();});
 el("hizToggle").onchange=()=>{fxLabels();queueLive();};
-function smartName(path){
- const raw=String(path).split("/").pop().replace(/\.(nam|wav)$/i,"");
- if(!smartEnabled)return raw;
- const rules=[[/\b(?:FNDR\s+)?BFSR\b/gi,"Fender Super Reverb"],[/\b(?:FNDR\s+)?BFPRO\b/gi,"Fender Pro Reverb"],[/\b(?:MRSHL?|MARSHALL)\s+(?:JT50|JTM50)\b/gi,"Marshall JTM50"],[/\bORNG\s+RV100\b/gi,"Orange Rockerverb 100"],[/\bHWTT\s+CUT100\b/gi,"Hiwatt Custom 100"],[/\b(?:TKIMP|TK\s+IMP)\b/gi,"Tone King Imperial"],[/\bFNDR\b/gi,"Fender"],[/\bMRSHL?\b/gi,"Marshall"],[/\bORNG\b/gi,"Orange"],[/\bHWTT\b/gi,"Hiwatt"],[/\bVX\b/gi,"Vox"],[/\bMTCH\b/gi,"Matchless"],[/\bCLN\b/gi,"Clean"],[/\bWRM\b/gi,"Warm"],[/\bBAL\b/gi,"Balanced"],[/\bBRT\b/gi,"Bright"],[/\bEOB\b/gi,"Edge of Breakup"]];
- return rules.reduce((v,[r,t])=>v.replace(r,t),raw);
+const captureCatalog=[["FNDR BLBM","Fender Bassman (Blonde)","generic"],["FNDR BFBM","Fender Bassman (Blackface)","blackface"],["FNDR TWBM","Fender Bassman (Tweed)","tweed"],["FNDR BFSR","Fender Super Reverb","blackface"],["FNDR BFPRO","Fender Pro Reverb","blackface"],["FNDR BFPRI","Fender Princeton Reverb","blackface"],["FNDR BFVRB","Fender Vibroverb","blackface"],["FNDR BFTWN","Fender Twin Reverb","blackface"],["FNDR BFDLX","Fender Deluxe Reverb","blackface"],["FNDR BFDRI","Fender Deluxe Reverb Reissue","blackface"],["FNDR TWDLX","Fender Deluxe (Tweed)","tweed"],["FNDR HPTWN","Fender High Powered Twin","tweed"],["FNDR TWDP","Fender V-Front Super","tweed"],["MRSH JT45RS","Marshall JTM45 Radiospares","plexi"],["MRSH JT45","Marshall JTM45","plexi"],["MRSH JT50","Marshall JTM50","plexi"],["MRSH SB67","Marshall Super Bass","plexi"],["MRSH SB100","Marshall Super Bass","plexi"],["MRSH SL68","Marshall Super Lead","plexi"],["MRSH JM50LD","Marshall JMP50 Lead","plexi"],["MRSH SA100","Marshall Super 100","plexi"],["MRSH JC800","Marshall JCM800","generic"],["VX TB30","Vox AC30 Top Boost","vox"],["MTCH CHTAN","Matchless Chieftain","matchless"],["MTCH PHNX","Matchless Phoenix 35","matchless"],["HWTT CUT100","Hiwatt Custom 100","hiewatt"],["TK IMP MKII","Tone King Imperial MKII","boutique"],["TKIMP","Tone King Imperial","boutique"],["TK ROY","Tone King Royalist","boutique"],["ORNG RV100","Orange Rockerverb 100","orange"],["ORNG OR120","Orange OR120","orange"],["MES DRECF","Mesa/Boogie Dual Rectifier","generic"],["MES MKIIC+","Mesa/Boogie Mark IIC+","mesa"],["MES MKV","Mesa/Boogie Mark V","mesa"],["GBSN G19","Gibson Falcon","gibson"],["GBSN G20","Gibson Ranger","gibson"],["AMPG S12","Ampeg SB-12","generic"],["MAGN 10M","Magnatone M10A","generic"],["MAGN TWST","Magnatone Twilighter Stereo","generic"],["TRCK OD100","Two-Rock TS-1 100W","generic"],["TRCK TCL","Two-Rock Traditional Clean","generic"],["AATR SX3","Two-Rock Silver Sterling Signature","generic"],["BOG UU","Bogner Uberschall Ultra MKII","generic"],["BOG XT","Bogner Ecstasy 101B","generic"],["BCAT ER30","Bad Cat Era 30","generic"],["PV 5050","Peavey 5150","generic"],["RLND J120","Roland Jazz Chorus","generic"],["SPRO 88TN","Supro 1688TN","generic"],["SWRT ATS","Swart Atomic Space Tone","generic"],["BRTL RLAND","Bartel Roseland","generic"],["BEN CHI","Benson Chimera","generic"],["FMAN FLEX","Friedman Plex","generic"],["DWOOD DNIGHT","Driftwood Darkest Nightmare","generic"],["PRSM ARC","PRS Archon 100","generic"],["SD DRAGON","Sundragon Super Dragon","generic"],["SD CNADO","Sundragon Coronado","generic"],["STONE 1485","Silvertone 1485","generic"],["TRECK EXP","Trainwreck Express","generic"],["MRGN DUO20","Morgan Dual 20","generic"]];
+function identifyCapture(path){
+ const raw=String(path).split("/").pop().replace(/\.(nam|wav)$/i,""),n=raw.replace(/MRSHL\b/gi,"MRSH").replace(/[_-]+/g," ").replace(/\s+/g," ").trim();
+ const padded=" "+n.toUpperCase()+" ";
+ const match=captureCatalog.find(([key])=>padded.includes(" "+key+" "));
+ if(!match)return {raw,label:raw,skin:null,model:null};
+ const [key,model,skin]=match,offset=padded.indexOf(" "+key+" ");
+ let label=n.slice(0,offset)+model+n.slice(offset+key.length);
+ if(/\.nam$/i.test(path)){
+ const tokens={CLN:"Clean",THN:"Thin",BRI:"Bright",BRT:"Bright",BAL:"Balanced",WRM:"Warm",FAT:"Fat",SCP:"Scooped",EOB:"Edge of Breakup",EOD:"Edge of Breakup"};
+ label=label.replace(/\b(?:CLN|THN|BRI|BRT|BAL|WRM|FAT|SCP|EOB|EOD)\b/gi,t=>tokens[t.toUpperCase()]);
+ }
+ return {raw,label,skin,model};
 }
+function smartName(path){const x=identifyCapture(path);if(!smartEnabled)return x.raw;if(x.model)return x.label;return x.raw.replace(/\b(?:FNDR|MRSHL?|ORNG|HWTT|VX|MTCH)\b/gi,t=>({FNDR:"Fender",MRSH:"Marshall",MRSHL:"Marshall",ORNG:"Orange",HWTT:"Hiwatt",VX:"Vox",MTCH:"Matchless"})[t.toUpperCase()]);}
 let smartEnabled=true;try{smartEnabled=localStorage.getItem("ton3k.originalNames")!=="1";}catch(e){}
 let practiceVisible=false;
 let treeKey=null;const openFolders=new Set();let libraryTarget="";
@@ -910,7 +919,7 @@ function renderTree(force=false){
  const tree={dirs:new Map(),files:[]};
  const nodeFor=parts=>{let node=tree;for(const part of parts){if(!node.dirs.has(part))node.dirs.set(part,{dirs:new Map(),files:[]});node=node.dirs.get(part);}return node;};
  for(const dir of state.folders||[])if(!q||dir.toLowerCase().includes(q))nodeFor(dir.split("/"));
- for(const file of state.files)if(!q||file.toLowerCase().includes(q)||smartName(file).toLowerCase().includes(q)){const parts=file.split("/");nodeFor(parts.slice(0,-1)).files.push(file);}
+ for(const file of state.files)if(!q||pickerRank(file,q)>=0){const parts=file.split("/");nodeFor(parts.slice(0,-1)).files.push(file);}
  function fileRow(file){
   const row=document.createElement("div"),b=document.createElement("button"),ico=document.createElement("span"),name=document.createElement("span"),tag=document.createElement("small"),isIR=file.toLowerCase().endsWith(".wav");
   row.className="library-file";row.classList.toggle("current",selected.includes(file));
@@ -1147,8 +1156,9 @@ function pickerExpand(s){
  if(["marshall","vox","orange","hiwatt","matchless"].some(t=>pickerHas(known,t)))tags.add("british");
  if(["fender","tone king","dumble"].some(t=>pickerHas(known,t)))tags.add("american");
  if(pickerHas(known,"ac30")||pickerHas(known,"matchless"))tags.add("class a");
- if(pickerHas(known,"bfsr")||pickerHas(known,"blbm")||pickerHas(known,"bfpro"))tags.add("blackface");
- if(pickerHas(known,"twdlx"))tags.add("tweed");
+ if(pickerHas(known,"bfsr")||pickerHas(known,"bfbm")||pickerHas(known,"bfpro"))tags.add("blackface");
+ if(pickerHas(known,"twdlx")||pickerHas(known,"twbm"))tags.add("tweed");
+ if(pickerHas(known,"blbm"))tags.add("blonde");
  return (original+" "+[...tags].join(" ")).trim();
 }
 const pickerMetadata=new Map();
@@ -1162,7 +1172,7 @@ function pickerMetadataText(info){
  return out.join(" ").slice(0,8192);
 }
 function pickerRank(file,q,metadata=""){
- const terms=pickerNormalize(q).split(" ").filter(Boolean),name=pickerNormalize(file.split("/").pop().replace(/\.(nam|wav)$/i,"")),path=pickerNormalize(file),expanded=pickerExpand(file+" "+smartName(file)+" "+metadata);
+ const terms=pickerNormalize(q).split(" ").filter(Boolean),name=pickerNormalize(file.split("/").pop().replace(/\.(nam|wav)$/i,"")),path=pickerNormalize(file),expanded=pickerExpand(file+" "+identifyCapture(file).label+" "+metadata);
  if(!terms.length)return 0;
  let score=0;
  for(const t of terms){
@@ -1384,6 +1394,7 @@ function makeAmpArt(key){
  </svg>`;
 }
 function autoAmpSkin(name){
+ const identity=identifyCapture(name);if(identity.skin)return identity.skin;
  const n=name.toLowerCase();
  if(/\b(?:rat|whiteface|proco)\b/.test(n))return "rat";
  if(/ts[-_ ]?808|ts[-_ ]?9\b|tube.screamer/.test(n))return "ts808";
@@ -1400,8 +1411,10 @@ function autoAmpSkin(name){
  if(/\b(?:fuzz|bender|octavio|octavia|overdrive pedal|boost pedal|kingsley|pedals?)\b/.test(n))return "pedal";
  if(/gibson|gbsn|ga[-_ ]?40/.test(n))return "gibson";
  if(/mesa|boogie|mesab|mark[-_ ]?(?:i{1,3}|iv|v)\b/.test(n))return "mesa";
- if(/soldano|slo[-_ ]?100/.test(n))return "hiewatt";
- if(/bassman|blbm|tweed|5e[358]|deluxe.*(?:57|1957)|(?:57|1957).*deluxe/.test(n))return "tweed";
+ if(/soldano|slo[-_ ]?100/.test(n))return "generic";
+ if(/blbm|blonde.*bassman/.test(n))return "generic";
+ if(/bfbm|blackface.*bassman/.test(n))return "blackface";
+ if(/tweed|twbm|5e[358]|deluxe.*(?:57|1957)|(?:57|1957).*deluxe/.test(n))return "tweed";
  if(/twin[-_ ]?reverb/.test(n)&&! /blackface|black.face/.test(n))return "silverface";
  if(/silverface|silver.face|sf[-_ ]|197[0-9].*fender/.test(n))return "silverface";
  if(/tone.king|imperial|tkimp/.test(n))return "boutique";
@@ -1436,7 +1449,7 @@ function updateAmpArtwork(name){
  el("ampAppearance").title="Appearance: "+ampSkins[key].name;el("ampAppearance").hidden=!name;
  if(show){const k=artworkChoice(second),sig=k+":"+(state?.amp_art?.[k]||"svg");
  el("secondUnit").classList.toggle("is-pedal",isPedalSkin(k));
- el("secondName").textContent=second.split("/").pop().replace(/\.nam$/i,"");
+ el("secondName").textContent=smartName(second);
  if(secondArtworkKey!==sig){putAmpArt(el("secondArtwork"),k);secondArtworkKey=sig;}
  el("secondAppearance").title="Appearance: "+ampSkins[k].name;
  }else{el("secondArtwork").replaceChildren();secondArtworkKey="";}

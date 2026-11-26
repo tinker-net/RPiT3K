@@ -108,3 +108,6 @@ The Space key now toggles play/pause/resume; the separate Stop button returns to
 
 ### Practice transport controls
 Space play/pause/resume; Enter restart from selected reference; period stop; U clear selection; Home beginning; Left/Right jump 5 seconds (Shift 1 second); L loop. Drag waveform to select a loop, drag edges to adjust or inside to move; click/double-click to clear selection and place reference. Ctrl/Cmd-wheel or +/- zoom, pan slider scrolls visible range. Waveform remains the cached 1200-point envelope, so zoom enlarges existing data rather than adding sample detail. Transport timing remains approximate; changes may restart FFmpeg. Inspired by https://www.seventhstring.com/xscribe/faq3.html, with Space intentionally configured for resume.
+
+### Smart Library model recognition
+Catalog identities take precedence over incidental pedal words in amp captures. BLBM, BFBM and TWBM identify distinct Bassman variants. Unknown artwork uses existing family or generic fallback. Original files unchanged. Model codes and EQ terminology based on https://amalgamcaptures.com/how-it-works/ and the published amp catalog. Manual appearance overrides remain authoritative.
