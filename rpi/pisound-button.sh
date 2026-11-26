@@ -4,7 +4,7 @@ action="${0##*/}"; action="${action#rpit3k-button-}"
 source /usr/local/pisound/scripts/common/common.sh
 exec 9>/run/lock/rpit3k-button.lock
 flock -w 35 9
-api=http://127.0.0.1:8080/api
+api=http://127.0.0.1/api
 post(){ curl --noproxy '*' --silent --show-error --fail-with-body --max-time 35 -X POST -H 'X-RPiT3K: 1' "$api/$1"; }
 status(){ curl --noproxy '*' --silent --show-error --fail --max-time 10 "$api/status"; }
 flashes(){ local n="$1"; [[ "$n" =~ ^[1-4]$ ]] || return 1; for ((i=0;i<n;i++)); do flash_leds 10; sleep .60; done; }

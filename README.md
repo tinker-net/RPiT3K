@@ -11,7 +11,7 @@ RPiT3K is inspired by the [TONE3000 × Daisy DIY Pedal](https://github.com/tone-
 | [rpi-ui](https://github.com/tinker-net/RPiT3K/tree/rpi-ui) | Raspberry Pi + Blokas Pisound | rpit3k | Pi 5: 64 × 3 |
 | [rpi-general](https://github.com/tinker-net/RPiT3K/tree/rpi-general) | 64-bit Debian/Ubuntu/Pi OS, configurable ALSA | rpit3k-general | 256 × 3 |
 
-Both source editions share features; Pi 5 is the measured baseline, generic hardware remains experimental. Use separate checkouts/data; do not run both services on port 8080. Historical branches and Debian packaging are not guaranteed current.
+Both source editions share features; Pi 5 is the measured baseline, generic hardware remains experimental. Use separate checkouts/data; avoid sharing audio hardware; PiSound uses port 80 and generic uses port 8080. Historical branches and Debian packaging are not guaranteed current.
 
 ## Features
 - Two independent serial NAM slots, automatic compatible A2 Embedded/Core dispatch, Full/Lite selection, native .nam.

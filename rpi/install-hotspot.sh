@@ -18,4 +18,4 @@ printf '[Unit]\nDescription=RPiT3K fallback Wi-Fi check\nAfter=NetworkManager.se
 printf '[Unit]\nDescription=Check for missing network on RPiT3K\n\n[Timer]\nOnBootSec=60s\nOnUnitActiveSec=30s\n\n[Install]\nWantedBy=timers.target\n' | sudo tee /etc/systemd/system/rpit3k-hotspot.timer >/dev/null
 sudo systemctl daemon-reload
 sudo systemctl enable --now rpit3k-hotspot.timer
-echo "Fallback hotspot RPiT3K: http://10.42.0.1:8080"
+echo "Fallback hotspot RPiT3K: http://10.42.0.1"

@@ -40,8 +40,10 @@ fi
 if [[ "$bind" == 0.0.0.0 ]]; then
  echo "WARNING: unauthenticated HTTP on the local network. Use only on a trusted isolated LAN."
 fi
-printf '[Unit]\nDescription=RPiT3K native pedal\nAfter=sound.target\n\n[Service]\nType=simple\nUser=%s\nSupplementaryGroups=audio\nWorkingDirectory=%s\nExecStart=/usr/bin/python3 %s/rpi/server.py --device hw:CARD=pisound,DEV=0 --bind %s --no-auth %s --data %s/.local/share/rpit3k\nLimitRTPRIO=60\nRestart=on-failure\nRestartSec=3\nUMask=0077\n\n[Install]\nWantedBy=multi-user.target\n' "$user" "$root" "$root" "$bind" "$cloud" "$home" | sudo tee /etc/systemd/system/rpit3k.service >/dev/null
+printf '[Unit]\nDescription=RPiT3K native pedal\nAfter=sound.target\n\n[Service]\nType=simple\nUser=%s\nSupplementaryGroups=audio\nWorkingDirectory=%s\nExecStart=/usr/bin/python3 %s/rpi/server.py --device hw:CARD=pisound,DEV=0 --bind %s --port 80 --no-auth %s --data %s/.local/share/rpit3k\nAmbientCapabilities=CAP_NET_BIND_SERVICE\n\nLimitRTPRIO=60\nRestart=on-failure\nRestartSec=3\nUMask=0077\n\n[Install]\nWantedBy=multi-user.target\n' "$user" "$root" "$root" "$bind" "$cloud" "$home" | sudo tee /etc/systemd/system/rpit3k.service >/dev/null
 sudo install -m 755 "$root/rpi/next-preset.sh" /usr/local/bin/rpit3k-next
+# Refresh existing physical button helper even without reinstalling mappings.
+if [[ -f /usr/local/bin/rpit3k-button ]]; then sudo install -m 755 "$root/rpi/pisound-button.sh" /usr/local/bin/rpit3k-button; fi
 if [[ "$button" == yes ]]; then
  bash "$root/rpi/install-button.sh"
 fi
@@ -51,8 +53,8 @@ sudo systemctl restart rpit3k.service
 sudo systemctl --no-pager status rpit3k.service
 # Audio intentionally starts stopped; verify controller readiness only.
 for attempt in $(seq 1 30); do
- if curl --noproxy '*' --silent --fail --max-time 2 http://127.0.0.1:8080/api/status | python3 -c 'import json,sys; s=json.load(sys.stdin); sys.exit(not (s.get("running") is False and s.get("active") is None and len(s.get("presets",{}))==4))' 2>/dev/null; then
-  echo "Controller ready; audio intentionally OFF. Open http://127.0.0.1:8080 and start audio to verify ALSA."
+ if curl --noproxy '*' --silent --fail --max-time 2 http://127.0.0.1/api/status | python3 -c 'import json,sys; s=json.load(sys.stdin); sys.exit(not (s.get("running") is False and s.get("active") is None and len(s.get("presets",{}))==4))' 2>/dev/null; then
+  echo "Controller ready; audio intentionally OFF. Open http://127.0.0.1 and start audio to verify ALSA."
   exit 0
  fi
  sleep 1

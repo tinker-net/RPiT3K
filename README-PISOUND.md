@@ -22,9 +22,9 @@ Installer installs dependencies, pins NAM Core, compiles, runs CTest and offline
 
 Default loopback HTTP; SSH tunnel from another computer:
 ```sh
-ssh -N -L 8080:127.0.0.1:8080 USER@HOST
+ssh -N -L 8080:127.0.0.1:80 USER@HOST
 ```
-Open http://localhost:8080. Explicit --lan at install exposes unauthenticated HTTP to the trusted isolated LAN, including library and cloud/power access. Never expose to Internet/untrusted network. For existing build use bash rpi/install-service.sh --lan; repeat --button/--cloud if desired.
+Open http://localhost:8080 through the SSH tunnel, or http://HOST directly in LAN mode (port 80). Existing source installations can migrate without changing their configuration using `bash rpi/migrate-http-port.sh`. Explicit --lan at install exposes unauthenticated HTTP to the trusted isolated LAN, including library and cloud/power access. Never expose to Internet/untrusted network. For existing build use bash rpi/install-service.sh --lan; repeat --button/--cloud if desired.
 
 ## First use
 
