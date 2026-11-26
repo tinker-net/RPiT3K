@@ -50,6 +50,45 @@ class FXTests(unittest.TestCase):
         values=list(map(float,lines[3].split()))
         self.assertEqual(len(values),20)
         for i in (6,8,14,17):self.assertAlmostEqual(values[i],.73)
+    def test_physical_stomp(self):
+        import json
+        self.c.file=lambda *args: self.statefile
+        self.statefile.touch()
+        self.c.settings={"last":"1"}
+        self.c.presets["1"].update(model="drive.nam",second="amp.nam",bypass=False)
+        before=dict(self.c.presets["1"])
+        self.c.toggle_stomp()
+        self.assertEqual(self.c.proc.stdin.getvalue(),"STOMP 0\n")
+        self.assertEqual(self.c.presets["1"],dict(before,nam1_enabled=False))
+        self.assertFalse(json.loads(self.c.statefile.read_text())["1"]["nam1_enabled"])
+        self.c.toggle_stomp()
+        self.assertEqual(self.c.proc.stdin.getvalue(),"STOMP 0\nSTOMP 1\n")
+        self.assertEqual(self.c.presets["1"],before)
+    def test_physical_stomp_audio_off(self):
+        self.c.file=lambda *args: self.statefile
+        self.statefile.touch()
+        self.c.settings={"last":"1"}
+        self.c.presets["1"].update(model="drive.nam",bypass=False)
+        self.c.proc=None
+        self.c.active=None
+        self.c.toggle_stomp()
+        self.assertFalse(self.c.presets["1"]["nam1_enabled"])
+        self.assertIsNone(self.c.proc)
+    def test_physical_stomp_without_capture(self):
+        self.c.settings={"last":"1"}
+        with self.assertRaises(ValueError):self.c.toggle_stomp()
+        self.assertEqual(self.c.proc.stdin.getvalue(),"")
+    def test_physical_preset_cycle_audio_off(self):
+        self.c.presets={str(i):dict(DEFAULT) for i in range(1,5)}
+        self.c.settings={"last":"1"}
+        self.c.proc=None
+        self.c.active=None
+        self.c.tuner_return=None
+        self.c.persist_settings=Mock()
+        for expected in ("2","3","4","1"):
+            self.c.next_preset()
+            self.assertEqual(self.c.settings["last"],expected)
+            self.assertIsNone(self.c.proc)
     def test_bad_values(self):
         for value in (float("nan"),float("inf"),-1,2,".5",True,0):
             p=dict(DEFAULT,comp_amount=value)
