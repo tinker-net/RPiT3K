@@ -340,6 +340,7 @@ for(const k of fxKeys)el(k).addEventListener("input",()=>{fxLabels();queueLive()
 let lastHizAmount=.77;el("hizToggle").onchange=()=>{if(el("hizToggle").checked)el("hiz").value=lastHizAmount;else{if(Number(el("hiz").value)>0)lastHizAmount=Number(el("hiz").value);el("hiz").value=0;}fxLabels();queueLive();};
 let treeKey=null;const openFolders=new Set();let libraryTarget="";
 let state,slot="1",busy=false,settingsInitialized=false,lastActive=null,liveTimer=null,liveBusy=false,livePending=null;
+let calibrationKey="",calibrationResult=null,calibrationError="";
 for(const [key,[min,max,step]] of Object.entries(ranges)){
  const label=document.createElement("div"),out=document.createElement("input"),input=document.createElement("input");
  const title=document.createElement("span"),dial=document.createElement("div"),cap=document.createElement("div");
@@ -371,6 +372,7 @@ function read(){const p={model:el("model").value,second:el("second").value,ir:el
  for(const k of ["slim","slim2",...controlKeys])p[k]=Number(el(k).value);return p;}
 function queueLive(){
  if(!state||busy)return;
+ refreshCalibration();
  livePending={slot,preset:read()};
  clearTimeout(liveTimer);liveTimer=setTimeout(()=>sendLive(),80);
 }
@@ -388,6 +390,24 @@ async function flushLive(){
   else await sendLive(true);
  }
 }
+function drawCalibration(){
+ const e=el("calibrationInfo");if(!el("model").value){e.textContent="";return;}
+ if(calibrationError){e.textContent=calibrationError;return;}
+ if(!calibrationResult){e.textContent="Reading capture reference…";return;}
+ const r=calibrationResult,g=Number(el("input").value),current=g>0?20*Math.log10(g):-Infinity;
+ const fmt=v=>Number.isFinite(v)?(v>0?"+":"")+v.toFixed(2):"−∞";
+ e.textContent="ADC "+fmt(r.reference_dbu)+" dBu · NAM "+fmt(r.model_dbu)+" dBu · Target "+fmt(r.db)+" dB · Current "+fmt(current)+" dB"+(Math.abs(current-r.db)<.05?" (matches reference)":" (not matched)");
+}
+function refreshCalibration(){
+ if(!state)return;
+ const model=el("model").value,ref=state.settings.reference_dbu,key=JSON.stringify([model,ref]);
+ if(key!==calibrationKey){
+  calibrationKey=key;calibrationResult=null;calibrationError="";
+  if(model&&ref==null)calibrationError="Set the ADC full-scale reference in Audio settings.";
+  else if(model)request("/api/calibrate",JSON.stringify({model})).then(r=>{if(key===calibrationKey){calibrationResult=r;drawCalibration();}}).catch(e=>{if(key===calibrationKey){calibrationError=e.message;drawCalibration();}});
+ }
+ drawCalibration();
+}
 function status(){
  if(state&&typeof ampArtworkKey!=="undefined")updateAmpArtwork(el("model").value);
  el("poweroff").disabled=busy||!state.poweroff_enabled;el("poweroff").title=state.poweroff_enabled?"Power options":"Power controls not enabled; see installation guide";el("calibrate").disabled=busy;
@@ -399,7 +419,7 @@ function status(){
  const tuning=state.running&&state.active===null;el("ampView").hidden=tuning;el("tunerView").hidden=!tuning;el("tuner").classList.toggle("selected",tuning);el("tuner").setAttribute("aria-pressed",String(tuning));
  el("tuner").disabled=busy; if(!tuning)drawPitch(null);
  el("slots").replaceChildren();renderTree();
- for(const k of Object.keys(state.presets)){const b=document.createElement("button");b.textContent=k;b.setAttribute("aria-pressed",String(k===slot));b.className=k===slot?"selected":"";b.disabled=busy;b.onclick=()=>{if(k===slot)return;action(async()=>{slot=k;render(state.presets[k]);state=await request("/api/edit",JSON.stringify({slot,preset:read()}));lastActive=k;});};el("slots").append(b);}updateAmp();
+ for(const k of Object.keys(state.presets)){const b=document.createElement("button");b.textContent=k;b.setAttribute("aria-pressed",String(k===slot));b.className=k===slot?"selected":"";b.disabled=busy;b.onclick=()=>{if(k===slot)return;action(async()=>{const previous=slot;slot=k;render(state.presets[k]);try{state=await request("/api/edit",JSON.stringify({slot,preset:read()}));lastActive=k;}catch(e){slot=previous;render(state.presets[slot]);throw e;}});};el("slots").append(b);}updateAmp();refreshCalibration();
 }
 async function action(fn){if(busy)return;busy=true;await flushLive();for(const id of ["save","status","uploadBtn","tuner","calibrate","audioSettings"])el(id).disabled=true;
  el("message").textContent="Working…";try{await fn();el("message").textContent="Done";}catch(e){el("message").textContent=e.message;}
@@ -415,7 +435,7 @@ el("calibrate").onclick=async()=>{
   const r=await request("/api/calibrate",JSON.stringify({model}));
   if(slot!==selectedSlot||el("model").value!==model)return;
   el("input").value=r.gain;el("input").refreshDial();
-  el("calibrationInfo").textContent="Input "+r.db.toFixed(2)+" dB · ADC reference "+r.reference_dbu+" dBu";el("message").textContent=el("calibrationInfo").textContent;
+  calibrationResult=r;calibrationError="";drawCalibration();el("message").textContent="Reference correction applied to input gain";
   queueLive();
  }catch(e){el("message").textContent=e.message;}
 };
@@ -444,7 +464,7 @@ el("poweroff").onclick=async()=>{
 el("uploadBtn").onclick=()=>{if(!busy)el("upload").click();};
 el("folderBrowse").onclick=()=>{if(!busy)el("uploadFolder").click();};
 el("upload").onchange=()=>{const entries=Array.from(el("upload").files,f=>({file:f,path:f.name}));el("upload").value="";importEntries(entries);};
-(async()=>{try{state=await request("/api/status");slot=state.active||state.settings.last||slot;render(state.presets[slot]);status();setInterval(async()=>{if(!busy){try{const s=await request("/api/status");if(!busy){state=s;status();}}catch(e){el("status").textContent="Disconnected";el("status").disabled=true;el("calibrate").disabled=true;el("poweroff").disabled=true;el("tuner").disabled=true;el("tuner").classList.remove("selected");el("tuner").setAttribute("aria-pressed","false");drawPitch(null);el("status").classList.remove("audio-active");el("status").setAttribute("aria-pressed","false");el("xruns").textContent="—";el("xrunMetric").classList.remove("xrun-ok","xrun-warn");clearTelemetryColors();}}},2000);}catch(e){el("message").textContent=e.message;}})();
+(async()=>{try{state=await request("/api/status");slot=state.active||state.settings.last||slot;render(state.presets[slot]);status();setInterval(async()=>{if(!busy&&!liveBusy&&!livePending){try{const s=await request("/api/status");if(!busy&&!liveBusy&&!livePending){state=s;status();}}catch(e){el("status").textContent="Disconnected";el("status").disabled=true;el("calibrate").disabled=true;el("poweroff").disabled=true;el("tuner").disabled=true;el("tuner").classList.remove("selected");el("tuner").setAttribute("aria-pressed","false");drawPitch(null);el("status").classList.remove("audio-active");el("status").setAttribute("aria-pressed","false");el("xruns").textContent="—";el("xrunMetric").classList.remove("xrun-ok","xrun-warn");clearTelemetryColors();}}},2000);}catch(e){el("message").textContent=e.message;}})();
 
 function ampStyle(name){const n=name.toLowerCase();if(/orange|or120|rv100|rocker/.test(n))return ["orange","ORANGE"];if(/vox|\bvx\b|ac30|tb30|matchless|chieftain/.test(n))return ["diamond","BRITISH CLASS A"];if(/fender|super reverb|panoverb|bfsr|deluxe|bassman|tone king/.test(n))return ["silver","AMERICAN"];if(/marshall|jtm|jt50|mrsh|plexi/.test(n))return ["gold","BRITISH"];return ["black","NAM"];}
 function updateAmp(){refreshCaptureFields();el("irBlendRow").hidden=!(el("ir2").value&&(el("ir").value||/\.wav$/i.test(el("second").value)));const name=el("model").value;updateAmpArtwork(name);el("ampName").textContent=name?name.split("/").pop().replace(/\.nam$/i,""):"No capture selected";el("ampCaption").textContent=el("bypass").checked?"BYPASS · Start to activate":name?"":"Import a NAM capture to begin";el("currentTitle").textContent="Preset "+slot+" · "+(name?name.split("/").pop().replace(/\.nam$/i,""):"Empty");}
