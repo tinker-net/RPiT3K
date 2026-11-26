@@ -4,6 +4,9 @@
 #include <atomic>
 #include <mutex>
 #include <array>
+#include <juce_gui_extra/juce_gui_extra.h>
+#include "BinaryData.h"
+#include <map>
 
 class Ton3k final : public juce::AudioProcessor, private juce::Timer {
 public:
@@ -73,7 +76,7 @@ public:
     juce::AudioProcessorEditor* createEditor() override;
     void getStateInformation(juce::MemoryBlock& b) override{
         auto tree=state.copyState();{std::lock_guard<std::mutex> lock(configLock);
-        for(int i=0;i<4;++i)tree.setProperty("file"+juce::String(i),paths[i],nullptr);}
+        for(int i=0;i<4;++i)tree.setProperty("file"+juce::String(i),paths[i],nullptr); tree.setProperty("webSlots",juce::String(savedSlots.dump()),nullptr); tree.setProperty("webActive",activeSlot,nullptr); nlohmann::json lib=nlohmann::json::object();for(const auto& [k,v]:library)lib[k.toStdString()]=v.toStdString();tree.setProperty("webLibrary",juce::String(lib.dump()),nullptr);}
         if(auto xml=tree.createXml())copyXmlToBinary(*xml,b);
     }
     void setStateInformation(const void* data,int size) override{
@@ -82,10 +85,70 @@ public:
                 state.replaceState(t);
                 std::lock_guard<std::mutex> lock(configLock);
                 for(int i=0;i<4;++i)paths[i]=t.getProperty("file"+juce::String(i)).toString();
-                dirty=true;
+                try{savedSlots=nlohmann::json::parse(t.getProperty("webSlots","{}").toString().toStdString());activeSlot=juce::jlimit(1,4,int(t.getProperty("webActive",1)));auto lib=nlohmann::json::parse(t.getProperty("webLibrary","{}").toString().toStdString());library.clear();for(auto it=lib.begin();it!=lib.end();++it)library[juce::String(it.key())]=juce::String(it.value().get<std::string>());}catch(...){savedSlots=nlohmann::json::object();}dirty=true;
             }
         }
     }
+    std::map<juce::String,juce::String> library;
+    nlohmann::json savedSlots=nlohmann::json::object();
+    int activeSlot=1;
+
+    using Json=nlohmann::json;
+    static constexpr const char* webKeys[]={"input","output","bass","mid","treble","gate","comp","comp_post","reverb","decay","reverb_type","ir_mix","hiz","hiz_profile","chorus","chorus_rate","chorus_depth","delay","delay_ms","delay_feedback"};
+    void importFile(const juce::File& file){
+        std::lock_guard<std::mutex> lock(configLock);
+        auto name=file.getFileName();int n=2;
+        while(library.count(name)&&library[name]!=file.getFullPathName())name=file.getFileNameWithoutExtension()+" ("+juce::String(n++)+")"+file.getFileExtension();
+        library[name]=file.getFullPathName();
+    }
+    Json webPreset(){
+        Json j=Json::object();
+        for(int i=0;i<20;++i)j[webKeys[i]]=v(i);
+        j["nam1_enabled"]=v(20)>.5f;j["bypass_nam2"]=v(21)<.5f;j["bypass_ir"]=v(22)<.5f;
+        j["slim"]=1;j["slim2"]=1;
+        const char* keys[]={"model","second","ir","ir2"};
+        for(int i=0;i<4;++i){
+            j[keys[i]]="";
+            if(paths[i].isNotEmpty()){
+                auto it=std::find_if(library.begin(),library.end(),[&](const auto& kv){return kv.second==paths[i];});
+                if(it!=library.end())j[keys[i]]=it->first.toStdString();
+                else{auto f=juce::File(paths[i]);auto k=f.getFileName();int n=2;while(library.count(k)&&library[k]!=paths[i])k=f.getFileNameWithoutExtension()+" ("+juce::String(n++)+")"+f.getFileExtension();library[k]=paths[i];j[keys[i]]=k.toStdString();}
+            }
+        }
+        auto key=std::to_string(activeSlot);
+        if(savedSlots.contains(key))for(auto* k:{"comp","chorus","delay","reverb","hiz"}){auto a=std::string(k)+"_amount";if(savedSlots[key].contains(a))j[a]=savedSlots[key][a];}
+        return j;
+    }
+    Json webStatus(){
+        std::lock_guard<std::mutex> lock(configLock);
+        auto currentPreset=webPreset();savedSlots[std::to_string(activeSlot)]=currentPreset;
+        for(int i=1;i<=4;++i){auto key=std::to_string(i);if(!savedSlots.contains(key)){auto empty=currentPreset;for(auto* k:{"model","second","ir","ir2"})empty[k]="";savedSlots[key]=empty;}}
+        Json files=Json::array();for(const auto& kv:library)files.push_back(kv.first.toStdString());
+        return Json{{"files",files},{"folders",Json::array()},{"favorites",Json::array()},{"presets",savedSlots},{"active",std::to_string(activeSlot)},{"settings",{{"last",std::to_string(activeSlot)},{"reference_dbu",nullptr}}},{"running",supported.load()},{"logs",Json::array({message.toStdString()})},{"cloud_enabled",false},{"poweroff_enabled",false},{"amp_art",Json::object()}};
+    }
+    Json webRequest(const juce::String& path,const juce::String& body){
+        if(path=="/api/status")return webStatus();
+        if(path=="/api/levels")return Json{{"valid",supported.load()},{"input",inputPeak.exchange(0)},{"output",outputPeak.exchange(0)}};
+        auto j=body.isEmpty()?Json::object():Json::parse(body.toStdString());
+        if(path=="/api/edit"||path=="/api/save"){
+            auto pr=j.at("preset");
+            std::lock_guard<std::mutex> lock(configLock);
+            int next=std::stoi(j.at("slot").get<std::string>());if(next<1||next>4)throw std::runtime_error("Invalid preset");
+            juce::String newPaths[4];const char* keys[]={"model","second","ir","ir2"};
+            for(int i=0;i<4;++i){auto k=juce::String(pr.value(keys[i],std::string{}));if(k.isNotEmpty()){auto it=library.find(k);if(it==library.end())throw std::runtime_error("File not in library");newPaths[i]=it->second;}}
+            for(int i=0;i<4;++i)if(paths[i]!=newPaths[i]){paths[i]=newPaths[i];dirty=true;}
+            activeSlot=next;savedSlots[std::to_string(next)]=pr;
+            auto set=[&](int i,float x){if(auto* q=state.getParameter(ids[i])){auto norm=q->convertTo0to1(x);if(std::abs(q->getValue()-norm)>1e-7f){q->beginChangeGesture();q->setValueNotifyingHost(norm);q->endChangeGesture();}}};
+            for(int i=0;i<20;++i)if(pr.contains(webKeys[i])&&pr[webKeys[i]].is_number())set(i,pr[webKeys[i]].get<float>());
+            set(20,pr.value("nam1_enabled",true)?1:0);set(21,pr.value("bypass_nam2",false)?0:1);set(22,pr.value("bypass_ir",false)?0:1);
+        }else if(path=="/api/capture-info"){
+            juce::String file;{std::lock_guard<std::mutex> lock(configLock);auto it=library.find(juce::String(j.at("model").get<std::string>()));if(it==library.end())throw std::runtime_error("Unknown capture");file=it->second;}
+            std::ifstream f(std::filesystem::u8path(file.toStdString()));Json raw;f>>raw;
+            raw.erase("weights");if(raw.contains("config"))raw.erase("config");return raw;
+        }else throw std::runtime_error("Not available in VST3 preview");
+        return webStatus();
+    }
+
     std::atomic<float> inputPeak{0},outputPeak{0};
     void select(int slot,juce::String file){std::lock_guard<std::mutex> lock(configLock);paths[slot]=file;dirty=true;}
     juce::String status(){std::lock_guard<std::mutex> lock(configLock);return juce::String(supported.load()?"48 kHz | ":"Set DAW to 48 kHz (dry bypass) | ")+message;}
@@ -262,5 +325,57 @@ public:
         inMeter=std::max(inMeter*.82f,p.inputPeak.exchange(0));outMeter=std::max(outMeter*.82f,p.outputPeak.exchange(0));repaint();
     }
 };
-juce::AudioProcessorEditor* Ton3k::createEditor(){return new Editor(*this);}
+
+class WebEditor final:public juce::AudioProcessorEditor{
+    using Browser=juce::WebBrowserComponent;
+    Ton3k& p;
+    std::unique_ptr<juce::FileChooser> chooser;
+    std::unique_ptr<Browser> browser;
+    std::unique_ptr<Editor> fallback;
+    juce::TextButton switcher{"Native controls"};
+    Browser::Options options(){
+        auto o=Browser::Options{}.withNativeIntegrationEnabled()
+            .withResourceProvider([](const juce::String& path)->std::optional<Browser::Resource>{
+                if(path!="/"&&path!="/plugin.html")return std::nullopt;
+                auto* begin=reinterpret_cast<const std::byte*>(BinaryData::plugin_html);
+                return Browser::Resource{std::vector<std::byte>(begin,begin+BinaryData::plugin_htmlSize),"text/html"};
+            })
+            .withNativeFunction("ton3k",[this](const juce::Array<juce::var>& args,Browser::NativeFunctionCompletion done){
+                try{
+                    if(args.size()<2)throw std::runtime_error("Invalid request");
+                    auto path=args[0].toString();
+                    if(path=="/plugin/import"){
+                        chooser=std::make_unique<juce::FileChooser>("Import NAM and WAV files",juce::File{},"*.nam;*.wav");
+                        auto safe=juce::Component::SafePointer<WebEditor>(this);
+                        chooser->launchAsync(juce::FileBrowserComponent::openMode|juce::FileBrowserComponent::canSelectFiles|juce::FileBrowserComponent::canSelectMultipleItems,[safe,done](const juce::FileChooser& c){
+                            if(safe==nullptr)return;
+                            for(auto& f:c.getResults())if(f.existsAsFile()&&(f.hasFileExtension("nam")||f.hasFileExtension("wav")))safe->p.importFile(f);
+                            done(juce::String(safe->p.webStatus().dump()));
+                        });return;
+                    }
+                    done(juce::String(p.webRequest(path,args[1].toString()).dump()));
+                }catch(const std::exception& e){done(juce::String(Ton3k::Json{{"error",e.what()}}.dump()));}
+            });
+        #if JUCE_WINDOWS
+        o=o.withBackend(Browser::Options::Backend::webview2);
+        #endif
+        return o;
+    }
+    void toggle(){
+        if(!fallback){fallback=std::make_unique<Editor>(p);addAndMakeVisible(*fallback);if(browser)browser->setVisible(false);switcher.setButtonText("Original UI");}
+        else if(browser){fallback.reset();browser->setVisible(true);switcher.setButtonText("Native controls");}
+        resized();
+    }
+public:
+    explicit WebEditor(Ton3k& proc):AudioProcessorEditor(proc),p(proc){
+        auto o=options();
+        if(Browser::areOptionsSupported(o)){browser=std::make_unique<Browser>(o);addAndMakeVisible(*browser);browser->goToURL(Browser::getResourceProviderRoot());}
+        else{fallback=std::make_unique<Editor>(p);addAndMakeVisible(*fallback);switcher.setEnabled(false);}
+        addAndMakeVisible(switcher);switcher.onClick=[this]{toggle();};
+        setResizable(true,true);setResizeLimits(760,600,1800,1200);setSize(1200,780);
+    }
+    void resized() override{auto r=getLocalBounds();switcher.setBounds(r.removeFromTop(24).removeFromRight(150));if(browser)browser->setBounds(r);if(fallback)fallback->setBounds(r);}
+};
+
+juce::AudioProcessorEditor* Ton3k::createEditor(){return new WebEditor(*this);}
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter(){return new Ton3k();}
