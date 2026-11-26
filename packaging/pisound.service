@@ -1,0 +1,22 @@
+[Unit]
+Description=Ton3K dedicated Pisound guitar processor
+After=sound.target network.target
+
+[Service]
+Type=simple
+User=rpi-ton3k-pisound
+SupplementaryGroups=audio
+StateDirectory=rpi-ton3k-pisound
+StateDirectoryMode=0700
+EnvironmentFile=/etc/default/rpi-ton3k-pisound
+Environment=RPIT3K_ENABLE_POWEROFF=1
+ExecStart=/usr/bin/python3 /usr/lib/rpi-ton3k/rpi/server.py --data /var/lib/rpi-ton3k-pisound --bind ${BIND} --port 8080 --device hw:CARD=pisound,DEV=0 --no-auth $CLOUD
+LimitRTPRIO=60
+UMask=0077
+Restart=on-failure
+RestartSec=3
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
