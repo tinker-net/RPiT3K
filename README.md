@@ -29,11 +29,11 @@ Both source editions share features; Pi 5 is the measured baseline, generic hard
 
 | Measurement | Result | Scope |
 |---|---|---|
-| CTest | 7/7 PASS, 3.41 s | Pi 5, 4b4a4be, 2026-11-26 |
+| CTest | 8/8 PASS, 3.48 s | Pi 5, bf45495, 2026-11-26 |
 | Reverb calibration | 24/24; max 41.75 ms / 6.39% errors | T30 estimates, synthetic |
 | Compressor | max 0.004902 dB static error | synthetic DC curve |
 | Delay | exact tested integer echo indices | 20–1000 ms, three feedback settings |
-| Combined effects | 10 s in 92.080 ms | DSP-only automation, not ALSA deadline |
+| Combined effects | 10 s in 92.095 ms | DSP-only automation, not ALSA deadline |
 | IR convolution | max 3.97309e-7 absolute error | 1–48000 taps |
 | Hybrid NAM | 16/16 null tests | earlier Pi build, tested captures |
 | OAuth | 8/8 mock tests | no real server/reboot validation |

@@ -147,3 +147,23 @@ Source: user-provided validation-daisysp-calibrated.log, HWW-RPiT3K, rpi-ui 4b4a
 Compressor, delay, chorus and all previous regression groups passed again with unchanged logged static measurements. Combined effects automation: 10 s audio, elapsed .09208042 s, realtime percentage .9208042, peak .455166, energy 3698.036. Prior run .09216136 s; single-run timing difference is not a statistically established performance change. No ALSA deadline claim.
 
 Five effect preset tests passed: bad values, bypass/restore, legacy decay migration, legacy amount migration, live protocol and disk persistence. Eight mocked OAuth tests passed again. Tests verify server state and effective native values, not browser appearance or actual physical playback. Remaining validation: listening, real service/reboot OAuth, ALSA xruns and generic edition hardware. No production changes in this documentation update.
+
+
+## Consolidated regression — measured 2026-11-26
+
+User-provided validation-consolidated.log, rpi-ui bf454958beece27f884513d0f9ff7b7f9d06270a. Incremental build successful; CTest 8/8 PASS, zero failures, 3.48 s. Individual times: metronome .00, calibration .06, native DSP .30, live exchange .02, DaisySP 2.54, OAuth .33, effect state .14, production chain .08 s. Existing numerical measurements reproduced; combined FX 10 s elapsed .09209452 s (.9209452% of audio duration), peak .455166, energy 3698.036. CMake FetchContent_Populate deprecation warning remains nonfatal.
+
+New production_chain: synthetic Linear identity NAM(s), mono PCM16 WAV IRs, 4096 float32 samples per render, 64-frame blocks, input 1/output .25. NAM Core selected. Maximum absolute residual against bypass or independent single-IR linear blend:
+
+| Case | Max absolute residual |
+|---|---:|
+| First identity NAM | 0 |
+| Second identity NAM | 0 |
+| Two identity NAMs | 0 |
+| IR blend 0 | 0 |
+| IR blend .25 | 1.3980924526561137e-7 |
+| IR blend .5 | 2.100261135146164e-9 |
+| IR blend 1 | 2.5106898782212284e-9 |
+| NAM/IR bypass | 0 |
+
+All within 2e-6 tolerance. Distinct IR response check passed. Identity NAM comparison alone cannot establish that both nonlinear stages are applied in order; this test is a routing smoke test, not proof of arbitrary capture correctness. No new real ALSA, installer, browser, OAuth network or generic hardware tests performed. No production changes in this evidence update.

@@ -92,7 +92,7 @@ Commercial models/IR not bundled. Null/hybrid tests require user-provided compat
 | daisysp_characterization | static compressor, delay echoes, chorus modulation, 24 calibrated reverb points, automation timing |
 | tonecloud_session | 8 mocked OAuth persistence/refresh cases |
 | effect_preset_state | 5 migration/bypass/live/disk checks |
-| production_chain | synthetic identity NAM, second-slot routing, dual IR and bypass through actual executable; new, pending run |
+| production_chain | synthetic identity NAM, second-slot routing, dual IR and bypass through actual executable; Pi 5 PASS at bf45495; identity-model smoke test, not nonlinear stage-order proof |
 
 Python tests require Python3 interpreter; install it to obtain complete suite. CI builds ARM64 and x86-64, runs CTest, bypass verification and script checks; workflow outcomes must be inspected before claiming CI passes. Neither CI nor synthetic tests replace real interface tests.
 
