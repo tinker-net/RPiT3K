@@ -5,6 +5,7 @@
 #include "../eq3band.h"
 #include "convolution.h"
 #include "live_rig.h"
+#include "metronome.h"
 #include "json.hpp"
 #include "tuner.h"
 #include "noise_gate.h"
@@ -334,6 +335,7 @@ int main(int argc,char** argv) {
             std::cerr<<"Realtime scheduling unavailable; continuing with normal priority\n";
         // Private nonblocking stdin pipe from the controller; fixed storage, bounded work.
         if(o.live){int flags=fcntl(STDIN_FILENO,F_GETFL);if(flags<0||fcntl(STDIN_FILENO,F_SETFL,flags|O_NONBLOCK)<0)throw std::runtime_error("Cannot configure live controls");}
+        PracticeMetronome metronome;
         char line[256]{}; unsigned used=0; bool overflow=false;
         auto poll_controls=[&]{
             if(!o.live)return;
@@ -342,7 +344,9 @@ int main(int argc,char** argv) {
             for(ssize_t k=0;k<n;++k){
                 if(buf[k]=='\n'){
                     if(!overflow){line[used]=0;float i,o,b,m,t,g,c,pos,wet,d,type,mix,hz,profile;char extra;
-                        if(std::sscanf(line,"%f %f %f %f %f %f %f %f %f %f %f %f %f %f %c",&i,&o,&b,&m,&t,&g,&c,&pos,&wet,&d,&type,&mix,&hz,&profile,&extra)==14)current->controls(i,o,b,m,t,g,c,pos,wet,d,type,mix,hz,profile);
+                        unsigned enabled,bpm,beats;float level;
+                        if(std::sscanf(line,"METRO %u %u %u %f %c",&enabled,&bpm,&beats,&level,&extra)==4&&enabled<=1)metronome.set(enabled!=0,bpm,beats,level);
+                        else if(std::sscanf(line,"%f %f %f %f %f %f %f %f %f %f %f %f %f %f %c",&i,&o,&b,&m,&t,&g,&c,&pos,&wet,&d,&type,&mix,&hz,&profile,&extra)==14)current->controls(i,o,b,m,t,g,c,pos,wet,d,type,mix,hz,profile);
                         else if(std::sscanf(line,"%f %f %f %f %f %f %f %f %f %f %f %f %c",&i,&o,&b,&m,&t,&g,&c,&pos,&wet,&d,&type,&mix,&extra)==12)current->controls(i,o,b,m,t,g,c,pos,wet,d,type,mix);
                         else if(std::sscanf(line,"%f %f %f %f %f %f %f %f %f %f %f %c",&i,&o,&b,&m,&t,&g,&c,&pos,&wet,&d,&type,&extra)==11)current->controls(i,o,b,m,t,g,c,pos,wet,d,type);}
                     used=0;overflow=false;
@@ -384,6 +388,7 @@ int main(int argc,char** argv) {
                 // Fade a single chain out/in rather than double its realtime CPU cost.
                 if(fade_in){for(unsigned i=0;i<64;++i)current->y[i]*=float(i)/63.f;fade_in=false;}
                 if(replacement)for(unsigned i=0;i<64;++i)current->y[block-64+i]*=float(63-i)/63.f;
+                metronome.mix(current->y,block,!current->tuning);
                 double us=std::chrono::duration<double,std::micro>(std::chrono::steady_clock::now()-dsp_start).count();
                 total_us+=us;worst_us=std::max(worst_us,us);++measured;if(us>1e6*block/rate)++late;
                 for(unsigned i=0;i<block;++i){meter[1]=std::max(meter[1],std::abs(current->y[i]));out_peak=std::max(out_peak,double(std::abs(current->y[i])));if(std::abs(current->y[i])>=.99999f)++clipped;}
