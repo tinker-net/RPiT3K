@@ -130,3 +130,7 @@ Both editions group device controls separately from gate, EQ, compressor and rev
 
 ## Native DaisySP effects
 Replaced custom compressor and FDN with pinned upstream DaisySP-LGPL Compressor and ReverbSc, shared library; original preset keys retained, reverb modes now damping voicings. Native build and listening validation pending. See rpi/vendor/daisysp/README.md.
+
+
+## DaisySP validation baseline — 2026-11-26
+User's Pi 5 build at cba64aa succeeded; all four CTest groups passed (0.38 s). Added detailed DSP and mock OAuth test targets; results pending. See [DAISYSP_VALIDATION.md](DAISYSP_VALIDATION.md) for numerical baseline, methodology and remaining hardware validation. No new branches.
