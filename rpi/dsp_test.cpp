@@ -41,6 +41,16 @@ int main(){
         v.set(0,1.f,type);for(int i=0;i<48000;++i)v.process(0);
         if(v.process(.25f)!=.25f)throw std::runtime_error("Reverb bypass recovery");
     }
+    RigChorus chorus; RigDelay delay;
+    for(float x:{-.3f,0.f,.2f})if(chorus.process(x)!=x||delay.process(x)!=x)throw std::runtime_error("Chorus/delay bypass");
+    delay.set(.5f,100.f,0.f);
+    for(int i=0;i<10000;++i)delay.process(0);
+    delay.process(.5f);float echo=0;
+    for(int i=1;i<=4800;++i)echo=delay.process(0);
+    if(!(echo>.2f&&echo<.3f))throw std::runtime_error("Delay impulse");
+    chorus.set(.5f,.8f,.5f);double difference=0;
+    for(int i=0;i<48000;++i){float x=.2f*std::sin(i*.1f),y=chorus.process(x);if(!std::isfinite(y))throw std::runtime_error("Chorus finite");difference+=std::abs(y-x);}
+    if(difference<1)throw std::runtime_error("Chorus modulation");
     std::cout<<"Native FX PASS\n";
     NoiseGate gate;
     for(float v:{-.2f,0.f,.00001f,.3f})if(gate.process(v)!=v)throw std::runtime_error("Gate OFF transparency");

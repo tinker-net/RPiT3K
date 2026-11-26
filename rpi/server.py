@@ -28,9 +28,9 @@ AMP_ART_KEYS = frozenset(("blackface","silverface","tweed","vox","orange","plexi
 AMP_ART_LIMIT = 2 * 1024 * 1024
 NAME = re.compile(r"[\w .()+@-]{1,180}", re.UNICODE)
 DEFAULT = dict(model="", second="", ir="", ir2="", ir_mix=.5, hiz=0, hiz_amount=.9, hiz_profile=0, slim=1, slim2=1, input=1, output=.15,
-               bass=0, mid=0, treble=0, gate=-81, comp=0, comp_post=0, reverb=0, decay=1.5, reverb_type=0, bypass=True)
+               bass=0, mid=0, treble=0, gate=-81, comp=0, comp_post=0, reverb=0, decay=1.5, reverb_type=0, chorus=0, chorus_rate=0.8, chorus_depth=0.5, delay=0, delay_ms=350, delay_feedback=0.35, bypass=True)
 RANGES = dict(hiz=(0,1), hiz_profile=(0,3), ir_mix=(0,1), slim=(0,1), slim2=(0,1), input=(0,2), output=(0,1),
-              bass=(-20,20), mid=(-15,15), treble=(-10,10), gate=(-81,-30), comp=(0,1), comp_post=(0,1), reverb=(0,1), decay=(.2,5), reverb_type=(0,2))
+              bass=(-20,20), mid=(-15,15), treble=(-10,10), gate=(-81,-30), comp=(0,1), comp_post=(0,1), reverb=(0,1), decay=(.2,5), reverb_type=(0,2), chorus=(0,1), chorus_rate=(0.1,5), chorus_depth=(0,1), delay=(0,1), delay_ms=(20,1000), delay_feedback=(0,0.85))
 
 class Controller:
     def __init__(self, args):
@@ -516,7 +516,7 @@ class Controller:
     def live_controls(self,slot,values):
         if slot!=self.active or self.proc is None or self.proc.poll() is not None:
             raise ValueError("Select the running preset first")
-        keys=("input","output","bass","mid","treble","gate","comp","comp_post","reverb","decay","reverb_type","ir_mix","hiz","hiz_profile")
+        keys=("input","output","bass","mid","treble","gate","comp","comp_post","reverb","decay","reverb_type","ir_mix","hiz","hiz_profile","chorus","chorus_rate","chorus_depth","delay","delay_ms","delay_feedback")
         p=dict(self.presets[slot])
         for k in keys:
             if k not in values: raise ValueError("Missing "+k)

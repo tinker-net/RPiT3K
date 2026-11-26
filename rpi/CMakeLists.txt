@@ -57,10 +57,12 @@ endif()
 # Upstream DaisySP-LGPL, built as a replaceable shared library.
 set(DAISY_VENDOR "${CMAKE_CURRENT_SOURCE_DIR}/vendor/daisysp")
 add_library(rpit3k-daisysp SHARED
+  "${DAISY_VENDOR}/mit/Effects/chorus.cpp"
   "${DAISY_VENDOR}/lgpl/Source/Dynamics/compressor.cpp"
   "${DAISY_VENDOR}/lgpl/Source/Effects/reverbsc.cpp")
 target_include_directories(rpit3k-daisysp PUBLIC
   "${DAISY_VENDOR}/mit"
+  "${DAISY_VENDOR}/mit/Utility"
   "${DAISY_VENDOR}/lgpl/Source/Dynamics"
   "${DAISY_VENDOR}/lgpl/Source/Effects")
 target_compile_options(rpit3k-daisysp PRIVATE $<$<CONFIG:Release>:-O3>)

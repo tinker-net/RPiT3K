@@ -74,3 +74,49 @@ public:
         return x+mix_*(.5f*(l+r)-x);
     }
 };
+
+#include "Effects/chorus.h"
+#include "Utility/delayline.h"
+
+class RigChorus {
+    daisysp::ChorusEngine dsp_{};
+    float mix_=0,target_=0, rate_=.8f, depth_=.5f;
+    unsigned tail_=0;
+public:
+    RigChorus(){dsp_.Init(48000.f);dsp_.SetDelayMs(12.f);dsp_.SetFeedback(0.f);dsp_.SetLfoFreq(rate_);dsp_.SetLfoDepth(depth_);}
+    void set(float mix,float rate,float depth){
+        target_=mix;rate_=rate;depth_=depth;
+        dsp_.SetLfoFreq(rate_);dsp_.SetLfoDepth(depth_);
+    }
+    float process(float x){
+        if(target_==0&&mix_==0&&tail_==0)return x;
+        if(target_>0)tail_=2400;else if(tail_)--tail_;
+        const float in=target_>0?x:0.f;
+        const float wet=dsp_.Process(in);
+        mix_+=.00208116f*(target_-mix_);
+        if(target_==0&&mix_<1e-5f){mix_=0;return x;}
+        return x+mix_*(wet-in);
+    }
+};
+class RigDelay {
+    daisysp::DelayLine<float,48002> dsp_{};
+    float mix_=0,target_=0, samples_=16800.f,target_samples_=16800.f, feedback_=.35f,target_feedback_=.35f;
+    unsigned tail_=0;
+public:
+    RigDelay(){dsp_.Init();}
+    void set(float mix,float ms,float feedback){
+        if(target_==0&&mix_==0&&tail_==0)samples_=ms*48.f;
+        target_=mix;target_samples_=ms*48.f;target_feedback_=feedback;
+    }
+    float process(float x){
+        if(target_==0&&mix_==0&&tail_==0)return x;
+        if(target_>0)tail_=48000*60;else if(tail_)--tail_;
+        samples_+=.0002f*(target_samples_-samples_);
+        feedback_+=.00208116f*(target_feedback_-feedback_);
+        const float wet=dsp_.Read(samples_);
+        dsp_.Write((target_>0?x:0.f)+feedback_*wet);
+        mix_+=.00208116f*(target_-mix_);
+        if(target_==0&&mix_<1e-5f){mix_=0;return x;}
+        return x+mix_*(wet-x);
+    }
+};
