@@ -637,8 +637,65 @@ function fxLabels(){el("chorusLabel").textContent=Math.round(Number(el("chorus")
 for(const k of fxKeys)el(k).addEventListener("input",()=>{fxLabels();queueLive();});
 el("hizToggle").onchange=()=>{fxLabels();queueLive();};
 const captureCatalog=[["FNDR BLBM","Fender Bassman (Blonde)","generic"],["FNDR BFBM","Fender Bassman (Blackface)","blackface"],["FNDR TWBM","Fender Bassman (Tweed)","tweed"],["FNDR BFSR","Fender Super Reverb","blackface"],["FNDR BFPRO","Fender Pro Reverb","blackface"],["FNDR BFPRI","Fender Princeton Reverb","blackface"],["FNDR BFVRB","Fender Vibroverb","blackface"],["FNDR BFTWN","Fender Twin Reverb","blackface"],["FNDR BFDLX","Fender Deluxe Reverb","blackface"],["FNDR BFDRI","Fender Deluxe Reverb Reissue","blackface"],["FNDR TWDLX","Fender Deluxe (Tweed)","tweed"],["FNDR HPTWN","Fender High Powered Twin","tweed"],["FNDR TWDP","Fender V-Front Super","tweed"],["MRSH JT45RS","Marshall JTM45 Radiospares","plexi"],["MRSH JT45","Marshall JTM45","plexi"],["MRSH JT50","Marshall JTM50","plexi"],["MRSH SB67","Marshall Super Bass","plexi"],["MRSH SB100","Marshall Super Bass","plexi"],["MRSH SL68","Marshall Super Lead","plexi"],["MRSH JM50LD","Marshall JMP50 Lead","plexi"],["MRSH SA100","Marshall Super 100","plexi"],["MRSH JC800","Marshall JCM800","generic"],["VX TB30","Vox AC30 Top Boost","vox"],["MTCH CHTAN","Matchless Chieftain","matchless"],["MTCH PHNX","Matchless Phoenix 35","matchless"],["HWTT CUT100","Hiwatt Custom 100","hiewatt"],["TK IMP MKII","Tone King Imperial MKII","boutique"],["TKIMP","Tone King Imperial","boutique"],["TK ROY","Tone King Royalist","boutique"],["ORNG RV100","Orange Rockerverb 100","orange"],["ORNG OR120","Orange OR120","orange"],["MES DRECF","Mesa/Boogie Dual Rectifier","generic"],["MES MKIIC+","Mesa/Boogie Mark IIC+","mesa"],["MES MKV","Mesa/Boogie Mark V","mesa"],["GBSN G19","Gibson Falcon","gibson"],["GBSN G20","Gibson Ranger","gibson"],["AMPG S12","Ampeg SB-12","generic"],["MAGN 10M","Magnatone M10A","generic"],["MAGN TWST","Magnatone Twilighter Stereo","generic"],["TRCK OD100","Two-Rock TS-1 100W","generic"],["TRCK TCL","Two-Rock Traditional Clean","generic"],["AATR SX3","Two-Rock Silver Sterling Signature","generic"],["BOG UU","Bogner Uberschall Ultra MKII","generic"],["BOG XT","Bogner Ecstasy 101B","generic"],["BCAT ER30","Bad Cat Era 30","generic"],["PV 5050","Peavey 5150","generic"],["RLND J120","Roland Jazz Chorus","generic"],["SPRO 88TN","Supro 1688TN","generic"],["SWRT ATS","Swart Atomic Space Tone","generic"],["BRTL RLAND","Bartel Roseland","generic"],["BEN CHI","Benson Chimera","generic"],["FMAN FLEX","Friedman Plex","generic"],["DWOOD DNIGHT","Driftwood Darkest Nightmare","generic"],["PRSM ARC","PRS Archon 100","generic"],["SD DRAGON","Sundragon Super Dragon","generic"],["SD CNADO","Sundragon Coronado","generic"],["STONE 1485","Silvertone 1485","generic"],["TRECK EXP","Trainwreck Express","generic"],["MRGN DUO20","Morgan Dual 20","generic"]];
+const yorkCabCatalog=[
+ ["BMAN 410 P10Q","Fender Bassman 4×10 · Jensen P10Q"],
+ ["ORNG 412 V30","Orange 4×12 · Celestion Vintage 30"],
+ ["MRSH 412 M25","Marshall 4×12 · Celestion G12M25"],
+ ["HWAT 412 FN50","Hiwatt 4×12 · Fane 50W"],
+ ["DXVB VERB DELUXE","Fender Deluxe Reverb 1×12 · Oxford"],
+ ["DXVB","Fender Deluxe Reverb 1×12 · Oxford"],
+ ["VX30 212 BLUE","Vox AC30 2×12 · Celestion Alnico Blue"],
+ ["VX15 112 BLUE","Vox AC15 1×12 · Celestion Alnico Blue"],
+ ["YORK 212 M65 CREAM","York Audio 2×12 · Celestion G12M-65 Creamback"],
+ ["YORK 212 DV77","York Audio 2×12 · Eminence DV-77"],
+ ["MES 412 TRAD","Mesa/Boogie Traditional 4×12 · Celestion Vintage 30"],
+ ["MES 412 OS V2","Mesa/Boogie Oversized 4×12 V2"],
+ ["MES 212 V30","Mesa/Boogie 2×12 · Celestion Vintage 30"],
+ ["VLUX 210 P10R","Fender Vibrolux 2×10 · Jensen P10R"],
+ ["FTWN 212 D120","Fender Twin 2×12 · JBL D120"],
+ ["PRNC 110 OX","Fender Princeton 1×10 · Oxford"],
+ ["BOGNA 412","Bogner 4×12 · Celestion Vintage 30"],
+ ["ZILA 212","Zilla Fatboy 2×12"],
+ ["KW 412 M25 SH","Kerry Wright 4×12 · M25-SH"],
+ ["MRSH 412 MV30 DUAL","Marshall 4×12 · MV30 Dual"],
+ ["MRSH 412 T75","Marshall 4×12 · T75"],
+ ["MRSH 412 BLACKJACK","Marshall 4×12 · Blackjack"],
+ ["MRSH M20","Marshall M20"],
+ ["FDMN 412 M25 V30","Friedman 4×12 · G12M25 / Vintage 30"],
+ ["MTCH 212 ESD V2","Matchless 2×12 · ESD V2"],
+ ["AMPG 410 HS","Ampeg Heritage 4×10"],
+ ["5153 412 VH20","EVH 5150 III 4×12 · VH20"],
+ ["VH+ 412 P50E","VHT 4×12 · P50E"]
+];
+const yorkMics={ "57":"Shure SM57","57M":"Shure SM57 (modern)","57V":"Shure SM57 (vintage)","58":"Shure SM58","SM7":"Shure SM7","421":"Sennheiser MD421","421M":"Sennheiser MD421 (modern)","421V":"Sennheiser MD421 (vintage)","906":"Sennheiser e906","121":"Royer R-121","160":"Beyerdynamic M160","313":"Shure KSM313","4119":"STC / Coles 4119","E22":"Josephson e22S","F47":"Neumann FET 47","U47":"Telefunken U47","184":"Neumann KM 184","N22":"AEA Nuvo N22","414":"AKG C414","I5":"Audix i5"};
+function identifyIR(path,raw){
+ const n=raw.replace(/[_-]+/g," ").replace(/\s+/g," ").trim(), upper=n.toUpperCase(), padded=" "+upper+" ";
+ const york=/^YA(?: |$)/i.test(n)||/(?:^|\/)York Audio(?:\/|$)/i.test(path);
+ if(york){
+  const match=yorkCabCatalog.find(([k])=>padded.includes(" "+k+" "));
+  if(!match)return {raw,label:raw,skin:null,model:null};
+  const [key,model]=match,offset=padded.indexOf(" "+key+" ");
+  const before=n.slice(0,offset).replace(/^YA\s*/i,"").trim();
+  let tail=n.slice(offset+key.length).trim();
+  // Microphone numbers mean microphones only in the suffix of a recognized York pack.
+  // Mix IDs are opaque and must not be interpreted as microphone codes.
+  if(!/^mix\b/i.test(tail)){
+   const parts=tail.split(" "),mic=yorkMics[parts[0]?.toUpperCase()];
+   if(mic){parts[0]=mic;tail=parts.join(" ");}
+  }
+  return {raw,label:[model,before,tail,"York Audio"].filter(Boolean).join(" · "),skin:null,model};
+ }
+ const amalgam=/(?:^|\/)Amalgam(?: Audio)?(?:\/|$)/i.test(path)||/^(?:KW|KERRY WRIGHT|VX2X12|MRSH|FNDR)\b/i.test(n);
+ if(!amalgam)return {raw,label:raw,skin:null,model:null};
+ let label=n.replace(/\bKW(?=\s+(?:4X12|412)\b)/gi,"Kerry Wright").replace(/\bVX(?=\s*2X12\b)/gi,"Vox ").replace(/\bMRSH\b/gi,"Marshall").replace(/\bFNDR\b/gi,"Fender");
+ label=label.replace(/\b([1248])\s*[xX]\s*(10|12|15)\b/g,"$1×$2").replace(/\bG12M\s?25\b/gi,"Celestion G12M25").replace(/\bG12M\s?65\b/gi,"Celestion G12M-65").replace(/\bV30\b/gi,"Celestion Vintage 30").replace(/\bLP(\d+(?:\.\d+)?)K\b/gi,"Low-pass $1 kHz").replace(/\bHP(\d+)HZ\b/gi,"High-pass $1 Hz");
+ // Bright/Dark/Mix describe voicing, not guaranteed microphone recipes.
+ if(label===n&&!/\b(?:BRIGHT|DARK|MIX)\b/i.test(n))return {raw,label:raw,skin:null,model:null};
+ return {raw,label,skin:null,model:label};
+}
 function identifyCapture(path){
  const raw=String(path).split("/").pop().replace(/\.(nam|wav)$/i,""),n=raw.replace(/MRSHL\b/gi,"MRSH").replace(/[_-]+/g," ").replace(/\s+/g," ").trim();
+ if(/\.wav$/i.test(path))return identifyIR(path,raw);
  const padded=" "+n.toUpperCase()+" ";
  const match=captureCatalog.find(([key])=>padded.includes(" "+key+" "));
  if(!match)return {raw,label:raw,skin:null,model:null};
@@ -650,7 +707,7 @@ function identifyCapture(path){
  }
  return {raw,label,skin,model};
 }
-function smartName(path){const x=identifyCapture(path);if(!smartEnabled)return x.raw;if(x.model)return x.label;return x.raw.replace(/\b(?:FNDR|MRSHL?|ORNG|HWTT|VX|MTCH)\b/gi,t=>({FNDR:"Fender",MRSH:"Marshall",MRSHL:"Marshall",ORNG:"Orange",HWTT:"Hiwatt",VX:"Vox",MTCH:"Matchless"})[t.toUpperCase()]);}
+function smartName(path){const x=identifyCapture(path);if(!smartEnabled)return x.raw;if(x.model)return x.label;if(/\.wav$/i.test(path))return x.raw;return x.raw.replace(/\b(?:FNDR|MRSHL?|ORNG|HWTT|VX|MTCH)\b/gi,t=>({FNDR:"Fender",MRSH:"Marshall",MRSHL:"Marshall",ORNG:"Orange",HWTT:"Hiwatt",VX:"Vox",MTCH:"Matchless"})[t.toUpperCase()]);}
 let smartEnabled=true;try{smartEnabled=localStorage.getItem("ton3k.originalNames")!=="1";}catch(e){}
 let practiceVisible=false;
 let treeKey=null;const openFolders=new Set();let libraryTarget="";
@@ -1172,7 +1229,7 @@ function pickerMetadataText(info){
  return out.join(" ").slice(0,8192);
 }
 function pickerRank(file,q,metadata=""){
- const terms=pickerNormalize(q).split(" ").filter(Boolean),name=pickerNormalize(file.split("/").pop().replace(/\.(nam|wav)$/i,"")),path=pickerNormalize(file),expanded=pickerExpand(file+" "+identifyCapture(file).label+" "+metadata);
+ const terms=pickerNormalize(q).split(" ").filter(Boolean),name=pickerNormalize(file.split("/").pop().replace(/\.(nam|wav)$/i,"")),path=pickerNormalize(file),expanded=pickerExpand(file+" "+identifyCapture(file).label.replace(/×/g,"x")+" "+metadata);
  if(!terms.length)return 0;
  let score=0;
  for(const t of terms){

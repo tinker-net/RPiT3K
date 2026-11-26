@@ -111,3 +111,6 @@ Space play/pause/resume; Enter restart from selected reference; period stop; U c
 
 ### Smart Library model recognition
 Catalog identities take precedence over incidental pedal words in amp captures. BLBM, BFBM and TWBM identify distinct Bassman variants. Unknown artwork uses existing family or generic fallback. Original files unchanged. Model codes and EQ terminology based on https://amalgamcaptures.com/how-it-works/ and the published amp catalog. Manual appearance overrides remain authoritative.
+
+### Smart IR names
+WAV-only parser, separate from NAM. York Audio YA-prefixed files (or York Audio folder) use a cab-pack catalog and suffix microphone codes; Mix numbers remain opaque. Amalgam-style cabinet/speaker/filter tokens are expanded conservatively. Original WAVs, phase/version/position suffixes and preset paths are unchanged. Sources: https://www.yorkaudio.co/ and individual pack pages, https://amalgamcaptures.com/how-it-works/. Unknown names retain original labels; no inference of microphone blends. No audio processing changes.
