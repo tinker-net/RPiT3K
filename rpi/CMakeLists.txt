@@ -77,3 +77,7 @@ set_tests_properties(daisysp_characterization PROPERTIES TIMEOUT 120)
 if(Python3_Interpreter_FOUND)
   add_test(NAME tonecloud_session COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tonecloud_test.py")
 endif()
+
+if(Python3_Interpreter_FOUND)
+  add_test(NAME effect_preset_state COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/effect_preset_test.py")
+endif()

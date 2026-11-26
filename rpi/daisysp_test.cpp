@@ -86,7 +86,17 @@ ReverbMetrics response(float decay,int type){
 }
 void reverb(){
     RigReverb r;bypass(r,"reverb initial bypass");
-    for(int type=0;type<3;++type){auto a=response(.2f,type),b=response(1.5f,type),c=response(5.f,type);check(a.rt60<b.rt60&&b.rt60<c.rt60,"reverb monotonic decay");}
+    for(int type=0;type<3;++type){
+        double previous=0;
+        for(float requested:{.3f,.5f,1.f,1.5f,2.f,3.f,4.f,5.f}){
+            auto m=response(requested,type);
+            const double error=std::abs(m.rt60-requested);
+            std::cout<<"reverb calibration absolute_error_s="<<error<<" relative_error="<<error/requested<<"\n";
+            check(m.rt60>previous,"reverb monotonic decay");
+            check(error<=std::max(.08,.12*requested),"reverb calibrated RT60 tolerance");
+            previous=m.rt60;
+        }
+    }
     auto dark=response(1.5f,0),bright=response(1.5f,1);check(bright.brightness>dark.brightness,"reverb voicing");
 }
 void benchmark(){

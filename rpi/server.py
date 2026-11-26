@@ -28,9 +28,30 @@ AMP_ART_KEYS = frozenset(("blackface","silverface","tweed","vox","orange","plexi
 AMP_ART_LIMIT = 2 * 1024 * 1024
 NAME = re.compile(r"[\w .()+@-]{1,180}", re.UNICODE)
 DEFAULT = dict(model="", second="", ir="", ir2="", ir_mix=.5, hiz=0, hiz_amount=.9, hiz_profile=0, slim=1, slim2=1, input=1, output=.15,
-               bass=0, mid=0, treble=0, gate=-81, comp=0, comp_post=0, reverb=0, decay=1.5, reverb_type=0, chorus=0, chorus_rate=0.8, chorus_depth=0.5, delay=0, delay_ms=350, delay_feedback=0.35, bypass=True)
+               bass=0, mid=0, treble=0, gate=-81, comp=0, comp_post=0, reverb=0, decay=1.5, reverb_type=0, comp_amount=.35, chorus_amount=.35, delay_amount=.25, reverb_amount=.25, chorus=0, chorus_rate=0.8, chorus_depth=0.5, delay=0, delay_ms=350, delay_feedback=0.35, bypass=True)
 RANGES = dict(hiz=(0,1), hiz_profile=(0,3), ir_mix=(0,1), slim=(0,1), slim2=(0,1), input=(0,2), output=(0,1),
               bass=(-20,20), mid=(-15,15), treble=(-10,10), gate=(-81,-30), comp=(0,1), comp_post=(0,1), reverb=(0,1), decay=(.2,5), reverb_type=(0,2), chorus=(0,1), chorus_rate=(0.1,5), chorus_depth=(0,1), delay=(0,1), delay_ms=(20,1000), delay_feedback=(0,0.85))
+
+
+# The native protocol retains effective amounts; separate remembered amounts
+# preserve settings across bypass and restart, with legacy preset migration.
+FX_DEFAULT_AMOUNTS = dict(comp=.35, chorus=.35, delay=.25, reverb=.25)
+
+def normalize_fx(preset):
+    p=dict(preset)
+    for k,default in FX_DEFAULT_AMOUNTS.items():
+        effective=p.get(k,0)
+        if type(effective) not in (int,float) or not math.isfinite(effective) or not 0<=effective<=1:
+            raise ValueError("Invalid "+k)
+        amount=p.get(k+"_amount",effective if effective>0 else default)
+        if type(amount) not in (int,float) or not math.isfinite(amount) or not .01<=amount<=1:
+            raise ValueError("Invalid "+k+"_amount")
+        p[k+"_amount"]=amount
+        p[k]=amount if effective>0 else 0
+    # The measured ReverbSc minimum is approximately 0.30 seconds.
+    if type(p.get("decay")) in (int,float) and .2<=p["decay"]<.3:
+        p["decay"]=.3
+    return p
 
 class Controller:
     def __init__(self, args):
@@ -56,7 +77,7 @@ class Controller:
         self.cpu_pct = None
         self.presets = {str(i): dict(DEFAULT) for i in range(1,5)}
         if self.statefile.exists():
-            self.presets.update({k:dict(DEFAULT, **v) for k,v in json.loads(self.statefile.read_text()).items()})
+            self.presets.update({k:dict(DEFAULT, **normalize_fx(v)) for k,v in json.loads(self.statefile.read_text()).items()})
         self.favoritesfile=self.data/"favorites.json"
         self.favorites=set(json.loads(self.favoritesfile.read_text())) if self.favoritesfile.exists() else set()
         self.exe = ROOT / "build-rpi/rpit3k"
@@ -240,6 +261,7 @@ class Controller:
     def validate(self, preset):
         if not isinstance(preset,dict):
             raise ValueError("Expected preset object")
+        preset=normalize_fx(preset)
         p = dict(DEFAULT)
         for k in p:
             if k in preset:
@@ -521,7 +543,9 @@ class Controller:
         for k in keys:
             if k not in values: raise ValueError("Missing "+k)
             p[k]=values[k]
-        p=self.validate(p)
+        for k in FX_DEFAULT_AMOUNTS:
+            if k+"_amount" in values:p[k+"_amount"]=values[k+"_amount"]
+            elif p[k]>0:p[k+"_amount"]=p[k]
         if "hiz_amount" in values: p["hiz_amount"]=values["hiz_amount"]
         p=self.validate(p)
         self.proc.stdin.write(" ".join(str(p[k]) for k in keys)+"\n")
