@@ -4,6 +4,8 @@
 #include "hybrid_nam.h"
 #include "../eq3band.h"
 #include "convolution.h"
+#include "live_rig.h"
+#include "json.hpp"
 #include "tuner.h"
 #include "noise_gate.h"
 #include "effects.h"
@@ -76,11 +78,11 @@ struct Options {
     float gate = -81.f;
     float ir_mix=.5f, hiz=0, hiz_profile=0;
     float comp=0, comp_post=0, reverb=0, decay=1.5f, reverb_type=0;
-    int meter_fd = -1;
+    int meter_fd = -1, rig_fd = -1, rig_ack_fd = -1;
     unsigned input_channel=1, input_channels=2, output_channels=2, output_left=1, output_right=2;
     bool benchmark = false, bypass = false, tuner = false, live = false, verify = false;
 };
-Options parse(int argc, char** argv) {
+Options parse(int argc, char** argv, bool rig_only=false) {
     Options o;
     for(int i=1;i<argc;++i) {
         std::string k=argv[i];
@@ -100,8 +102,9 @@ Options parse(int argc, char** argv) {
         else if(k=="--output-left") o.output_left=std::stoul(v);
         else if(k=="--output-right") o.output_right=std::stoul(v);
         else if(k=="--meter-fd") { o.meter_fd=std::stoi(v); if(o.meter_fd<3)throw std::runtime_error("Invalid meter fd"); }
-        else if(k=="--buffer") { if(v!="64"&&v!="128"&&v!="256"&&v!="512") throw std::runtime_error("Invalid buffer"); block=std::stoul(v); }
-        else if(k=="--periods") { if(v!="2"&&v!="3"&&v!="4") throw std::runtime_error("Invalid periods"); periods=std::stoul(v); }
+        else if(k=="--rig-fd"||k=="--rig-ack-fd") { if(rig_only)throw std::runtime_error("Invalid rig fd"); auto fd=std::stoi(v);if(fd<3)throw std::runtime_error("Invalid rig fd");(k=="--rig-fd"?o.rig_fd:o.rig_ack_fd)=fd; }
+        else if(k=="--buffer") { if(v!="64"&&v!="128"&&v!="256"&&v!="512") throw std::runtime_error("Invalid buffer"); auto b=std::stoul(v);if(rig_only){if(b!=block)throw std::runtime_error("ALSA period requires reopening");}else block=b; }
+        else if(k=="--periods") { if(v!="2"&&v!="3"&&v!="4") throw std::runtime_error("Invalid periods"); auto p=std::stoul(v);if(rig_only){if(p!=periods)throw std::runtime_error("ALSA periods require reopening");}else periods=p; }
         else if(k=="--model") o.model=v;
         else if(k=="--second") o.second=v;
         else if(k=="--ir") o.ir=v;
@@ -253,7 +256,7 @@ struct Chain {
 }
 int main(int argc,char** argv) {
     try {
-        auto o=parse(argc,argv); Chain chain(o);
+        auto o=parse(argc,argv); auto initial=std::make_unique<Chain>(o); Chain& chain=*initial;
         if(!o.render_in.empty() || !o.render_out.empty()){
             // Offline path uses the identical production Chain and block size.
             if(o.render_in.empty()||o.render_out.empty()||o.tuner||o.verify||o.benchmark||o.live)
@@ -327,6 +330,18 @@ int main(int argc,char** argv) {
         auto cap=open_pcm(o.device.c_str(),SND_PCM_STREAM_CAPTURE,o.input_channels);
         auto play=open_pcm(o.device.c_str(),SND_PCM_STREAM_PLAYBACK,o.output_channels);
         std::vector<int32_t> capture(block*o.input_channels), playback(block*o.output_channels);
+        std::signal(SIGPIPE,SIG_IGN);
+        auto current=std::move(initial);
+        LiveRigLoader<Chain> loader(o.rig_fd,o.rig_ack_fd,[&](const std::string& line){
+            auto args=nlohmann::json::parse(line).get<std::vector<std::string>>();
+            args.insert(args.begin(),"rpit3k");
+            std::vector<char*> argv2;for(auto& a:args)argv2.push_back(a.data());
+            auto next=parse(static_cast<int>(argv2.size()),argv2.data(),true);
+            if(next.device!=o.device||next.input_channel!=o.input_channel||next.input_channels!=o.input_channels||next.output_channels!=o.output_channels||next.output_left!=o.output_left||next.output_right!=o.output_right||next.benchmark||next.verify||next.live||!next.render_in.empty()||!next.render_out.empty())
+                throw std::runtime_error("Invalid live rig options");
+            return std::make_unique<Chain>(next);
+        });
+        bool fade_in=false;
         sched_param sp{};
         sp.sched_priority=60;
         if(sched_setscheduler(0,SCHED_FIFO,&sp)<0)
@@ -341,9 +356,9 @@ int main(int argc,char** argv) {
             for(ssize_t k=0;k<n;++k){
                 if(buf[k]=='\n'){
                     if(!overflow){line[used]=0;float i,o,b,m,t,g,c,pos,wet,d,type,mix,hz,profile;char extra;
-                        if(std::sscanf(line,"%f %f %f %f %f %f %f %f %f %f %f %f %f %f %c",&i,&o,&b,&m,&t,&g,&c,&pos,&wet,&d,&type,&mix,&hz,&profile,&extra)==14)chain.controls(i,o,b,m,t,g,c,pos,wet,d,type,mix,hz,profile);
-                        else if(std::sscanf(line,"%f %f %f %f %f %f %f %f %f %f %f %f %c",&i,&o,&b,&m,&t,&g,&c,&pos,&wet,&d,&type,&mix,&extra)==12)chain.controls(i,o,b,m,t,g,c,pos,wet,d,type,mix);
-                        else if(std::sscanf(line,"%f %f %f %f %f %f %f %f %f %f %f %c",&i,&o,&b,&m,&t,&g,&c,&pos,&wet,&d,&type,&extra)==11)chain.controls(i,o,b,m,t,g,c,pos,wet,d,type);}
+                        if(std::sscanf(line,"%f %f %f %f %f %f %f %f %f %f %f %f %f %f %c",&i,&o,&b,&m,&t,&g,&c,&pos,&wet,&d,&type,&mix,&hz,&profile,&extra)==14)current->controls(i,o,b,m,t,g,c,pos,wet,d,type,mix,hz,profile);
+                        else if(std::sscanf(line,"%f %f %f %f %f %f %f %f %f %f %f %f %c",&i,&o,&b,&m,&t,&g,&c,&pos,&wet,&d,&type,&mix,&extra)==12)current->controls(i,o,b,m,t,g,c,pos,wet,d,type,mix);
+                        else if(std::sscanf(line,"%f %f %f %f %f %f %f %f %f %f %f %c",&i,&o,&b,&m,&t,&g,&c,&pos,&wet,&d,&type,&extra)==11)current->controls(i,o,b,m,t,g,c,pos,wet,d,type);}
                     used=0;overflow=false;
                 }else if(used<sizeof(line)-1)line[used++]=buf[k];else overflow=true;
             }
@@ -374,18 +389,25 @@ int main(int argc,char** argv) {
             }
             if(!running)break;
             if(!failed){
-                for(unsigned i=0;i<block;++i)chain.x[i]=capture[i*o.input_channels+o.input_channel-1]/2147483648.0;
-                for(unsigned i=0;i<block;++i){const float p=std::abs(chain.x[i]);in_peak=std::max(in_peak,double(p));meter[0]=std::max(meter[0],p);}
+                for(unsigned i=0;i<block;++i)current->x[i]=capture[i*o.input_channels+o.input_channel-1]/2147483648.0;
+                for(unsigned i=0;i<block;++i){const float p=std::abs(current->x[i]);in_peak=std::max(in_peak,double(p));meter[0]=std::max(meter[0],p);}
                 auto dsp_start=std::chrono::steady_clock::now();
                 poll_controls();
-                chain.process();
+                current->process();
+                auto* replacement=loader.take();
+                // Fade a single chain out/in rather than double its realtime CPU cost.
+                if(fade_in){for(unsigned i=0;i<64;++i)current->y[i]*=float(i)/63.f;fade_in=false;}
+                if(replacement)for(unsigned i=0;i<64;++i)current->y[block-64+i]*=float(63-i)/63.f;
                 double us=std::chrono::duration<double,std::micro>(std::chrono::steady_clock::now()-dsp_start).count();
                 total_us+=us;worst_us=std::max(worst_us,us);++measured;if(us>1e6*block/rate)++late;
-                for(unsigned i=0;i<block;++i){meter[1]=std::max(meter[1],std::abs(chain.y[i]));out_peak=std::max(out_peak,double(std::abs(chain.y[i])));if(std::abs(chain.y[i])>=.99999f)++clipped;}
+                for(unsigned i=0;i<block;++i){meter[1]=std::max(meter[1],std::abs(current->y[i]));out_peak=std::max(out_peak,double(std::abs(current->y[i])));if(std::abs(current->y[i])>=.99999f)++clipped;}
                 for(unsigned i=0;i<block;++i) {
-                    auto s=static_cast<int32_t>(std::clamp(double(chain.y[i])*2147483648.,-2147483648.,2147483647.));
+                    auto s=static_cast<int32_t>(std::clamp(double(current->y[i])*2147483648.,-2147483648.,2147483647.));
                     playback[i*o.output_channels+o.output_left-1]=s;
                     playback[i*o.output_channels+o.output_right-1]=s;
+                }
+                if(replacement){
+                    auto* old=current.release();current.reset(replacement);loader.retire(old);fade_in=true;
                 }
                 unsigned done=0;
                 while(done<block&&running){
@@ -400,7 +422,7 @@ int main(int argc,char** argv) {
             if(!failed && o.meter_fd>=0){meter_frames+=block;if(meter_frames>=2400){const auto n=write(o.meter_fd,meter,sizeof(meter));if(n<0&&errno!=EAGAIN&&errno!=EWOULDBLOCK&&errno!=EINTR){close(o.meter_fd);o.meter_fd=-1;}meter[0]=meter[1]=0;meter_frames=0;}}
             auto now=std::chrono::steady_clock::now();
             if(measured && now-report_at>=std::chrono::seconds(5)){
-                std::cerr<<"DSP mean_us="<<total_us/measured<<" max_us="<<worst_us<<" deadline_us="<<1e6*block/rate<<" blocks="<<measured<<" late="<<late<<" xruns="<<xruns<<" in_peak="<<in_peak<<" out_peak="<<out_peak<<" clipped_samples="<<clipped<<" NAM="<<bool(chain.a)<<" IR="<<bool(chain.ir)<<" IR2="<<bool(chain.ir2)<<"\n";
+                std::cerr<<"DSP mean_us="<<total_us/measured<<" max_us="<<worst_us<<" deadline_us="<<1e6*block/rate<<" blocks="<<measured<<" late="<<late<<" xruns="<<xruns<<" in_peak="<<in_peak<<" out_peak="<<out_peak<<" clipped_samples="<<clipped<<" NAM="<<bool(current->a)<<" IR="<<bool(current->ir)<<" IR2="<<bool(current->ir2)<<"\n";
                 measured=late=clipped=0;total_us=worst_us=in_peak=out_peak=0;report_at=now;
             }
             if(failed && running){
