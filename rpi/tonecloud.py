@@ -130,7 +130,8 @@ class ToneCloud:
                         if match: detail+="; storage_code="+match.group(1).decode("ascii")
                     except OSError: pass
                 e.close()
-                raise ValueError(detail) from None
+                print(detail, flush=True)
+                raise ValueError(f"TONE3000 HTTP {e.code}") from None
             except urllib.error.URLError:
                 raise ValueError("TONE3000 network unavailable") from None
 

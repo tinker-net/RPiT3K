@@ -751,12 +751,12 @@ async function cloudLoad(){
    const res=await cloud("download",{model_id:item.id});
    const fresh=await request("/api/status");
    state=fresh;status();renderTree(true);
-   cloudMessage("Saved to local library: "+res.file);
+   cloudMessage("Downloaded");
   });list.append(b);
  }
  if(!data.data.length)list.textContent="No items on this page";
  el("cloudPrev").disabled=cloudPage===1;el("cloudNext").disabled=data.data.length<(tone?50:20)||(!tone&&["latest","trending"].includes(el("cloudMode").value));
- cloudMessage((tone?tone.title:"TONE3000")+" · page "+cloudPage);
+ cloudMessage("Page "+cloudPage);
 }
 async function openCloud(){el("cloudDialog").showModal();cloudEpoch++;cloudTone=null;cloudPage=1;await cloudWork(async()=>{const r=await cloud("status");cloudView(r.connected);if(r.connected)await cloudLoad();});}
 el("cloudOpen").onclick=openCloud;
@@ -764,7 +764,7 @@ el("cloudClose").onclick=()=>el("cloudDialog").close();
 el("cloudDialog").addEventListener("close",()=>{cloudEpoch++;});
 el("cloudConnect").onclick=()=>cloudWork(async()=>{
  const epoch=++cloudEpoch;const r=await cloud("connect",{client_id:el("cloudKey").value});el("cloudKey").value="";
- el("cloudLogin").hidden=true;el("cloudAuth").hidden=false;el("cloudCode").textContent=r.user_code;cloudMessage("Waiting for authorization…");
+ el("cloudLogin").hidden=true;el("cloudAuth").hidden=false;el("cloudCode").textContent=r.user_code;cloudMessage("Authorizing…");
  async function poll(interval){await new Promise(r=>setTimeout(r,interval*1000));if(epoch!==cloudEpoch)return;
  try{const p=await cloud("poll");if(epoch!==cloudEpoch)return;if(p.connected){cloudView(true);cloudPage=1;cloudTone=null;await cloudLoad();}else poll(p.interval);}catch(e){cloudView(false);cloudMessage(e.message);}}
  poll(r.interval);
