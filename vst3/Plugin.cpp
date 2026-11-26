@@ -3,6 +3,7 @@
 #include "../rpi/plugin_chain.h"
 #include <atomic>
 #include <mutex>
+#include <array>
 
 class Ton3k final : public juce::AudioProcessor, private juce::Timer {
 public:
@@ -26,7 +27,7 @@ public:
     State state;
     Ton3k():AudioProcessor(BusesProperties().withInput("Input",juce::AudioChannelSet::mono(),true).withOutput("Output",juce::AudioChannelSet::stereo(),true)),state(*this,nullptr,"TON3K",layout()){
         for(auto* id:ids) params.push_back(state.getRawParameterValue(id));
-        current=new ton3k::Chain(ton3k::Options{});
+        ton3k::Options initial; initial.output=.5f; current=new ton3k::Chain(initial);
         startTimerHz(10);
     }
     ~Ton3k() override {stopTimer(); delete current;delete pending.exchange(nullptr);delete retired.exchange(nullptr);}
@@ -51,7 +52,7 @@ public:
             return;
         }
         for(int i=0;i<buf.getNumSamples();++i){
-            in[pos]=buf.getSample(0,i);
+            in[pos]=buf.getSample(0,i); if(!std::isfinite(in[pos])) in[pos]=0.f; inputPeak.store(std::max(inputPeak.load(),std::abs(in[pos]))); outputPeak.store(std::max(outputPeak.load(),std::abs(out[pos])));
             for(int c=0;c<getTotalNumOutputChannels();++c)buf.setSample(c,i,out[pos]);
             if(++pos==64){
                 bool fade=false;
@@ -85,8 +86,9 @@ public:
             }
         }
     }
+    std::atomic<float> inputPeak{0},outputPeak{0};
     void select(int slot,juce::String file){std::lock_guard<std::mutex> lock(configLock);paths[slot]=file;dirty=true;}
-    juce::String status(){std::lock_guard<std::mutex> lock(configLock);return (supported.load()?"48 kHz | ":"Set DAW to 48 kHz (dry bypass) | ")+message;}
+    juce::String status(){std::lock_guard<std::mutex> lock(configLock);return juce::String(supported.load()?"48 kHz | ":"Set DAW to 48 kHz (dry bypass) | ")+message;}
     juce::String filename(int i){std::lock_guard<std::mutex> lock(configLock);return paths[i].isEmpty()?"Empty":juce::File(paths[i]).getFileName();}
 private:
     static constexpr const char* ids[]={"input","output","bass","mid","treble","gate","comp","compPost","reverb","decay","reverbType","mix","hiz","profile","chorus","chorusRate","chorusDepth","delay","delayMs","feedback","stomp","amp","cab"};
@@ -116,18 +118,74 @@ private:
 };
 
 class Editor final:public juce::AudioProcessorEditor,private juce::Timer{
+    using Attachment=juce::AudioProcessorValueTreeState::SliderAttachment;
     Ton3k& p;
-    juce::GenericAudioProcessorEditor controls;
-    juce::Label header,statusLabel;
-    juce::TextButton files[4],clear[4];
+    const juce::Colour ink{0xffeeeeef}, muted{0xffa0a0a7}, yellow{0xffffff00}, panel{0xff202024};
+    struct Knob {
+        juce::Slider slider;juce::Label label;
+        std::unique_ptr<Attachment> attachment;
+    };
+    std::array<Knob,20> knobs;
+    juce::Label statusLabel;
+    juce::TextButton files[4],clear[4], switches[3], tabs[2];
     std::unique_ptr<juce::FileChooser> chooser;
+    int page=0;
+    float inMeter=0,outMeter=0;
+    static constexpr const char* ids[]={"input","output","bass","mid","treble","gate","comp","compPost","reverb","decay","reverbType","mix","hiz","profile","chorus","chorusRate","chorusDepth","delay","delayMs","feedback"};
+    static constexpr const char* names[]={"INPUT","OUTPUT","BASS","MID","TREBLE","GATE","COMP","POSITION","REVERB","DECAY","TYPE","IR BLEND","HI-Z","PROFILE","CHORUS","RATE","DEPTH","DELAY","TIME","FEEDBACK"};
+    static constexpr const char* switchIds[]={"stomp","amp","cab"};
+    void toggle(int i){
+        if(auto* q=p.state.getParameter(switchIds[i])){
+            q->beginChangeGesture();q->setValueNotifyingHost(q->getValue()>.5f?0.f:1.f);q->endChangeGesture();
+        }
+    }
+    void setPage(int n){page=n;resized();repaint();}
+    void card(juce::Graphics& g,juce::Rectangle<int> r){
+        g.setColour(panel);g.fillRoundedRectangle(r.toFloat(),8);g.setColour(juce::Colour(0xff39393d));g.drawRoundedRectangle(r.toFloat(),8,1);
+    }
+    void meter(juce::Graphics& g,juce::Rectangle<int> r,float value,const char* name){
+        g.setColour(muted);g.setFont(11.f);g.drawText(name,r.removeFromLeft(28),juce::Justification::centredLeft);
+        g.setColour(juce::Colour(0xff101012));g.fillRoundedRectangle(r.toFloat(),3);
+        auto db=juce::Decibels::gainToDecibels(value,-60.f);
+        auto width=juce::jlimit(0.f,1.f,(db+60.f)/60.f)*r.getWidth();
+        g.setColour(value>=.99f?juce::Colour(0xffff453a):yellow);g.fillRoundedRectangle(r.withWidth(int(width)).toFloat(),3);
+    }
 public:
-    explicit Editor(Ton3k& proc):AudioProcessorEditor(proc),p(proc),controls(proc){
-        header.setText("TON3K | Native NAM guitar processor",juce::dontSendNotification);
-        header.setFont(juce::FontOptions(20.f,juce::Font::bold));
-        addAndMakeVisible(header);addAndMakeVisible(statusLabel);addAndMakeVisible(controls);
+    explicit Editor(Ton3k& proc):AudioProcessorEditor(proc),p(proc){
+        setOpaque(true);
+        statusLabel.setColour(juce::Label::textColourId,muted);
+        addAndMakeVisible(statusLabel);
+        for(int i=0;i<20;++i){
+            auto& k=knobs[i];
+            k.slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
+            k.slider.setTextBoxStyle(juce::Slider::TextBoxBelow,false,78,22);
+            k.slider.setColour(juce::Slider::rotarySliderFillColourId,yellow);
+            k.slider.setColour(juce::Slider::rotarySliderOutlineColourId,juce::Colour(0xff454549));
+            k.slider.setColour(juce::Slider::thumbColourId,ink);
+            k.slider.setColour(juce::Slider::textBoxTextColourId,ink);
+            k.slider.setColour(juce::Slider::textBoxBackgroundColourId,juce::Colour(0xff101012));
+            k.slider.setColour(juce::Slider::textBoxOutlineColourId,juce::Colour(0xff454549));
+            k.attachment=std::make_unique<Attachment>(p.state,ids[i],k.slider);
+            k.slider.setTooltip(names[i]);
+            if(i<6){
+                k.slider.textFromValueFunction=[i](double x){
+                    if(i==5&&x<=-81)return juce::String("OFF");
+                    if(i<=1){if(x<=0)return juce::String("-inf dB");return juce::String(20*std::log10(x),2)+" dB";}
+                    return juce::String(x,0)+" dB";
+                };
+                k.slider.valueFromTextFunction=[i](const juce::String& t){
+                    if(i==5&&t.trim().equalsIgnoreCase("OFF"))return -81.;
+                    if(i<=1){if(t.containsIgnoreCase("inf"))return 0.;return std::pow(10.,t.getDoubleValue()/20.);}
+                    return t.getDoubleValue();
+                };
+                k.slider.updateText();
+            }
+            k.label.setText(names[i],juce::dontSendNotification);k.label.setJustificationType(juce::Justification::centred);
+            k.label.setColour(juce::Label::textColourId,muted);k.label.setFont(juce::FontOptions(12.f));
+            addAndMakeVisible(k.slider);addAndMakeVisible(k.label);
+        }
         for(int i=0;i<4;++i){
-            addAndMakeVisible(files[i]);addAndMakeVisible(clear[i]);clear[i].setButtonText("Clear");
+            addAndMakeVisible(files[i]);addAndMakeVisible(clear[i]);clear[i].setButtonText("X");
             files[i].onClick=[this,i]{
                 chooser=std::make_unique<juce::FileChooser>("Select local capture or cabinet IR",juce::File{},i<2?"*.nam":"*.wav");
                 auto safe=juce::Component::SafePointer<Editor>(this);
@@ -137,18 +195,71 @@ public:
             };
             clear[i].onClick=[this,i]{p.select(i,{});};
         }
-        setResizable(true,true);setSize(740,720);startTimerHz(5);timerCallback();
+        for(int i=0;i<3;++i){addAndMakeVisible(switches[i]);switches[i].onClick=[this,i]{toggle(i);};}
+        tabs[0].setButtonText("AMP / CAB");tabs[1].setButtonText("EFFECTS");
+        for(int i=0;i<2;++i){addAndMakeVisible(tabs[i]);tabs[i].onClick=[this,i]{setPage(i);};}
+        setResizable(true,true);setResizeLimits(760,600,1600,1100);setSize(960,690);
+        startTimerHz(20);timerCallback();
     }
     ~Editor() override{stopTimer();}
+    void paint(juce::Graphics& g) override{
+        g.fillAll(juce::Colour(0xff111113));
+        auto r=getLocalBounds().reduced(16);
+        auto top=r.removeFromTop(58);
+        auto logo=top.removeFromLeft(175);
+        g.setFont(juce::FontOptions(35.f,juce::Font::bold|juce::Font::italic));
+        g.setColour(juce::Colour(0xffff1600));g.drawText("Ton3K",logo.translated(0,-2),juce::Justification::centredLeft);
+        g.setColour(juce::Colour(0xff1600ff));g.drawText("Ton3K",logo.translated(0,2),juce::Justification::centredLeft);
+        g.setColour(yellow);g.drawText("Ton3K",logo,juce::Justification::centredLeft);
+        auto met=top.removeFromRight(220).reduced(2,8);meter(g,met.removeFromTop(17),inMeter,"IN");met.removeFromTop(5);meter(g,met.removeFromTop(17),outMeter,"OUT");
+        r.removeFromTop(6);auto rig=r.removeFromTop(150);card(g,rig);
+        auto title=rig.reduced(12).removeFromTop(20);g.setColour(muted);g.setFont(12.f);g.drawText("SIGNAL CHAIN   /   PEDAL  >  AMPLIFIER  >  CABINET",title,juce::Justification::centredLeft);
+        r.removeFromTop(8);r.removeFromTop(32);r.removeFromTop(8);card(g,r);
+        if(page==0){
+            auto amp=r.reduced(18).removeFromTop(105);
+            g.setColour(juce::Colour(0xff0e0e10));g.fillRoundedRectangle(amp.toFloat(),7);
+            g.setColour(juce::Colour(0xff39393d));
+            for(int y=amp.getY()+5;y<amp.getBottom()-3;y+=4)g.drawHorizontalLine(y,float(amp.getX()+5),float(amp.getRight()-5));
+            g.setColour(ink);g.setFont(juce::FontOptions(20.f,juce::Font::bold));
+            g.drawFittedText(p.filename(1),amp.reduced(10),juce::Justification::centred,2);
+        }
+    }
     void resized() override{
-        auto a=getLocalBounds().reduced(12);header.setBounds(a.removeFromTop(32));statusLabel.setBounds(a.removeFromTop(26));
-        for(int i=0;i<4;++i){auto row=a.removeFromTop(30).reduced(0,2);clear[i].setBounds(row.removeFromRight(72));files[i].setBounds(row);}
-        controls.setBounds(a);
+        auto r=getLocalBounds().reduced(16);auto top=r.removeFromTop(58);
+        top.removeFromLeft(175);top.removeFromRight(220);statusLabel.setBounds(top);
+        r.removeFromTop(6);auto rig=r.removeFromTop(150).reduced(12);rig.removeFromTop(24);
+        auto row=rig.removeFromTop(44);
+        for(int i=0;i<4;++i){auto a=row.removeFromLeft(row.getWidth()/(4-i)).reduced(3);clear[i].setBounds(a.removeFromRight(25));files[i].setBounds(a);}
+        row=rig.removeFromTop(40);
+        for(int i=0;i<3;++i)switches[i].setBounds(row.removeFromLeft(row.getWidth()/(3-i)).reduced(3));
+        r.removeFromTop(8);auto bar=r.removeFromTop(32);tabs[0].setBounds(bar.removeFromLeft(150).reduced(2));tabs[1].setBounds(bar.removeFromLeft(150).reduced(2));r.removeFromTop(8);r=r.reduced(12);
+        for(auto& k:knobs){k.label.setVisible(false);k.slider.setVisible(false);}
+        auto place=[&](int idx,juce::Rectangle<int> a){
+            auto& k=knobs[idx];k.label.setVisible(true);k.slider.setVisible(true);k.label.setBounds(a.removeFromTop(20));k.slider.setBounds(a.reduced(5));
+        };
+        if(page==0){
+            r.removeFromTop(115);
+            auto row=r.removeFromTop(r.getHeight()*2/3);
+            for(int i=0;i<6;++i)place(i,row.removeFromLeft(row.getWidth()/(6-i)));
+            auto bottom=r;int indices[]={11,12,13};for(int j=0;j<3;++j)place(indices[j],bottom.removeFromLeft(bottom.getWidth()/(3-j)));
+        }else{
+            int indices[]={6,7,8,9,10,14,15,16,17,18,19};
+            for(int j=0;j<2;++j){auto row=r.removeFromTop(r.getHeight()/(2-j));int n=j==0?6:5;for(int k=0;k<n;++k)place(indices[j*6+k],row.removeFromLeft(row.getWidth()/(n-k)));}
+        }
     }
     void timerCallback() override{
         const char* labels[]={"Pedal","Amplifier","IR A","IR B"};
         for(int i=0;i<4;++i)files[i].setButtonText(juce::String(labels[i])+": "+p.filename(i));
+        const char* sw[]={"PEDAL","AMP","CAB"};
+        for(int i=0;i<3;++i){
+            bool enabled=p.state.getRawParameterValue(switchIds[i])->load()>.5f;
+            switches[i].setButtonText(juce::String(sw[i])+(enabled?" ON":" OFF"));
+            switches[i].setColour(juce::TextButton::buttonColourId,enabled?yellow:panel);
+            switches[i].setColour(juce::TextButton::textColourOffId,enabled?juce::Colours::black:ink);
+        }
+        for(int i=0;i<2;++i){tabs[i].setColour(juce::TextButton::buttonColourId,i==page?yellow:panel);tabs[i].setColour(juce::TextButton::textColourOffId,i==page?juce::Colours::black:ink);}
         statusLabel.setText(p.status(),juce::dontSendNotification);
+        inMeter=std::max(inMeter*.82f,p.inputPeak.exchange(0));outMeter=std::max(outMeter*.82f,p.outputPeak.exchange(0));repaint();
     }
 };
 juce::AudioProcessorEditor* Ton3k::createEditor(){return new Editor(*this);}
