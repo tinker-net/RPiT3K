@@ -693,6 +693,35 @@ function identifyIR(path,raw){
  if(label===n&&!/\b(?:BRIGHT|DARK|MIX)\b/i.test(n))return {raw,label:raw,skin:null,model:null};
  return {raw,label,skin:null,model:label};
 }
+// Channel aliases are scoped to the actual amp model, never global.
+const captureChannels=(()=>{
+ const bass={B:"Bass",N:"Normal",BASS:"Bass",NORM:"Normal",NORMAL:"Normal"};
+ const vibrato={N:"Normal",V:"Vibrato",NORM:"Normal",VIB:"Vibrato",NORMAL:"Normal",VIBRATO:"Vibrato"};
+ const plexi={N:"Normal",BR:"Bright",B:"Bright",JU:"Jumped",NORM:"Normal",NORMAL:"Normal",BRIGHT:"Bright",JUMPED:"Jumped",HI:"High Treble"};
+ const vox={N:"Normal",TB:"Top Boost",BR:"Brilliant",NORM:"Normal",NORMAL:"Normal",BRILLIANT:"Brilliant"};
+ const imperial={R:"Rhythm",L:"Lead",RHY:"Rhythm",RHYTHM:"Rhythm",LEAD:"Lead"};
+ const orange={C:"Clean",D:"Dirty",CL:"Clean",DIR:"Dirty",CLEAN:"Clean",DIRTY:"Dirty"};
+ const matchless={I:"I",II:"II",CH1:"I",CH2:"II"};
+ const hiwatt={N:"Normal",BR:"Brilliant",NORM:"Normal",NORMAL:"Normal",BRILLIANT:"Brilliant",JU:"Jumped"};
+ const result={};
+ for(const [keys,map] of [
+ [["FNDR BLBM","FNDR BFBM"],bass],
+ [["FNDR BFSR","FNDR BFPRO","FNDR BFVRB","FNDR BFTWN","FNDR BFDLX","FNDR BFDRI"],vibrato],
+ [["MRSH JT45RS","MRSH JT45","MRSH JT50","MRSH SB67","MRSH SB100","MRSH SL68","MRSH JM50LD","MRSH SA100","FNDR TWBM","FNDR TWDLX","FNDR HPTWN"],plexi],
+ [["VX TB30"],vox],
+ [["TK IMP MKII","TKIMP"],imperial],
+ [["ORNG RV100"],orange],
+ [["MTCH PHNX"],matchless],
+ [["HWTT CUT100"],hiwatt]
+ ])for(const key of keys)result[key]=map;
+ return result;
+})();
+function captureChannel(key,tail){
+ const map=captureChannels[key];if(!map)return tail;
+ // Only the first token after model/year, and only when a gain designation follows.
+ // Never translate gain, EQ, pedal, IR or circuit revision tokens as channels.
+ return tail.replace(/^(\s+(?:(?:19|20)\d{2}\s+)?)([A-Z0-9]+)(?=\s+(?:Clean|CLN|Edge|EOB|EOD|Crunch|Dimed|Drive|Lead|Fuzz|Gain|HiGain|HighGain)(?:\d+)?(?:\s|$))/i,(whole,prefix,token)=>Object.hasOwn(map,token.toUpperCase())?prefix+map[token.toUpperCase()]+" Channel":whole);
+}
 function identifyCapture(path){
  const raw=String(path).split("/").pop().replace(/\.(nam|wav)$/i,""),n=raw.replace(/MRSHL\b/gi,"MRSH").replace(/[_-]+/g," ").replace(/\s+/g," ").trim();
  if(/\.wav$/i.test(path))return identifyIR(path,raw);
@@ -700,7 +729,7 @@ function identifyCapture(path){
  const match=captureCatalog.find(([key])=>padded.includes(" "+key+" "));
  if(!match)return {raw,label:raw,skin:null,model:null};
  const [key,model,skin]=match,offset=padded.indexOf(" "+key+" ");
- let label=n.slice(0,offset)+model+n.slice(offset+key.length);
+ let label=n.slice(0,offset)+model+captureChannel(key,n.slice(offset+key.length));
  if(/\.nam$/i.test(path)){
  const tokens={CLN:"Clean",THN:"Thin",BRI:"Bright",BRT:"Bright",BAL:"Balanced",WRM:"Warm",FAT:"Fat",SCP:"Scooped",EOB:"Edge of Breakup",EOD:"Edge of Breakup"};
  label=label.replace(/\b(?:CLN|THN|BRI|BRT|BAL|WRM|FAT|SCP|EOB|EOD)\b/gi,t=>tokens[t.toUpperCase()]);

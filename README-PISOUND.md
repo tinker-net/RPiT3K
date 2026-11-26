@@ -114,3 +114,6 @@ Catalog identities take precedence over incidental pedal words in amp captures. 
 
 ### Smart IR names
 WAV-only parser, separate from NAM. York Audio YA-prefixed files (or York Audio folder) use a cab-pack catalog and suffix microphone codes; Mix numbers remain opaque. Amalgam-style cabinet/speaker/filter tokens are expanded conservatively. Original WAVs, phase/version/position suffixes and preset paths are unchanged. Sources: https://www.yorkaudio.co/ and individual pack pages, https://amalgamcaptures.com/how-it-works/. Unknown names retain original labels; no inference of microphone blends. No audio processing changes.
+
+### Capture channels
+Model-scoped channel aliases expand the channel slot immediately following a recognized model (optionally after its year) when followed by a known gain designation. Bassman Blonde/Blackface B = Bass, N = Normal; Fender reverb amps N/V = Normal/Vibrato; classic Marshall JU = Jumped, BR/B = Bright, N = Normal; Vox TB = Top Boost; Imperial R/L = Rhythm/Lead; Rockerverb C/D = Clean/Dirty; Phoenix I/II = channels I/II. Unknown codes remain intact. No WAV, original filename, preset or audio processing changes. Naming structure: https://amalgamcaptures.com/how-it-works/. Channel abbreviations beyond documented examples are conservative model-specific conventions and need checking against actual pack filenames.
