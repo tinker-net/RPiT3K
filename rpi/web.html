@@ -681,13 +681,13 @@ function identifyIR(path,raw){
   let match=candidates.find(([k])=>(" "+normalized+" ").includes(" "+k+" "));
   let fromFolder=false;
   if(!match){match=candidates.find(([k])=>parts.slice(0,-1).some(p=>(" "+norm(p)+" ").includes(" "+k+" ")));fromFolder=!!match;}
-  if(!match)return {raw,label:raw,skin:null,model:null};
+  if(!match)return {raw,label:n.replace(/^YA[\s_-]+/i,"").trim()||raw,skin:null,model:null};
   const [key,model]=match;
-  let tail=n.replace(/^YA[\s_-]*/i,"");
+  let tail=n.replace(/^YA(?:[\s_-]+|$)/i,"");
   if(!fromFolder){
    const kt=key.split(" "),at=tokens.findIndex((_,i)=>kt.every((t,j)=>tokens[i+j]?.[0].toUpperCase()===t));
-   if(at<0)return {raw,label:raw,skin:null,model:null};
-   const first=tokens[at].index,last=tokens[at+kt.length-1],prefix=n.slice(0,first).replace(/^YA[\s_-]*/i,"").trim();
+   if(at<0)return {raw,label:n.replace(/^YA[\s_-]+/i,"").trim()||raw,skin:null,model:null};
+   const first=tokens[at].index,last=tokens[at+kt.length-1],prefix=n.slice(0,first).replace(/^YA(?:[\s_-]+|$)/i,"").trim();
    tail=[prefix,n.slice(last.index+last[0].length).replace(/^[\s_-]+/,"")].filter(Boolean).join(" ");
   }
   // Speaker variant prefixes are retained. Mix numbers are never mic identifiers.
