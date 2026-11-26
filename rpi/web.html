@@ -518,7 +518,7 @@ async function sendLive(force=false){
  const p=livePending;livePending=null;liveBusy=true;
  try{state=await request("/api/edit",JSON.stringify(p));if(!busy)status();}
  catch(e){el("message").textContent=e.message;if(!livePending&&slot===p.slot&&state?.presets[slot])render(state.presets[slot]);}
- finally{liveBusy=false;if(livePending&&!busy)sendLive();else refreshCalibration();}
+ finally{liveBusy=false;if(livePending&&!busy)sendLive();else if(!busy){status();refreshCalibration();}}
 }
 async function flushLive(){
  clearTimeout(liveTimer);
@@ -561,7 +561,7 @@ function status(){
  el("poweroff").disabled=busy||!state.poweroff_enabled;el("poweroff").title=state.poweroff_enabled?"Power options":"Power controls not enabled; see installation guide";el("calibrate").disabled=busy;
  el("cloudOpen").hidden=state.cloud_enabled===false;
  const t=state.telemetry;if(t){const count=t.xruns_total;el("xruns").textContent=Number.isInteger(count)?count:"—";el("xrunMetric").classList.toggle("xrun-ok",state.running&&count===0);el("xrunMetric").classList.toggle("xrun-warn",count>0);el("xrunDetail").textContent="Current engine: "+(t.xruns??"—")+" · Since service start: "+(count??"—")+" · ALSA xrun/suspend recoveries";el("cpu").textContent=t.cpu===null?"—":t.cpu+"%";el("cpuMeter").value=t.cpu||0;el("temp").textContent=t.temp===null?"—":t.temp+" °C";el("latency").textContent=t.buffer_ms.toFixed(2)+" ms";colorTelemetry(t,state.running);el("latencyDetail").textContent=t.buffer+" × "+t.periods+" · period "+t.period_ms.toFixed(2)+" ms · nominal ALSA buffer per direction; not measured round-trip latency";if(!settingsInitialized){el("buffer").value=t.buffer;el("periods").value=t.periods;el("reference_dbu").value=state.settings.reference_dbu??"";settingsInitialized=true;}}
- const selected=state.active||state.settings.last;if(selected&&selected!==lastActive){lastActive=selected;if(!liveBusy&&!livePending){slot=selected;render(state.presets[slot]);}}
+ const selected=state.active||state.settings.last;if(selected&&selected!==lastActive&&!liveBusy&&!livePending){lastActive=selected;slot=selected;render(state.presets[slot]);}
  const audioOn=state.running&&state.active!==null;el("status").setAttribute("aria-label",audioOn?"Audio on — stop":"Audio off — start");el("status").classList.toggle("audio-active",!!audioOn);el("status").setAttribute("aria-pressed",String(!!audioOn));el("status").title=audioOn?"Stop audio":"Start audio with current preset";el("status").disabled=busy;
  el("logs").textContent=state.logs.join("\n");
  const tuning=state.running&&state.active===null;el("ampView").hidden=tuning;el("tunerView").hidden=!tuning;el("tuner").classList.toggle("selected",tuning);el("tuner").setAttribute("aria-pressed",String(tuning));
