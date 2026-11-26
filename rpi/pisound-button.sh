@@ -11,7 +11,7 @@ flashes(){ local n="$1"; [[ "$n" =~ ^[1-4]$ ]] || return 1; for ((i=0;i<n;i++));
 preset(){ python3 -c 'import json,sys; s=json.load(sys.stdin); print(s["active"] or s["settings"]["last"])'; }
 case "$action" in
  stomp) log "RPiT3K: single click / NAM 1"; if ! result=$(post stomp); then log "RPiT3K stomp failed: $result"; exit 1; fi; enabled=$(python3 -c 'import json,sys; s=json.load(sys.stdin); p=s["presets"][s["active"] or s["settings"]["last"]]; print(int(p["nam1_enabled"]))' <<<"$result"); log "RPiT3K: NAM 1 enabled=$enabled"; if [[ "$enabled" == 1 ]]; then flash_leds 15; else flash_leds 5; fi ;;
- next) post next >/dev/null ;;
+ next) post next >/dev/null; flash_leds 10 ;;
  identify) result=$(status); flashes "$(preset <<<"$result")" ;;
  audio) result=$(post audio-toggle); running=$(python3 -c 'import json,sys; s=json.load(sys.stdin); print(int(s["running"] and s["active"] is not None))' <<<"$result"); if [[ "$running" == 1 ]]; then flash_leds 20; else flash_leds 5; fi ;;
  hotspot)
