@@ -6,6 +6,9 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: deb-packaging-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   build:
     strategy:

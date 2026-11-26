@@ -18,6 +18,8 @@ Builds use immutable source revisions listed in build-deb.sh, pinned NAM Core an
 
 Prepare the official Blokas APT repository on the target (see https://blokas.io/pisound/docs/the-pisound-software/). The package declares the vendor pisound and pisound-btn dependencies; APT must have access to them. Follow the vendor setup for kernel/overlay support and reboot if required. Do not run remote installers silently as Debian maintainer scripts.
 
+When migrating a source installation, also disable its fallback timer before installing the package: `sudo systemctl disable --now rpit3k-hotspot.timer` (only if previously installed). The existing NetworkManager profile is retained.
+
 With the dedicated artifact extracted:
 
     sudo apt install ./rpi-ton3k-pisound_*.deb

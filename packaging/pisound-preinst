@@ -1,0 +1,22 @@
+#!/bin/sh
+set -e
+if [ "$1" = install ] && command -v systemctl >/dev/null; then
+ for s in rpit3k.service rpit3k-general.service rpit3k-linux.service; do
+  if systemctl is-active --quiet "$s" || systemctl is-enabled --quiet "$s"; then
+   echo "Stop AND disable $s before installing the experimental package. Existing data is not migrated." >&2
+   exit 1
+  fi
+ done
+fi
+
+# Never provision board-specific services on an unrelated live host.
+if [ "$1" = install ] && [ -d /run/systemd/system ]; then
+ if [ ! -r /proc/device-tree/model ] || ! grep -aqE 'Raspberry Pi 5|Compute Module 5' /proc/device-tree/model; then
+  echo "The dedicated Pisound package targets Raspberry Pi 5 / Compute Module 5." >&2
+  exit 1
+ fi
+ if systemctl is-active --quiet rpit3k-hotspot.timer || systemctl is-enabled --quiet rpit3k-hotspot.timer; then
+  echo "Disable the source hotspot timer first: sudo systemctl disable --now rpit3k-hotspot.timer" >&2
+  exit 1
+ fi
+fi

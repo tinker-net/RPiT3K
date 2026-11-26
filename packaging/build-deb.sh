@@ -65,7 +65,11 @@ else
  install -Dm644 "$packaging/config" "$root/etc/default/rpi-ton3k"
  for f in postinst prerm postrm; do install -m755 "$packaging/$f" "$root/DEBIAN/$f"; done
 fi
-install -m755 "$packaging/preinst" "$root/DEBIAN/preinst"
+if [[ "$edition" == pisound ]]; then
+ install -m755 "$packaging/pisound-preinst" "$root/DEBIAN/preinst"
+else
+ install -m755 "$packaging/preinst" "$root/DEBIAN/preinst"
+fi
 cat > "$root/DEBIAN/control" <<EOF
 Package: $package
 Version: $version
