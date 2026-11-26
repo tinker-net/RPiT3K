@@ -257,7 +257,7 @@ class Controller:
         for k,ext in (("model",(".nam",)),("second",(".nam",".wav")),("ir",(".wav",)),("ir2",(".wav",))):
             if p[k] != "" and not self.file(p[k],ext).is_file():
                 raise ValueError("Missing "+k)
-        if not p["bypass"] and not p["model"]:
+        if not p["bypass"] and not (p["model"] or p["second"].lower().endswith(".nam")):
             raise ValueError("Choose a NAM capture or enable bypass")
         if str(p["second"]).lower().endswith(".wav"):
             p["slim2"] = 1
@@ -276,7 +276,8 @@ class Controller:
         if p["bypass"]:
             cmd+=["--bypass"]
         else:
-            cmd+=["--model",str(self.library/p["model"])]
+            if p["model"]:
+                cmd+=["--model",str(self.library/p["model"])]
             if p["second"]:
                 cmd+=["--second",str(self.library/p["second"])]
             if p["ir"]:

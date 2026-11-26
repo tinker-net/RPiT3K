@@ -75,6 +75,7 @@ struct Options {
     int meter_fd = -1, rig_fd = -1, rig_ack_fd = -1;
     bool benchmark = false, bypass = false, tuner = false, live = false, verify = false;
 };
+bool is_wav(const std::string& path);
 Options parse(int argc, char** argv, bool rig_only=false) {
     Options o;
     for(int i=1;i<argc;++i) {
@@ -115,7 +116,7 @@ Options parse(int argc, char** argv, bool rig_only=false) {
         else if(k=="--treble") o.treble=std::stof(v);
         else throw std::runtime_error("Unknown option: "+k);
     }
-    if(o.model.empty() && !o.bypass && !o.tuner) throw std::runtime_error("--model FILE required");
+    if(o.model.empty() && (o.second.empty() || is_wav(o.second)) && !o.bypass && !o.tuner) throw std::runtime_error("Choose a NAM capture in either slot");
     for(double x:{o.slim,o.slim2}) if(!std::isfinite(x)||x<0||x>1) throw std::runtime_error("Slim must be 0..1");
     for(float x:{o.input,o.output,o.bass,o.mid,o.treble}) if(!std::isfinite(x)) throw std::runtime_error("Nonfinite control");
     if(o.input<0||o.input>2||o.output<0||o.output>1) throw std::runtime_error("Gain outside range");
@@ -176,7 +177,7 @@ struct Chain {
     float input,output;
     float target_input,target_output,bass,mid,treble,target_bass,target_mid,target_treble;
     NAM_SAMPLE x[512]{}, y[512]{}, z[512]{};
-    Chain(const Options& o):a((o.bypass||o.tuner) ? nullptr : load(o.model,o.slim)),b((o.bypass||o.tuner||is_wav(o.second)) ? nullptr : load(o.second,o.slim2)),ir((o.bypass||o.tuner)?nullptr:load_ir(o.ir.empty()&&is_wav(o.second)?o.second:o.ir)),ir2((o.bypass||o.tuner)?nullptr:load_ir(o.ir2)),ir_mix(o.ir_mix),target_ir_mix(o.ir_mix),tuning(o.tuner),input(o.input),output(o.output),target_input(o.input),target_output(o.output),bass(o.bass),mid(o.mid),treble(o.treble),target_bass(o.bass),target_mid(o.mid),target_treble(o.treble) {
+    Chain(const Options& o):a((o.bypass||o.tuner) ? nullptr : (o.model.empty()&&!is_wav(o.second)?load(o.second,o.slim2):load(o.model,o.slim))),b((o.bypass||o.tuner||o.model.empty()||is_wav(o.second)) ? nullptr : load(o.second,o.slim2)),ir((o.bypass||o.tuner)?nullptr:load_ir(o.ir.empty()&&is_wav(o.second)?o.second:o.ir)),ir2((o.bypass||o.tuner)?nullptr:load_ir(o.ir2)),ir_mix(o.ir_mix),target_ir_mix(o.ir_mix),tuning(o.tuner),input(o.input),output(o.output),target_input(o.input),target_output(o.output),bass(o.bass),mid(o.mid),treble(o.treble),target_bass(o.bass),target_mid(o.mid),target_treble(o.treble) {
         hiz.set(o.hiz,int(o.hiz_profile));
         gate.set(o.gate);
         effects(o.comp,o.comp_post,o.reverb,o.decay,o.reverb_type);
