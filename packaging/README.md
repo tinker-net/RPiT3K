@@ -1,21 +1,55 @@
-# Experimental Debian packages
+# Debian packages — isolated editions
 
-This branch targets Debian 13 / Raspberry Pi OS Trixie 64-bit only. No existing source installation is modified or migrated automatically. Install on a spare system first.
+Debian 13 / Raspberry Pi OS Trixie 64-bit. Experimental until fresh hardware installation is verified.
 
-Build on the target architecture with git, build-essential, cmake, libasound2-dev, python3, dpkg-dev and ca-certificates installed:
+| Artifact | Package | Source edition | Target |
+| --- | --- | --- | --- |
+| rpi-ton3k-pisound | rpi-ton3k-pisound | rpi-ui | Pi 5 / Cortex-A76 + original Blokas Pisound |
+| rpi-ton3k-pi5 | rpi-ton3k | rpi-general | Pi 5 / Cortex-A76 with any supported ALSA device |
+| rpi-ton3k-pi4 | rpi-ton3k | rpi-general | Pi 4 / Cortex-A72 |
+| rpi-ton3k-arm64 | rpi-ton3k | rpi-general | portable ARM64 |
+| rpi-ton3k-amd64 | rpi-ton3k | rpi-general | x86-64 |
 
-    bash packaging/build-deb.sh 0.1.0~preview1
+Install only one variant. Packages conflict with each other and share application installation paths; data directories are separate. Stop AND disable any existing source service before installation. No automatic migration, no bundled personal captures, passwords, tokens or presets.
 
-On arm64 optionally pass cortex-a72 (Pi 4) or cortex-a76 (Pi 5) as the second argument. Portable arm64 is the safest default. All variants share one package name; install only the appropriate variant.
+Builds use immutable source revisions listed in build-deb.sh, pinned NAM Core and Embedded v2.0.0. Both editions include the actual native engine, shared DaisySP library/source, Python modules, web UI and license notices. Build runs CTest, production bypass verification and Hi-Z regression. The staged binary is also verified. Generic package CI installs/reinstalls/removes in a container. Pisound CI verifies extracted contents, scripts and executable offline; this is not a physical installation test. Releases remain prereleases.
 
-    sudo apt install ./dist/<package>.deb
+## Dedicated PiSound package
 
-The service listens on localhost:8080 without authentication; use SSH forwarding from another computer:
+Prepare the official Blokas APT repository on the target (see https://blokas.io/pisound/docs/the-pisound-software/). The package declares the vendor pisound and pisound-btn dependencies; APT must have access to them. Follow the vendor setup for kernel/overlay support and reboot if required. Do not run remote installers silently as Debian maintainer scripts.
 
-    ssh -L 8080:127.0.0.1:8080 user@raspberrypi
+With the dedicated artifact extracted:
 
-Open http://localhost:8080 and configure PCM, channels and buffer in Audio settings. No audio starts automatically until enabled in /etc/default/rpi-ton3k. Pisound drivers must already be installed; select hw:pisound and configure the buffer and ADC reference explicitly. No hotspot, poweroff privileges, cloud integration or physical button is enabled by default.
+    sudo apt install ./rpi-ton3k-pisound_*.deb
 
-Data lives in /var/lib/rpi-ton3k and survives upgrades, removal and purge. Existing source installation data remains separate; back up and migrate manually while both services are stopped. Never run both services on the same device. Remove with sudo apt remove rpi-ton3k. To resume the source installation, re-enable its original service.
+On the booted target the package configures and enables rpi-ton3k-pisound.service, installs the six physical button mappings in /etc/pisound.conf (previous mappings backed up), sets up a fallback NetworkManager hotspot and timer, and grants the dedicated service user only the two exact sudo power commands. Audio starts OFF, fixed hardware PCM hw:CARD=pisound,DEV=0, 48 kHz, left input/dual mono output, initial 64 x 3 and nominal ADC reference +1.14 dBu. Web profile exposes port 8080 on the trusted LAN and enables optional cloud login. WARNING: unauthenticated API including power actions; never expose to the Internet or untrusted network. Change BIND in /etc/default/rpi-ton3k-pisound to 127.0.0.1 for SSH-only access.
 
-This is packaging scaffolding, not a validated release. CI tests digital processing, not physical ALSA hardware or real-time performance. Do not install over the production setup until installation and upgrade tests pass.
+| Gesture | Action |
+| --- | --- |
+| Click 1 | NAM 1 stomp |
+| Click 2 | Next preset, one confirmation flash |
+| Click 3 | Hotspot toggle |
+| Hold 1 s | Identify preset with 1–4 flashes |
+| Hold 3 s | Audio on/off, one confirmation flash |
+| Hold 5 s | Vendor shutdown |
+
+Hotspot RPiT3K, 10.42.0.1:8080, only when disconnected or manually enabled. Existing RPiT3K-fallback profile is reused without changing credentials. A new profile uses a unique generated WPA2 password: sudo cat /var/lib/rpi-ton3k-pisound-integration/hotspot-password (do not share it). Existing profile credentials are not copied. The timer does not intentionally interrupt working network connections. Manual OFF inhibits automatic fallback until reboot/manual ON.
+
+Data: /var/lib/rpi-ton3k-pisound. Migration is manual with both source and package services stopped; back up ~/.local/share/rpit3k, copy only the desired library/settings/presets/favorites/artwork and set owner rpi-ton3k-pisound. Do not copy credentials into a distributable package. Remove with sudo apt remove rpi-ton3k-pisound; removal on a booted system restores replaced button mappings, removes package-owned hotspot and power permission, retains personal data. Source service is not re-enabled automatically. If configured in a chroot, boot the target and run sudo dpkg-reconfigure rpi-ton3k-pisound. Pi 4 Pisound package is not produced yet.
+
+## Generic packages
+
+    sudo apt install ./rpi-ton3k_*.deb
+
+Install a single CPU variant. No Pisound driver dependency, button mapping/helper, hotspot unit, network provisioning or sudo power permission is shipped. Default localhost:8080, cloud disabled, configurable PCM/channel routing, 256 x 3, unknown ADC reference, audio OFF. Use SSH forwarding or explicitly configure trusted LAN access. Data /var/lib/rpi-ton3k survives removal/purge. Remove with sudo apt remove rpi-ton3k.
+
+## Local build
+
+From deb-packaging with git, build-essential, cmake, libasound2-dev, python3, dpkg-dev and ca-certificates:
+
+    bash packaging/build-deb.sh 0.1.0~preview1 cortex-a76 pisound
+    bash packaging/build-deb.sh 0.1.0~preview1 cortex-a76 general
+
+The first command is ARM64 only. Generic CPU argument can be empty for portable ARM64/AMD64 or cortex-a72 for Pi 4. Update source pins deliberately when promoting a new tested edition. The generic source pin is its existing branch revision; it does not automatically inherit newer Pi-only UI changes. See build-provenance in installed documentation.
+
+[Build artifacts](https://github.com/tinker-net/RPiT3K/actions/workflows/deb-packaging.yml) · [Prereleases](https://github.com/tinker-net/RPiT3K/releases) · [Pisound source guide](https://github.com/tinker-net/RPiT3K/blob/rpi-ui/README-PISOUND.md).
