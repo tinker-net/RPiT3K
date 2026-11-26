@@ -594,6 +594,7 @@ html body .knob .knob-readout input[type=text]{width:100%;max-width:84px;text-al
 @media(max-width:650px){.practice-adjust{grid-template-columns:1fr}.practice-adjust label{display:flex!important}.practice-adjust input{width:auto;order:1}}
 
 .library-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0}.library-heading h2{margin:0}.smart-switch{display:inline-flex;align-items:center;gap:5px;position:relative;font-size:10px;color:#aaa;cursor:pointer;white-space:nowrap;user-select:none}.smart-switch input{position:absolute;opacity:0;width:1px;height:1px}.smart-track{width:24px;height:13px;border:1px solid #555;border-radius:10px;background:#272727;position:relative}.smart-track:after{content:"";position:absolute;width:7px;height:7px;top:2px;left:2px;background:#888;border-radius:50%;transition:transform .12s}.smart-switch input:checked+.smart-track{border-color:#b7b700}.smart-switch input:checked+.smart-track:after{background:#ffff00;transform:translateX(11px)}.smart-switch input:focus-visible+.smart-track{outline:2px solid #fff;outline-offset:2px}
+.library-name{white-space:normal;line-height:1.25}.library-name>span,.library-name>small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.library-name>small{font-size:10px;color:#999;font-weight:400;margin-top:2px}
 </style></head><body>
 <header><div><div class="brand" aria-label="Ton3K"><svg class="brand-wordmark" viewBox="0 0 154 38" role="img" aria-label="Ton3K" xmlns="http://www.w3.org/2000/svg"><g font-family="Arial Black,Arial,system-ui,sans-serif" font-weight="900" font-style="italic" font-size="32" letter-spacing="-1" text-anchor="middle"><text x="65" y="25" textLength="143" lengthAdjust="spacingAndGlyphs" fill="#ff1600">Ton3K</text><text x="65" y="34" textLength="143" lengthAdjust="spacingAndGlyphs" fill="#1600ff">Ton3K</text><text x="65" y="29.5" textLength="143" lengthAdjust="spacingAndGlyphs" fill="#ffff00">Ton3K</text></g></svg></div><div class="subtitle">NATIVE GUITAR PROCESSOR</div></div><button id="libraryToggle" type="button" aria-label="Toggle library sidebar" aria-controls="libraryPanel" aria-expanded="true" title="Show or hide library"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg></button><button id="rigToggle" type="button" aria-label="Toggle rig sidebar" aria-controls="rigPanel" aria-expanded="true" title="Show or hide rig details"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/></svg></button><div id="currentTitle">Connecting…</div><div class="metrics"><span class="metric">CPU <strong id="cpu" title="CPU utilization: green <30%, amber 30–84%, red ≥85%. Not audio-thread deadline utilization.">—</strong><meter id="cpuMeter" min="0" max="100"></meter></span><span class="metric">TEMP <strong id="temp" title="Temperature: green <55 °C, amber 55–79 °C, red ≥80 °C.">—</strong></span><span class="metric">BUFFER <strong id="latency" title="Nominal ALSA buffer per direction: green <6 ms, amber 6–<12 ms, red ≥12 ms. Not measured round-trip latency.">—</strong></span><span class="metric" id="xrunMetric" title="ALSA recoveries since service start (includes suspend recovery)">XRUNS <strong id="xruns" title="Cumulative ALSA recoveries since service start: green 0 while running, amber 1–4, red ≥5.">—</strong></span></div><div class="header-actions"><div class="toolbar-group effects-group" role="group" aria-label="Effects"><button id="compOpen" type="button" aria-label="Compressor" title="Compressor" aria-haspopup="dialog" aria-pressed="false"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 18l6-7h5l7-6M3 21h18M3 3v18"/></svg></button><button id="chorusOpen" type="button" aria-label="Chorus" title="Chorus" aria-haspopup="dialog" aria-pressed="false"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 8q5-7 10 0t10 0M2 16q5-7 10 0t10 0"/></svg></button><button id="delayOpen" type="button" aria-label="Delay" title="Delay" aria-haspopup="dialog" aria-pressed="false"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5v14M8 8v11M13 11v8M18 14v5M22 17v2"/></svg></button><button id="reverbOpen" type="button" aria-label="Reverb" title="Reverb" aria-haspopup="dialog" aria-pressed="false"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h3m3-7v14m4-11v8m4-6v4m4-3v2"/></svg></button></div><div class="toolbar-group device-group" role="group" aria-label="Device controls"><button id="tuner" type="button" aria-label="Toggle chromatic tuner" aria-pressed="false" title="Toggle tuner" disabled><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3v6a5 5 0 0 0 10 0V3M12 14v7M10 21h4"/></svg></button><button id="practiceOpen" type="button" title="Practice Mode" aria-pressed="false" aria-label="Practice Mode">♫</button><button id="metroOpen" type="button" title="Practice metronome" aria-label="Practice metronome" aria-haspopup="dialog" aria-pressed="false"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3h6l5 18H4L9 3Z M12 17l5-10 M10 17h4"/><circle cx="17" cy="7" r="1.5"/></svg></button><button id="calibrate" type="button" disabled title="Calibrate from Amplifier metadata and ADC reference" aria-label="Input calibration" aria-haspopup="dialog"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="7.5"/><circle cx="12" cy="12" r="3.5"/><circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none"/><path d="M12 2.5v2"/><path d="M12 19.5v2"/><path d="M2.5 12h2"/><path d="M19.5 12h2"/></svg></button><button id="settingsOpen" type="button" aria-label="Audio settings & diagnostics" title="Audio settings & diagnostics" aria-haspopup="dialog" aria-pressed="false"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3M5 5l2 2m10 10 2 2M5 19l2-2M17 7l2-2"/></svg></button><button id="status" type="button" aria-pressed="false" disabled><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 9v6h4l5 4V5L7 9H3Z"/><path d="M16 9a4 4 0 0 1 0 6m3-9a8 8 0 0 1 0 12"/></svg></button></div><div class="toolbar-power"><button id="poweroff" type="button" title="Power options" aria-label="Power options" aria-haspopup="dialog" disabled><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2v10M6 5a9 9 0 1 0 12 0"/></svg></button></div></div></header>
 <main class="layout"><aside class="panel" id="libraryPanel"><div class="library-heading"><h2>Library</h2><label class="smart-switch" title="Show interpreted names instead of original filenames"><input id="smartNames" type="checkbox" role="switch"><span class="smart-track" aria-hidden="true"></span><span>Smart</span></label></div><div class="library"><input id="filter" type="search" placeholder="Find NAM or IR"><div class="folder-tools"><button id="newFolder" title="Create folder in selected location">+ Folder</button><button id="collapseTree" title="Collapse all folders">Collapse</button></div><small id="folderTarget" hidden aria-hidden="true"></small><div id="fileTree" aria-label="Local file tree"></div><div id="importDrop" tabindex="0" aria-label="Drop files or folders to import"><span>Drop files or folders here</span><small id="importProgress">NAM / WAV · preserves folder structure</small></div><div class="import-buttons"><button id="uploadBtn" type="button">Import files</button><button id="folderBrowse" type="button" title="Browser may request folder access confirmation">Browse folder</button></div><input id="uploadFolder" type="file" webkitdirectory multiple hidden><input id="upload" type="file" accept=".nam,.wav" multiple hidden><button id="cloudOpen">Browse TONE3000</button></div></aside><div class="layout-resizer" id="resizeLibrary" role="separator" aria-label="Library width" aria-orientation="vertical" tabindex="0" title="Drag to resize · double-click to reset"></div>
@@ -669,7 +670,7 @@ const yorkCabCatalog=[
  ["VH+ 412 P50E","VHT 4×12 · P50E"]
 ];
 const yorkMics={ "57":"Shure SM57","57M":"Shure SM57 (modern)","57V":"Shure SM57 (vintage)","58":"Shure SM58","SM7":"Shure SM7","421":"Sennheiser MD421","421M":"Sennheiser MD421 (modern)","421V":"Sennheiser MD421 (vintage)","906":"Sennheiser e906","121":"Royer R-121","160":"Beyerdynamic M160","313":"Shure KSM313","4119":"STC / Coles 4119","E22":"Josephson e22S","F47":"Neumann FET 47","U47":"Telefunken U47","184":"Neumann KM 184","N22":"AEA Nuvo N22","414":"AKG C414","I5":"Audix i5"};
-function identifyIR(path,raw){
+function legacyIR(path,raw){
  // Match on normalized tokens but preserve the exact original suffix, including hyphens.
  const norm=s=>s.replace(/[_-]+/g," ").replace(/\s+/g," ").trim().toUpperCase();
  const parts=String(path).split("/"),n=raw.trim(),tokens=[...n.matchAll(/[^\s_-]+/g)];
@@ -735,9 +736,9 @@ function captureChannel(key,tail){
  // Never translate gain, EQ, pedal, IR or circuit revision tokens as channels.
  return tail.replace(/^(\s+(?:(?:19|20)\d{2}\s+)?)([A-Z0-9]+)(?=\s+(?:Clean|CLN|Edge|EOB|EOD|Crunch|Dimed|Drive|Lead|Fuzz|Gain|HiGain|HighGain)(?:\d+)?(?:\s|$))/i,(whole,prefix,token)=>Object.hasOwn(map,token.toUpperCase())?prefix+map[token.toUpperCase()]+" Channel":whole);
 }
-function identifyCapture(path){
+function legacyCapture(path){
  const raw=String(path).split("/").pop().replace(/\.(nam|wav)$/i,""),n=raw.replace(/MRSHL\b/gi,"MRSH").replace(/[_-]+/g," ").replace(/\s+/g," ").trim();
- if(/\.wav$/i.test(path))return identifyIR(path,raw);
+ if(/\.wav$/i.test(path))return legacyIR(path,raw);
  const padded=" "+n.toUpperCase()+" ";
  const match=captureCatalog.find(([key])=>padded.includes(" "+key+" "));
  if(!match)return {raw,label:raw,skin:null,model:null};
@@ -749,12 +750,94 @@ function identifyCapture(path){
  }
  return {raw,label,skin,model};
 }
-function smartName(path){
- const x=identifyCapture(path);if(!smartEnabled)return x.raw;
- if(/\.wav$/i.test(path))return x.label;
- const label=x.model?x.label:x.raw.replace(/\b(?:FNDR|MRSHL?|ORNG|HWTT|VX|MTCH)\b/gi,t=>({FNDR:"Fender",MRSH:"Marshall",MRSHL:"Marshall",ORNG:"Orange",HWTT:"Hiwatt",VX:"Vox",MTCH:"Matchless"})[t.toUpperCase()]);
- return /\.nam$/i.test(path)?label.replace(/[\s_-]+DI$/i,"").replace(/[\s_-]+CAB$/i," · CAB"):label;
+
+const extraModels=[
+ ["FNDR PANO","Fender Pano-Verb","generic"],["ORNG GR100","Orange GRO-100","orange"],["TK IMP","Tone King Imperial MKII","boutique"],["TRCK CRS","Two-Rock CRS","generic"],
+ ["PEDAL IBNZ 808","Ibanez TS808","ts808"],["PEDAL KING PAG","Kingsley Page","kingsleypage"],["PEDAL KLN CENT","Klon Centaur","centaur"],["PEDAL MRSH BSB","Marshall Bluesbreaker","bluesbreaker"],["PEDAL MRX OCT","MXR Octavio","octavio"],["PEDAL PRO WHRAT","ProCo RAT Whiteface","rat"],["PEDAL RMBL TBEND MKI.V","Ramble FX Twin Bender MKI.V","twinbender"]
+];
+const channelMaps={
+ "FNDR BLBM":{B:"Bass",N:"Normal",NR:"Normal"},"FNDR BFBM":{B:"Bass",N:"Normal",NR:"Normal"},
+ "FNDR BFSR":{N:"Normal",NR:"Normal",V:"Vibrato",VB:"Vibrato"},
+ "FNDR TWDLX":{IN:"Instrument",JU:"Jumped",N:"Normal",BR:"Bright"},
+ "MRSH JT50":{I:"I",II:"II",JU:"Jumped",BR:"Bright",N:"Normal"},
+ "ORNG RV100":{CL:"Clean",C:"Clean",OD:"Dirty",D:"Dirty"},
+ "TK IMP":{RH:"Rhythm",LD:"Lead",R:"Rhythm",L:"Lead"},
+ "TK IMP MKII":{RH:"Rhythm",LD:"Lead",R:"Rhythm",L:"Lead"},
+ "VX TB30":{BR:"Brilliant",NR:"Normal",N:"Normal",TB:"Top Boost"},
+ "MTCH PHNX":{I:"I",II:"II"},"TRCK CRS":{NR:"Normal"}
+};
+const toneCodes={BAL:"Balanced",BRI:"Bright",BRT:"Bright",WRM:"Warm",FAT:"Fat",SCP:"Scooped",THN:"Thin",CLN:"Clean",FZZ:"Fuzz",EOB:"Edge",EOD:"Edge",PED:"Pedal Platform",BSB:"Bluesbreaker","808":"TS808",KLN:"Klon",PAG:"Kingsley Page",KOT:"King of Tone",TMY:"Timmy",ZEN:"Zendrive",T9:"TS9",BST:"Boost",TS:"Tube Screamer",ALLON10:"All on 10"};
+function expandTone(token){
+ const m=token.match(/^([a-z]+)(\d*)$/i);
+ if(m&&Object.hasOwn(toneCodes,m[1].toUpperCase()))return toneCodes[m[1].toUpperCase()]+(m[2]?" "+m[2]:"");
+ if(Object.hasOwn(toneCodes,token.toUpperCase()))return toneCodes[token.toUpperCase()];
+ return token.replace(/^(Clean|Crunch|Dimed|Edge|Drive|Lead|Gain|Boost)(\d+)$/i,"$1 $2");
 }
+function result(raw,title,details,skin=null,model=title){
+ return {raw,title,details:details.filter(Boolean),label:[title,...details.filter(Boolean)].join(" · "),skin,model};
+}
+const yorkPacks=[
+ ["KW 412 M25 SH","Kerry Wright 4×12","Celestion G12M25","Scott Henderson"],
+ ["ORNG 412 V30","Orange PPC412 4×12","Celestion Vintage 30"],
+ ["BMAN 410 P10Q","Fender Bassman Tweed 4×10","Jensen P10Q"],
+ ["DXVB 112","Fender Deluxe Reverb 1×12","Oxford"],
+ ["MES 212 V30","Mesa/Boogie 2×12","Celestion Vintage 30"]
+];
+const normIR=s=>s.replace(/[_-]+/g," ").replace(/\s+/g," ").trim().toUpperCase();
+function normalYork(path,raw){
+ const parts=path.split("/"),normalized=normIR(raw).replace(/^YA /,"");
+ const p=yorkPacks.find(([k])=>parts.slice(0,-1).some(x=>normIR(x).replace(/^YA /,"")===k)||normalized.startsWith(k+" ")||normalized===k);
+ if(!p){const x=legacyIR(path,raw);return result(raw,x.label,[],null,x.model);}
+ const [key,title,speaker,artist]=p;
+ // Actual basename may omit SH or use a different separator. Remove only verified pack prefix.
+ const base=raw.replace(/^YA[\s_-]+/i,""),words=[...base.matchAll(/[^\s_-]+/g)],ks=key.split(" ");
+ let count=0;while(count<ks.length&&words[count]?.[0].toUpperCase()===ks[count])count++;
+ let tail=count>=Math.min(3,ks.length)?base.slice(words[count-1].index+words[count-1][0].length).replace(/^[\s_-]+/,""):base;
+ tail=tail.replace(/^SH(?:[\s_-]+|$)/i,"Scott Henderson ");
+ const mic=tail.match(/^([a-z0-9]+)(?=[\s_-]|$)/i);
+ if(mic&&Object.hasOwn(yorkMics,mic[1].toUpperCase()))tail=yorkMics[mic[1].toUpperCase()]+tail.slice(mic[0].length);
+ tail=tail.replace(/^(Mix)[\s_-]*(\d+)/i,"Mix $2");
+ const phase=parts.find(x=>/^(?:Minimum|Natural) Phase/i.test(x))||"";
+ const phaseLabel=/^Minimum/i.test(phase)?"Minimum Phase":/^Natural/i.test(phase)?"Natural Phase":"";
+ const stereo=parts.some(x=>/\bStereo\b/i.test(x))?"Stereo":"";
+ return result(raw,title,[speaker,artist,tail,phaseLabel,stereo],null,title);
+}
+function normalAmalgamIR(path,raw){
+ let n=raw.replace(/_/g," ").trim(),title="",m;
+ const rules=[
+ [/^FNDR BFSR\b/i,"Fender Super Reverb"],[/^FNDR TWDLX\b/i,"Fender Deluxe (Tweed)"],[/^FNDR PANO\b/i,"Fender Pano-Verb"],[/^(?:FNDR|Fender)\b/i,"Fender"],
+ [/^MRSH\b/i,"Marshall"],[/^HWTT\b/i,"Hiwatt"],[/^ORNG\b/i,"Orange"],[/^MTCH PHNX\b/i,"Matchless Phoenix 35"],[/^MTCH\b/i,"Matchless"],[/^TK IMP\b/i,"Tone King Imperial MKII"],[/^TRCK\b/i,"Two-Rock"],[/^VX(?:\s+TB30|\s+TB)?(?=\s|2X12)/i,"Vox"],[/^VOX\b/i,"Vox"],[/^MES\b/i,"Mesa/Boogie"],[/^CRR MERC\b/i,"Carr Mercury"],[/^MAGN DUSK\b/i,"Magnatone Dusk"]
+ ];
+ const rule=rules.find(([re])=>re.test(n));if(!rule)return result(raw,raw,[],null,null);
+ title=rule[1];n=n.replace(rule[0],"").trim();
+ // Cabinet model, dimensions and date in canonical order regardless of source token order.
+ m=n.match(/\b1960[AB]\b/i);if(m){title+=" "+m[0].toUpperCase();n=n.replace(m[0],"").trim();}
+ const dims=[...n.matchAll(/\b([1248])\s*[xX×]\s*(10|12|15)\b/g)];
+ if(dims.length){title+=" "+dims.map(d=>d[1]+"×"+d[2]).join(" + ");n=n.replace(/\b([1248])\s*[xX×]\s*(10|12|15)\b/g,"").replace(/^\s*\+\s*/,"").trim();}
+ else if(/\b1960[AB]\b/.test(title))title+=" 4×12";
+ m=n.match(/\b(?:19|20)\d{2}\b/);if(m){title+=" ("+m[0]+")";n=n.replace(m[0],"").trim();}
+ n=n.replace(/\bG12M25W?\b/gi,"Celestion G12M25").replace(/\bG12M65\b/gi,"Celestion G12M-65").replace(/\bG12H30\b/gi,"Celestion G12H30").replace(/\bV30\b/gi,"Celestion Vintage 30").replace(/\b(?:G12 65|G12-65)\b/gi,"Celestion G12-65").replace(/\b(?:Jensen\s+)?(C12N|P12R)\b/gi,"Jensen $1").replace(/\bEV12L\b/gi,"Electro-Voice EVM12L").replace(/\b(\d+)\s*Hz\b/gi,"$1 Hz").replace(/\bLP\s*(\d+(?:\.\d+)?)\s*K(?:Hz)?\b/gi,"LP $1 kHz").replace(/\bHP\s*(\d+)(?:\s*Hz)?\b/gi,"HP $1 Hz").replace(/\bBRI\b/gi,"Bright").replace(/\bMIX\b/gi,"Mix").replace(/\bv(\d+)\b/gi,"V$1").replace(/\bSILVERS?\b/gi,"Silver").replace(/\bALNICO\b/gi,"Alnico").replace(/\bGOLD\b/gi,"Gold").replace(/\s+/g," ").trim();
+ return result(raw,title,[n],null,title);
+}
+function identifyCapture(path){
+ const raw=String(path).split("/").pop().replace(/\.(nam|wav)$/i,"");
+ if(/\.wav$/i.test(path)){
+  if(/(?:^|\/)York Audio(?:\/|$)/i.test(path)||/^YA[\s_-]/i.test(raw))return normalYork(path,raw);
+  if(/(?:^|\/)(?:IRs )?Amalgam(?: Audio)?(?:\/|$)/i.test(path))return normalAmalgamIR(path,raw);
+  return result(raw,raw,[],null,null);
+ }
+ const n=raw.replace(/MRSHL\b/gi,"MRSH").replace(/_/g," ").replace(/\s+/g," ").trim();
+ const catalog=[...extraModels,...captureCatalog].sort((a,b)=>b[0].length-a[0].length);
+ const match=catalog.find(([key])=>n.toUpperCase()===key||n.toUpperCase().startsWith(key+" "));
+ if(!match)return result(raw,raw.replace(/[\s_-]+DI$/i,""),[],null,null);
+ const [key,model,skin]=match,year=path.split("/").slice(0,-1).reverse().map(x=>x.match(/\b(?:19|20)\d{2}\b/)).find(Boolean)?.[0];
+ let tail=n.slice(key.length).trim().replace(/\s+D\s*I$/i,"").trim().split(/\s+/).filter(Boolean);
+ const channels=channelMaps[key]||captureChannels[key]||{};
+ const channel=tail.length&&Object.hasOwn(channels,tail[0].toUpperCase())?channels[tail.shift().toUpperCase()]:null;
+ const generation=path.split("/").find(x=>/^A[12]$/i.test(x));
+ return result(raw,model+(year?" ("+year+")":""),[channel,...tail.map(expandTone),generation],skin,model);
+}
+function smartName(path){const x=identifyCapture(path);return smartEnabled?x.label:x.raw;}
 let smartEnabled=true;try{smartEnabled=localStorage.getItem("ton3k.originalNames")!=="1";}catch(e){}
 let practiceVisible=false;
 let treeKey=null;const openFolders=new Set();let libraryTarget="";
@@ -1027,7 +1110,7 @@ function renderTree(force=false){
  function fileRow(file){
   const row=document.createElement("div"),b=document.createElement("button"),ico=document.createElement("span"),name=document.createElement("span"),tag=document.createElement("small"),isIR=file.toLowerCase().endsWith(".wav");
   row.className="library-file";row.classList.toggle("current",selected.includes(file));
-  b.className="library-file-main";b.type="button";ico.className="library-glyph";ico.innerHTML=fileIcon;name.textContent=smartName(file);name.className="library-name";tag.textContent=isIR?"IR":"NAM";tag.className="library-type";b.title=file;b.append(ico,name,tag);
+  b.className="library-file-main";b.type="button";ico.className="library-glyph";ico.innerHTML=fileIcon;name.className="library-name";const identity=identifyCapture(file);if(smartEnabled&&identity.details.length){const primary=document.createElement("span"),secondary=document.createElement("small");primary.textContent=identity.title;secondary.textContent=identity.details.join(" · ");name.append(primary,secondary);}else name.textContent=smartName(file);tag.textContent=isIR?"IR":"NAM";tag.className="library-type";b.title=file;b.append(ico,name,tag);
   b.onclick=()=>{if(busy)return;const id=isIR?"ir":"model";el(id).value=file;updateAmp();renderTree(true);queueLive();};
   const starred=favorites.has(file);
   row.append(b,libraryButton(starred?"★":"☆",starred?"Remove favorite":"Add favorite",()=>action(async()=>{state=await request("/api/favorite",JSON.stringify({path:file,enabled:!starred}));renderTree(true);}),starred?"starred":""),libraryButton("⋯","File options",()=>itemMenu(file,"file")));return row;
@@ -1327,7 +1410,7 @@ function drawPicker(){
  const candidates=all.filter(f=>!pickerFav||fav.has(f));
  const results=q?candidates.map(f=>({f,rank:pickerRank(f,q,pickerMetadata.get(f)||"")})).filter(x=>x.rank>=0).sort((a,b)=>b.rank-a.rank||a.f.localeCompare(b.f,undefined,{numeric:true,sensitivity:"base"})).map(x=>x.f):candidates.filter(f=>pickerFav||f.split("/").slice(0,-1).join("/")===pickerFolder);
  el("pickerSearchCount").textContent=results.length+" files";
- for(const f of results){const b=document.createElement("button"),name=document.createElement("span"),path=document.createElement("small");b.type="button";b.className="picker-item";name.textContent=(fav.has(f)?"★  ":"")+smartName(f);b.title=f;path.textContent=f.split("/").slice(0,-1).join(" / ")||"Library root";b.append(name,path);b.classList.toggle("selected",f===pickerSelected);b.onclick=()=>{pickerSelected=f;for(const item of list.querySelectorAll(".picker-item"))item.classList.toggle("selected",item===b);el("pickerSelection").textContent=name.textContent;el("pickerLoad").disabled=false;};b.ondblclick=()=>{pickerSelected=f;commitPicker();};list.append(b);}
+ for(const f of results){const b=document.createElement("button"),name=document.createElement("span"),path=document.createElement("small");b.type="button";b.className="picker-item";const identity=identifyCapture(f);name.textContent=(fav.has(f)?"★  ":"")+(smartEnabled?identity.title:identity.raw);b.title=f;path.textContent=smartEnabled&&identity.details.length?identity.details.join(" · "):f.split("/").slice(0,-1).join(" / ")||"Library root";b.append(name,path);b.classList.toggle("selected",f===pickerSelected);b.onclick=()=>{pickerSelected=f;for(const item of list.querySelectorAll(".picker-item"))item.classList.toggle("selected",item===b);el("pickerSelection").textContent=name.textContent;el("pickerLoad").disabled=false;};b.ondblclick=()=>{pickerSelected=f;commitPicker();};list.append(b);}
  if(!results.length){const hint=document.createElement("p");hint.textContent="No matching files. Choose a folder or search the library.";list.append(hint);}
  el("pickerSelection").textContent=pickerSelected?pickerSelected.split("/").pop().replace(/\.(nam|wav)$/i,""):"No file selected";el("pickerLoad").disabled=!pickerSelected||!all.includes(pickerSelected);
 }
