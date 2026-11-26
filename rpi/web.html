@@ -453,13 +453,13 @@ html[data-skin=tone3000] .rig .stomp-toggle[aria-pressed=true]{color:var(--amber
 /* Keep the visible artwork edges next to the arrow, not the edges of oversized flex cells. */
 @media(min-width:1001px){
  #ampView{max-width:1180px;margin-inline:auto}
- #ampChain{gap:16px;margin-inline:auto}
+ #ampChain{gap:40px;margin-inline:auto}
  html[data-skin=tone3000] #chainArrow{flex:0 0 40px}
  #ampChain .chain-unit{flex:0 1 var(--art-width,50%);width:var(--art-width,50%);max-width:var(--art-width,50%)}
  #ampChain .chain-unit.is-pedal{flex:0 1 var(--art-width,220px);width:var(--art-width,220px);max-width:220px}
  #ampChain .chain-unit #ampArtwork,#ampChain .chain-unit #secondArtwork{height:100%;max-width:none}
- .controls-panel.face-no-rail>div:first-child,.controls-panel.expanded-face>div:first-child{grid-column:2;grid-row:1;justify-self:start}
- .controls-panel.face-no-rail>div:nth-child(2),.controls-panel.expanded-face>div:nth-child(2){grid-column:2;grid-row:2}
+ .controls-panel>div:first-child{grid-column:1;grid-row:1;justify-self:center}
+ .controls-panel>div:nth-child(2){grid-column:2;grid-row:1}
 }
 
 </style></head><body>
@@ -1231,18 +1231,24 @@ el("ampAppearance").onclick=()=>chooseAmpAppearance(firstNAMSlot()||"model");el(
  function align(){
   pending=false;
   if(window.innerWidth<=1000)return;
-  const expanded=stage.closest(".layout").matches(".library-hidden.rig-hidden");
-  const target=expanded?el("ampView"):stage;
-  const s=target.getBoundingClientRect(),p=panel.getBoundingClientRect(),cs=getComputedStyle(panel);
+  const layout=stage.closest(".layout"),p=panel.getBoundingClientRect(),cs=getComputedStyle(panel);
   const x=p.left+parseFloat(cs.borderLeftWidth)+parseFloat(cs.paddingLeft);
   const available=panel.clientWidth-parseFloat(cs.paddingLeft)-parseFloat(cs.paddingRight);
-  if(s.width<=0||available<=0)return;
-  const left=Math.max(0,Math.min(available,s.left-x));
-  const width=Math.max(0,Math.min(available-left,s.right-x-left));
+  if(available<=0)return;
+  // Reserve the same virtual sidebar columns whether they are visible or not.
+  const lc=getComputedStyle(layout),measure=document.createElement("div");
+  measure.style.cssText="position:absolute;visibility:hidden;pointer-events:none;height:0;";
+  layout.append(measure);
+  const rail=(value,fallback)=>{measure.style.width=value.trim()||fallback;return measure.getBoundingClientRect().width;};
+  const l=layout.getBoundingClientRect();
+  const library=rail(lc.getPropertyValue("--library-width"),"clamp(180px,18vw,350px)");
+  const rig=rail(lc.getPropertyValue("--rig-width"),"clamp(260px,17vw,320px)");
+  measure.remove();
+  const left=Math.max(0,Math.min(available,l.left+library+8-x));
+  const width=Math.max(0,Math.min(available-left,l.width-library-rig-16));
   panel.style.setProperty("--face-left",left+"px");
   panel.style.setProperty("--face-width",width+"px");
-  panel.classList.toggle("face-no-rail",left<145);
-  panel.classList.toggle("expanded-face",expanded);
+  panel.classList.remove("face-no-rail","expanded-face");
  }
  function schedule(){if(!pending){pending=true;requestAnimationFrame(align);}}
  if(typeof ResizeObserver!=="undefined"){const observer=new ResizeObserver(schedule);observer.observe(stage);observer.observe(el("ampView"));observer.observe(panel);}
