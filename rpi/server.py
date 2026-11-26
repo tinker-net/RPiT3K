@@ -30,7 +30,7 @@ AMP_ART_KEYS = frozenset(("blackface","silverface","tweed","vox","orange","plexi
 AMP_ART_LIMIT = 2 * 1024 * 1024
 NAME = re.compile(r"[\w .()+@-]{1,180}", re.UNICODE)
 DEFAULT = dict(nam1_enabled=True, model="", second="", ir="", ir2="", ir_mix=.5, hiz=0, hiz_amount=.9, hiz_profile=0, slim=1, slim2=1, input=1, output=.15,
-               bass=0, mid=0, treble=0, gate=-81, comp=0, comp_post=0, reverb=0, decay=1.5, reverb_type=0, comp_amount=.35, chorus_amount=.35, delay_amount=.25, reverb_amount=.25, chorus=0, chorus_rate=0.8, chorus_depth=0.5, delay=0, delay_ms=350, delay_feedback=0.35, bypass=True)
+               bass=0, mid=0, treble=0, gate=-81, comp=0, comp_post=0, reverb=0, decay=1.5, reverb_type=0, comp_amount=.35, chorus_amount=.35, delay_amount=.25, reverb_amount=.25, chorus=0, chorus_rate=0.8, chorus_depth=0.5, delay=0, delay_ms=350, delay_feedback=0.35, bypass_nam2=False, bypass_ir=False)
 RANGES = dict(hiz=(0,1), hiz_profile=(0,3), ir_mix=(0,1), slim=(0,1), slim2=(0,1), input=(0,2), output=(0,1),
               bass=(-20,20), mid=(-15,15), treble=(-10,10), gate=(-81,-30), comp=(0,1), comp_post=(0,1), reverb=(0,1), decay=(.2,5), reverb_type=(0,2), chorus=(0,1), chorus_rate=(0.1,5), chorus_depth=(0,1), delay=(0,1), delay_ms=(20,1000), delay_feedback=(0,0.85))
 
@@ -41,6 +41,14 @@ FX_DEFAULT_AMOUNTS = dict(comp=.35, chorus=.35, delay=.25, reverb=.25)
 
 def normalize_fx(preset):
     p=dict(preset)
+    # Legacy global bypass disabled both NAM slots and both cabinets.
+    if "bypass" in p:
+        legacy=p.pop("bypass")
+        if type(legacy) is not bool: raise ValueError("Invalid legacy bypass")
+        if legacy:
+            p["nam1_enabled"]=False
+        p.setdefault("bypass_nam2",legacy)
+        p.setdefault("bypass_ir",legacy)
     for k,default in FX_DEFAULT_AMOUNTS.items():
         effective=p.get(k,0)
         if type(effective) not in (int,float) or not math.isfinite(effective) or not 0<=effective<=1:
@@ -273,8 +281,8 @@ class Controller:
         if type(p["hiz_amount"]) not in (int,float) or not math.isfinite(p["hiz_amount"]) or not 0<=p["hiz_amount"]<=1:
             raise ValueError("Invalid Hi-Z amount")
         if type(p["nam1_enabled"]) is not bool: raise ValueError("Invalid NAM 1 state")
-        if type(p["bypass"]) is not bool:
-            raise ValueError("Invalid bypass")
+        for key in ("bypass_nam2","bypass_ir"):
+            if type(p[key]) is not bool: raise ValueError("Invalid "+key)
         for k,(lo,hi) in RANGES.items():
             v = p[k]
             if type(v) not in (int,float) or not math.isfinite(v) or not lo <= v <= hi:
@@ -286,8 +294,6 @@ class Controller:
         for k,ext in (("model",(".nam",)),("second",(".nam",".wav")),("ir",(".wav",)),("ir2",(".wav",))):
             if p[k] != "" and not self.file(p[k],ext).is_file():
                 raise ValueError("Missing "+k)
-        if not p["bypass"] and not (p["model"] or p["second"].lower().endswith(".nam")):
-            raise ValueError("Choose a NAM capture or enable bypass")
         if str(p["second"]).lower().endswith(".wav"):
             p["slim2"] = 1
         return p
@@ -302,17 +308,17 @@ class Controller:
 
     def command(self,p):
         cmd=[str(self.exe)]+self.audio_args()
-        if p["bypass"]:
+        # Keep the selected paths in the preset; omit only inactive stages from the native rig.
+        second_is_ir=p["second"].lower().endswith(".wav")
+        if p["model"]:
+            cmd+=["--model",str(self.library/p["model"])]
+        if p["second"] and ((second_is_ir and not p["bypass_ir"]) or (not second_is_ir and not p["bypass_nam2"])):
+            cmd+=["--second",str(self.library/p["second"])]
+        if not p["bypass_ir"]:
+            for key in ("ir","ir2"):
+                if p[key]: cmd+=["--"+key,str(self.library/p[key])]
+        if not any(flag in cmd for flag in ("--model","--second","--ir","--ir2")):
             cmd+=["--bypass"]
-        else:
-            if p["model"]:
-                cmd+=["--model",str(self.library/p["model"])]
-            if p["second"]:
-                cmd+=["--second",str(self.library/p["second"])]
-            if p["ir"]:
-                cmd+=["--ir",str(self.library/p["ir"])]
-            if p["ir2"]:
-                cmd+=["--ir2",str(self.library/p["ir2"])]
         if not p["nam1_enabled"]: cmd+=["--nam1-off"]
         for k in RANGES:
             cmd+=["--"+k,str(p[k])]
@@ -528,7 +534,7 @@ class Controller:
         if slot not in self.presets: raise ValueError("Invalid preset")
         p=self.validate(p)
         if self.proc and self.proc.poll() is None and self.active is not None:
-            structural=("model","second","ir","ir2","slim","slim2","bypass")
+            structural=("model","second","ir","ir2","slim","slim2","bypass_nam2","bypass_ir")
             if slot==self.active and all(p[k]==self.presets[slot][k] for k in structural):
                 self.live_controls(slot,p)
             else:
@@ -561,7 +567,7 @@ class Controller:
     def toggle_stomp(self):
         slot=self.active or self.settings["last"]
         p=dict(self.presets[slot])
-        if not p["model"] or p["bypass"]:raise ValueError("Select NAM 1 and disable global bypass first")
+        if not p["model"]:raise ValueError("Select NAM 1 first")
         p["nam1_enabled"]=not p["nam1_enabled"]
         if self.proc and self.proc.poll() is None and self.active==slot:
             self.proc.stdin.write("STOMP "+str(int(p["nam1_enabled"]))+"\n")

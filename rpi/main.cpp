@@ -138,7 +138,7 @@ Options parse(int argc, char** argv, bool rig_only=false) {
         else if(k=="--treble") o.treble=std::stof(v);
         else throw std::runtime_error("Unknown option: "+k);
     }
-    if(o.model.empty() && (o.second.empty() || is_wav(o.second)) && !o.bypass && !o.tuner) throw std::runtime_error("Choose a NAM capture in either slot");
+    if(o.model.empty() && o.second.empty() && o.ir.empty() && o.ir2.empty() && !o.bypass && !o.tuner) throw std::runtime_error("Choose a NAM or cabinet IR, or enable bypass");
     for(double x:{o.slim,o.slim2}) if(!std::isfinite(x)||x<0||x>1) throw std::runtime_error("Slim must be 0..1");
     for(float x:{o.input,o.output,o.bass,o.mid,o.treble}) if(!std::isfinite(x)) throw std::runtime_error("Nonfinite control");
     if(o.input<0||o.input>2||o.output<0||o.output>1) throw std::runtime_error("Gain outside range");

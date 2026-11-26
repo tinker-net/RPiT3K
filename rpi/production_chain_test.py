@@ -31,5 +31,14 @@ with tempfile.TemporaryDirectory() as d:
     for mix in (0,.25,.5,1):
         dual=run(p,"dual"+str(mix),["--model",model,"--ir",p/"a.wav","--ir2",p/"b.wav","--ir_mix",mix])
         close(dual,[i+mix*(j-i) for i,j in zip(a,b)],"dual IR blend "+str(mix))
+    gain=p/"gain.nam"
+    gain.write_text(json.dumps({"version":"0.5.4","architecture":"Linear","config":{"receptive_field":1,"bias":False},"weights":[0.5],"sample_rate":48000}))
+    close(run(p,"ir_only",["--ir",p/"a.wav"]),a,"IR without NAM")
+    close(run(p,"legacy_ir_only",["--second",p/"a.wav"]),a,"legacy IR without NAM")
+    both=run(p,"two_gain",["--model",gain,"--second",gain,"--ir",p/"a.wav"])
+    close(both,[v*.25 for v in a],"two NAM plus IR")
+    close(run(p,"nam2_off",["--model",gain,"--ir",p/"a.wav"]),[v*.5 for v in a],"NAM 2 bypass leaves IR")
+    close(run(p,"ir_off",["--model",gain,"--second",gain]),[v*.25 for v in base],"IR bypass leaves both NAM")
+    close(run(p,"nam1_off",["--model",gain,"--nam1-off","--second",gain,"--ir",p/"a.wav"]),[v*.5 for v in a],"NAM 1 stomp leaves NAM 2 and IR")
     close(run(p,"bypass_loaded",["--bypass","--model",model,"--ir",p/"a.wav","--ir2",p/"b.wav"]),base,"NAM/IR bypass")
 print("Production chain routing PASS")

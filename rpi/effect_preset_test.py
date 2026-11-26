@@ -55,7 +55,7 @@ class FXTests(unittest.TestCase):
         self.c.file=lambda *args: self.c.statefile
         self.c.statefile.touch()
         self.c.settings={"last":"1"}
-        self.c.presets["1"].update(model="drive.nam",second="amp.nam",bypass=False)
+        self.c.presets["1"].update(model="drive.nam",second="amp.nam")
         before=dict(self.c.presets["1"])
         self.c.toggle_stomp()
         self.assertEqual(self.c.proc.stdin.getvalue(),"STOMP 0\n")
@@ -68,7 +68,7 @@ class FXTests(unittest.TestCase):
         self.c.file=lambda *args: self.c.statefile
         self.c.statefile.touch()
         self.c.settings={"last":"1"}
-        self.c.presets["1"].update(model="drive.nam",bypass=False)
+        self.c.presets["1"].update(model="drive.nam")
         self.c.proc=None
         self.c.active=None
         self.c.toggle_stomp()
@@ -89,6 +89,34 @@ class FXTests(unittest.TestCase):
             self.c.next_preset()
             self.assertEqual(self.c.settings["last"],expected)
             self.assertIsNone(self.c.proc)
+    def test_independent_bypass_routing(self):
+        self.c.exe=Path("/engine")
+        self.c.library=Path("/library")
+        self.c.args=SimpleNamespace(device="default")
+        self.c.audio_args=lambda:[]
+        self.c.file=lambda *args:self.c.statefile
+        self.c.statefile.touch()
+        p=dict(DEFAULT,model="drive.nam",second="amp.nam",ir="a.wav",ir2="b.wav")
+        for nam2 in (False,True):
+            for ir in (False,True):
+                q=self.c.validate(dict(p,bypass_nam2=nam2,bypass_ir=ir))
+                cmd=self.c.command(q)
+                self.assertIn("--model",cmd)
+                self.assertEqual("--second" in cmd,not nam2)
+                self.assertEqual("--ir" in cmd,not ir)
+                self.assertEqual("--ir2" in cmd,not ir)
+                self.assertEqual(q["second"],"amp.nam")
+                self.assertEqual(q["ir"],"a.wav")
+                self.assertNotIn("--bypass",cmd)
+        old=self.c.validate(dict(model="drive.nam",second="amp.nam",ir="a.wav",bypass=True))
+        self.assertFalse(old["nam1_enabled"])
+        self.assertTrue(old["bypass_nam2"])
+        self.assertTrue(old["bypass_ir"])
+        for key in ("bypass_nam2","bypass_ir"):
+            with self.assertRaises(ValueError): self.c.validate(dict(p,**{key:1}))
+        legacy_ir=dict(p,model="",second="legacy.wav",ir="",ir2="")
+        self.assertIn("--second",self.c.command(dict(legacy_ir,bypass_nam2=True)))
+        self.assertIn("--bypass",self.c.command(dict(legacy_ir,bypass_ir=True)))
     def test_bad_values(self):
         for value in (float("nan"),float("inf"),-1,2,".5",True,0):
             p=dict(DEFAULT,comp_amount=value)

@@ -18,3 +18,6 @@ Pi 5/Pisound, aarch64 Linux 6.18.60+rpt-rpi-2712, GCC 14.2.0: incremental build 
 
 ## Open validation
 Clean SD installation, real browser rendering, live audio stability/latency and audible transitions with latest effects, hardware button/hotspot, real OAuth authorization/download/restart/reboot, generic USB/x86 hardware, and physical ADC/Hi-Z measurement. Documentation and code inspection do not establish these results. No changes to DSP algorithms in documentation consolidation.
+
+## Independent cabinet and second NAM bypass
+Each preset stores independent `bypass_nam2` and `bypass_ir` switches; NAM 1 retains its existing stomp. IR bypass excludes both cabinet IRs including legacy WAV in slot 2. Structural changes use the existing live rig exchange and fade, without reopening ALSA. Legacy global bypass migrates to NAM 1 OFF and both bypass switches ON. No inference or convolution algorithm changes. Added controller routing/migration and production offline signal checks; CI and hardware verification pending.
