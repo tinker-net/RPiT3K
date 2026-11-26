@@ -66,7 +66,7 @@ class ToneCloud:
         if u.scheme!='https' or not u.hostname or u.port not in (None,443) or u.username or u.password:
             raise ValueError('Unsafe TONE3000 download redirect')
         host=u.hostname.lower()
-        if host not in ('www.tone3000.com','tone3000.com'):
+        if host not in ('www.tone3000.com','tone3000.com','files.tone3000.com'):
             # External signed download URL: reject non-public addresses and never forward OAuth.
             try:
                 addresses=socket.getaddrinfo(host,443,type=socket.SOCK_STREAM)
@@ -104,7 +104,9 @@ class ToneCloud:
                     if not location or hop==5:
                         raise ValueError("TONE3000 download redirect missing or limit exceeded") from None
                     target=self.download_redirect(url,location)
-                    if urlsplit(target).hostname!=urlsplit(url).hostname:
+                    # Explicitly trusted TONE3000 file origin, observed in a
+                    # real download. Never forward a bearer to other hosts.
+                    if urlsplit(target).hostname not in ("www.tone3000.com","tone3000.com","files.tone3000.com"):
                         headers.pop("Authorization",None)
                     url=target
                     continue

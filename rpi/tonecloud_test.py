@@ -85,6 +85,15 @@ class DownloadTests(unittest.TestCase):
         self.c.http.open.side_effect=[self.redirect("https://cdn.example.com/signed"),self.response()]
         self.assertEqual(self.c.fetch(self.url,token="fake",binary=True),b"model")
         self.assertIsNone(self.c.http.open.call_args.args[0].get_header("Authorization"))
+    def test_official_file_origin_keeps_bearer(self):
+        self.c.http.open.side_effect=[self.redirect("https://files.tone3000.com/model"),self.response()]
+        self.assertEqual(self.c.fetch(self.url,token="fake",binary=True),b"model")
+        self.assertEqual(self.c.http.open.call_args.args[0].get_header("Authorization"),"Bearer fake")
+    @patch("tonecloud.socket.getaddrinfo",return_value=[(2,1,6,"",("8.8.8.8",443))])
+    def test_bearer_not_restored_after_external_hop(self,_):
+        self.c.http.open.side_effect=[self.redirect("https://cdn.example.com/signed"),self.redirect("https://files.tone3000.com/model"),self.response()]
+        self.assertEqual(self.c.fetch(self.url,token="fake",binary=True),b"model")
+        self.assertIsNone(self.c.http.open.call_args.args[0].get_header("Authorization"))
     def test_http_blocked(self):
         self.c.http.open.side_effect=self.redirect("http://www.tone3000.com/file")
         with self.assertRaisesRegex(ValueError,"Unsafe"):self.c.fetch(self.url,token="fake",binary=True)
