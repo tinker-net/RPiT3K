@@ -35,6 +35,7 @@ jobs:
           ctest --test-dir build-rpi --output-on-failure
           ./build-rpi/rpit3k --bypass --verify
           python3 -m py_compile rpi/*.py
+          python3 rpi/button_status_test.py
           for f in rpi/*.sh; do bash -n "$f"; done
       - name: Browser script syntax
         run: |

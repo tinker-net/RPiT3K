@@ -620,8 +620,11 @@ class Controller:
         b,p=self.settings["buffer"],self.settings["periods"]
         return dict(cpu=self.cpu_pct,temp=temp,buffer=b,periods=p,period_ms=b/48,buffer_ms=b*p/48,**self.xrun_status())
 
+    def button_status(self):
+        return dict(presets={k:dict(v) for k,v in self.presets.items()},active=self.active,settings=dict(self.settings),running=self.proc is not None and self.proc.poll() is None,button_revision=getattr(self,"button_revision",0))
+
     def status(self):
-        return dict(presets=self.presets,active=self.active,settings=self.settings,telemetry=self.telemetry(),
+        return dict(presets=self.presets,active=self.active,settings=self.settings,button_revision=getattr(self,"button_revision",0),telemetry=self.telemetry(),
                     cloud_enabled=not self.args.disable_cloud,
                     poweroff_enabled=os.environ.get("RPIT3K_ENABLE_POWEROFF")=="1",
                     running=self.proc is not None and self.proc.poll() is None,
@@ -681,7 +684,16 @@ class Handler(BaseHTTPRequestHandler):
             except (OSError,ValueError):
                 self.send(404,dict(error="Artwork unavailable"))
         elif path=="/api/levels":
-            self.send(200,self.server.controller.levels())
+            c=self.server.controller
+            data=c.levels()
+            if c.lock.acquire(blocking=False):
+                try: data["button"]=c.button_status()
+                finally: c.lock.release()
+            self.send(200,data)
+        elif path=="/api/button-status":
+            c=self.server.controller
+            with c.lock: data=c.button_status()
+            self.send(200,data)
         elif path=="/api/status":
             with self.server.controller.lock:
                 self.send(200,self.server.controller.status())
@@ -748,6 +760,21 @@ class Handler(BaseHTTPRequestHandler):
                 if not isinstance(v,dict): raise ValueError('Expected object')
                 self.send(200,c.cloud.action(u.path.rsplit('/',1)[-1],v))
                 return
+            # Physical controls must not walk the library or render telemetry.
+            if u.path in ("/api/stomp","/api/next","/api/audio-toggle"):
+                if self.client_address[0] not in ("127.0.0.1","::1"): raise ValueError("Local button endpoint only")
+                started=time.monotonic()
+                with c.lock:
+                    acquired=time.monotonic()
+                    if u.path=="/api/stomp": c.toggle_stomp()
+                    elif u.path=="/api/next": c.next_preset()
+                    else: c.toggle_audio()
+                    c.button_revision=getattr(c,"button_revision",0)+1
+                    compact=parse_qs(u.query).get("compact")==["1"]
+                    data=c.button_status() if compact else c.status()
+                print("BUTTON "+u.path.rsplit("/",1)[-1]+" lock_ms=%.1f action_ms=%.1f"%((acquired-started)*1000,(time.monotonic()-acquired)*1000),flush=True)
+                self.send(200,data)
+                return
             with c.lock:
                 if u.path.startswith("/api/amp-art/"):
                     key=u.path.rsplit("/",1)[-1]
@@ -780,13 +807,6 @@ class Handler(BaseHTTPRequestHandler):
                     if not name: raise ValueError("Choose a folder name")
                     p=c.folder(name)
                     p.mkdir(parents=True,exist_ok=True)
-                elif u.path in ("/api/stomp","/api/audio-toggle"):
-                    if self.client_address[0] not in ("127.0.0.1","::1"): raise ValueError("Local button endpoint only")
-                    if u.path=="/api/stomp":c.toggle_stomp()
-                    else:c.toggle_audio()
-                elif u.path=="/api/next":
-                    if self.client_address[0] not in ("127.0.0.1","::1"): raise ValueError("Local button endpoint only")
-                    c.next_preset()
                 elif u.path=="/api/edit":
                     v=json.loads(self.body(65536))
                     c.edit_preset(v["slot"],v["preset"])

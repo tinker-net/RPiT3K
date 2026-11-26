@@ -652,7 +652,7 @@ async function request(path,body){
  const opts=body===undefined?{}:{method:"POST",headers:{"X-RPiT3K":"1"},body};
  const res=await fetch(path,opts);const data=await res.json();if(!res.ok)throw Error(data.error||res.status);return data;
 }
-function options(id,files,value){const s=el(id);s.replaceChildren(new Option("None",""));for(const f of files)s.add(new Option(f,f));s.value=value||"";}
+function options(id,files,value){const s=el(id),key=JSON.stringify(files);if(s.dataset.filesKey!==key){s.replaceChildren(new Option("None",""));for(const f of files)s.add(new Option(f,f));s.dataset.filesKey=key;}s.value=value||"";}
 function render(preset){
  options("model",state.files.filter(f=>f.toLowerCase().endsWith(".nam")),preset.model);
  options("second",state.files.filter(f=>f.toLowerCase().endsWith(".nam")||f===preset.second),preset.second);
@@ -808,7 +808,7 @@ el("poweroff").onclick=async()=>{
 el("uploadBtn").onclick=()=>{if(!busy)el("upload").click();};
 el("folderBrowse").onclick=()=>{if(!busy)el("uploadFolder").click();};
 el("upload").onchange=()=>{const entries=Array.from(el("upload").files,f=>({file:f,path:f.name}));el("upload").value="";importEntries(entries);};
-(async()=>{try{state=await request("/api/status");slot=state.active||state.settings.last||slot;render(state.presets[slot]);status();setInterval(async()=>{if(!busy&&!liveBusy&&!livePending){try{const s=await request("/api/status");if(!busy&&!liveBusy&&!livePending){state=s;if(s.presets[slot])setStompUI(s.presets[slot].nam1_enabled!==false);status();}}catch(e){el("status").setAttribute("aria-label","Disconnected");el("status").title="Disconnected";el("status").disabled=true;el("calibrate").disabled=true;el("poweroff").disabled=true;el("tuner").disabled=true;el("tuner").classList.remove("selected");el("tuner").setAttribute("aria-pressed","false");drawPitch(null);el("status").classList.remove("audio-active");el("status").setAttribute("aria-pressed","false");el("xruns").textContent="—";el("xrunMetric").classList.remove("xrun-ok","xrun-warn");clearTelemetryColors();}}},2000);}catch(e){notify(e.message,"error");}})();
+(async()=>{try{state=await request("/api/status");slot=state.active||state.settings.last||slot;render(state.presets[slot]);status();setInterval(async()=>{if(!busy&&!liveBusy&&!livePending){try{const s=await request("/api/status");if(!busy&&!liveBusy&&!livePending){if((s.button_revision||0)>=(state.button_revision||0)){state=s;if(s.presets[slot])setStompUI(s.presets[slot].nam1_enabled!==false);status();}}}catch(e){el("status").setAttribute("aria-label","Disconnected");el("status").title="Disconnected";el("status").disabled=true;el("calibrate").disabled=true;el("poweroff").disabled=true;el("tuner").disabled=true;el("tuner").classList.remove("selected");el("tuner").setAttribute("aria-pressed","false");drawPitch(null);el("status").classList.remove("audio-active");el("status").setAttribute("aria-pressed","false");el("xruns").textContent="—";el("xrunMetric").classList.remove("xrun-ok","xrun-warn");clearTelemetryColors();}}},2000);}catch(e){notify(e.message,"error");}})();
 
 function ampStyle(name){const n=name.toLowerCase();if(/orange|or120|rv100|rocker/.test(n))return ["orange","ORANGE"];if(/vox|\bvx\b|ac30|tb30|matchless|chieftain/.test(n))return ["diamond","BRITISH CLASS A"];if(/fender|super reverb|panoverb|bfsr|deluxe|bassman|tone king/.test(n))return ["silver","AMERICAN"];if(/marshall|jtm|jt50|mrsh|plexi/.test(n))return ["gold","BRITISH"];return ["black","NAM"];}
 function updateAmp(){refreshCaptureFields();el("irBlendRow").hidden=!(el("ir2").value&&(el("ir").value||/\.wav$/i.test(el("second").value)));const name=firstNAM();updateAmpArtwork(name);el("ampName").textContent=name?name.split("/").pop().replace(/\.nam$/i,""):"No capture selected";el("ampCaption").textContent="";el("currentTitle").textContent="Preset "+slot+" · "+(name?name.split("/").pop().replace(/\.nam$/i,""):"Empty");}
@@ -997,7 +997,7 @@ function drawPitch(p){
  el("pitchDetail").textContent=(cents>0?"+":"")+cents+" cents · "+hz.toFixed(1)+" Hz";el("needle").style.left=Math.max(0,Math.min(100,50+cents))+"%";
 }
 async function pollLevels(){
- try{const data=await request("/api/levels");drawLevels(data);if(!busy&&state?.running&&state.active===null)drawPitch(data.pitch);}catch(e){drawLevels({valid:false});drawPitch(null);}
+ try{const data=await request("/api/levels");drawLevels(data);const b=data.button;if(b&&state&&!busy&&!liveBusy&&!livePending&&(b.button_revision||0)>(state.button_revision||0)){const old=state.active||state.settings.last;const selected=b.active||b.settings.last;state={...state,...b};if(selected!==old||selected!==slot){slot=selected;lastActive=selected;render(state.presets[slot]);}else if(state.presets[slot])setStompUI(state.presets[slot].nam1_enabled!==false);status();}if(!busy&&state?.running&&state.active===null)drawPitch(data.pitch);}catch(e){drawLevels({valid:false});drawPitch(null);}
  setTimeout(pollLevels,80);
 }
 pollLevels();

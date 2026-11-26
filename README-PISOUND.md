@@ -75,3 +75,15 @@ sudo systemctl start rpit3k
 Run sequentially and stop on failures. Service restarts with audio OFF. If audio fails check browser logs, aplay -l, arecord -l, sudo journalctl -u rpit3k -n 100 --no-pager. Increase period size/count if xruns; counter includes suspend recoveries, nominal per-direction buffer not round-trip latency. Audio OFF means no valid live meters; controller can be healthy without audio. 
 
 Data lives in ~/.local/share/rpit3k. Back up privately, including library/settings/presets/favorites/artwork; OAuth file contains secrets, never share. Uninstall by disabling power helper (if enabled), disabling/stopping service, removing service unit and reloading systemd; preserve data unless deliberately deleting it. Restore Pisound button backup if appropriate, remove optional hotspot separately. No commercial models provided. See technical guide for licenses and current test limitations.
+
+## Live button response (2026-11-26)
+
+The physical mappings remain unchanged. The local helper requests compact responses rather than scanning the capture library. Browser meter polling also carries a lightweight button state, so changes can be reflected on the next approximately 80 ms poll instead of the 2 s full status cycle. Preset identification flashes no longer hold the action lock. Journal entries `BUTTON stomp lock_ms=... action_ms=...` and `BUTTON next ...` measure server-side dispatch, not physical gesture or analog response. The upstream Blokas daemon uses a 400 ms multi-click recognition timeout; installed versions may differ. Structural preset changes still prepare a new rig; no preloading or measured hardware latency is claimed.
+
+Update an existing source install without changing its network/service configuration:
+
+    git pull --ff-only origin rpi-ui
+    sudo install -m 755 rpi/pisound-button.sh /usr/local/bin/rpit3k-button
+    sudo systemctl restart rpit3k.service pisound-btn.service
+
+Audio starts OFF after restart. Hard-refresh the browser.
