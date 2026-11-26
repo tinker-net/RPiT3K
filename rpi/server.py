@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import re
 import secrets
+import select
 import shutil
 import signal
 import subprocess
@@ -303,6 +304,10 @@ class Controller:
                 except subprocess.TimeoutExpired:
                     self.proc.kill()
                     self.proc.wait()
+            for fd in (getattr(self.proc,'rig_write',None),getattr(self.proc,'rig_ack',None)):
+                if fd is not None:
+                    try: os.close(fd)
+                    except OSError: pass
             self.proc=None
         self.active=None
         self.meter=None
@@ -340,11 +345,17 @@ class Controller:
             current=getattr(proc,"rpit3k_xruns",None) if proc and proc.poll() is None else None
             return dict(xruns=current,xruns_total=self.xrun_total)
 
-    def apply(self,slot,p,benchmark=True):
+    def apply(self,slot,p,benchmark=True,reopen=False):
         p=self.validate(p)
         if slot not in self.presets:
             raise ValueError("Invalid preset")
         cmd=self.command(p)
+        if not reopen and self.proc and self.proc.poll() is None:
+            self.replace_rig(cmd,slot)
+            self.save(slot,p)
+            self.settings['last']=slot
+            self.persist_settings()
+            return
         # Validate model and measure cost without opening ALSA.
         # Stop first: offline benchmark must not compete with live DSP.
         old_slot,old_p=(self.active,self.presets.get(self.active))
@@ -403,15 +414,19 @@ class Controller:
 
     def start(self,cmd,slot):
         rd,wr=os.pipe()
+        req_rd,req_wr=os.pipe()
+        ack_rd,ack_wr=os.pipe()
         self.meter=None
         try:
-            self.proc=subprocess.Popen(cmd+["--live-controls","--meter-fd",str(wr)],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,
-                                       text=True,bufsize=1,pass_fds=(wr,))
+            self.proc=subprocess.Popen(cmd+["--live-controls","--meter-fd",str(wr),"--rig-fd",str(req_rd),"--rig-ack-fd",str(ack_wr)],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,
+                                       text=True,bufsize=1,pass_fds=(wr,req_rd,ack_wr))
         except Exception:
-            os.close(rd)
+            for fd in (rd,req_wr,ack_rd): os.close(fd)
             raise
         finally:
-            os.close(wr)
+            for fd in (wr,req_rd,ack_wr): os.close(fd)
+        self.proc.rig_write=req_wr
+        self.proc.rig_ack=ack_rd
         self.proc.rpit3k_xruns=0
         self.proc.rpit3k_pitch=None
         threading.Thread(target=self.drain_meter,args=(self.proc,rd),daemon=True).start()
@@ -420,6 +435,55 @@ class Controller:
         if self.proc.poll() is not None:
             raise ValueError("Audio engine stopped: "+"; ".join(list(self.logs)[-5:]))
         self.active=slot
+
+    def replace_rig(self,cmd,slot):
+        # Caller holds the controller lock, so there is only one outstanding request.
+        proc=self.proc
+        old_slot=self.active
+        payload=json.dumps(cmd[1:],ensure_ascii=True).encode()+b"\n"
+        if len(payload)>32768: raise ValueError("Rig request too large")
+        try:
+            while payload:
+                n=os.write(proc.rig_write,payload)
+                if not n: raise OSError("Rig request pipe closed")
+                payload=payload[n:]
+            response=b""
+            deadline=time.monotonic()+30
+            while b"\n" not in response:
+                remaining=deadline-time.monotonic()
+                if remaining<=0 or not select.select([proc.rig_ack],[],[],remaining)[0]:
+                    raise TimeoutError("Rig switch timed out")
+                chunk=os.read(proc.rig_ack,1024)
+                if not chunk: raise OSError("Rig acknowledgement pipe closed")
+                response+=chunk
+                if len(response)>2048: raise OSError("Invalid rig acknowledgement")
+        except OSError:
+            # A timed-out request must not activate later after reporting failure.
+            self.stop()
+            if old_slot:
+                self.start(self.command(self.presets[old_slot]),old_slot)
+            elif old_slot is None:
+                self.start([str(self.exe),"--device",self.args.device,"--tuner"]+self.audio_args(),None)
+            raise
+        result=response.decode(errors="replace").strip()
+        if result!="OK": raise ValueError(result.removeprefix("ERR "))
+        proc.rpit3k_pitch=None
+        self.active=slot
+
+    def edit_preset(self,slot,p):
+        if slot not in self.presets: raise ValueError("Invalid preset")
+        p=self.validate(p)
+        if self.proc and self.proc.poll() is None and self.active is not None:
+            structural=("model","second","ir","ir2","slim","slim2","bypass")
+            if slot==self.active and all(p[k]==self.presets[slot][k] for k in structural):
+                self.live_controls(slot,p)
+            else:
+                self.apply(slot,p,benchmark=False)
+        else:
+            self.save(slot,p)
+            self.settings["last"]=slot
+            if self.tuner_return is not None: self.tuner_return=slot
+            self.persist_settings()
 
     def live_controls(self,slot,values):
         if slot!=self.active or self.proc is None or self.proc.poll() is not None:
@@ -436,7 +500,7 @@ class Controller:
 
     def next_preset(self):
         slot=str(int(self.settings["last"])%4+1)
-        self.apply(slot,self.presets[slot],benchmark=False)
+        self.edit_preset(slot,self.presets[slot])
 
     def configure(self,values):
         b,p=values.get("buffer"),values.get("periods")
@@ -446,9 +510,10 @@ class Controller:
         if ref is not None and (type(ref) not in (int,float) or not math.isfinite(ref) or not -60<=ref<=30): raise ValueError("Invalid ADC reference in dBu")
         self.settings.update(buffer=b,periods=p,reference_dbu=ref)
         try:
-            if slot: self.apply(slot,self.presets[slot],benchmark=False)
-            elif self.proc and self.proc.poll() is None:
-                self.stop();self.start([str(self.exe),"--device",self.args.device,"--tuner"]+self.audio_args(),None)
+            if (b,p)!=(old["buffer"],old["periods"]):
+                if slot: self.apply(slot,self.presets[slot],benchmark=False,reopen=True)
+                elif self.proc and self.proc.poll() is None:
+                    self.stop();self.start([str(self.exe),"--device",self.args.device,"--tuner"]+self.audio_args(),None)
             self.persist_settings()
         except Exception:
             self.settings=old
@@ -623,6 +688,9 @@ class Handler(BaseHTTPRequestHandler):
                 elif u.path=="/api/next":
                     if self.client_address[0] not in ("127.0.0.1","::1"): raise ValueError("Local button endpoint only")
                     c.next_preset()
+                elif u.path=="/api/edit":
+                    v=json.loads(self.body(65536))
+                    c.edit_preset(v["slot"],v["preset"])
                 elif u.path=="/api/controls":
                     v=json.loads(self.body(65536))
                     c.live_controls(v["slot"],v["controls"])
@@ -631,31 +699,24 @@ class Handler(BaseHTTPRequestHandler):
                 elif u.path=="/api/tuner":
                     if c.proc and c.proc.poll() is None and c.active is None:
                         previous=c.tuner_return
-                        c.stop()
-                        c.tuner_return=None
                         if previous:
                             c.apply(previous,c.presets[previous],benchmark=False)
+                        else: c.stop()
+                        c.tuner_return=None
                     else:
-                        c.tuner_return=c.active if c.proc and c.proc.poll() is None else None
-                        c.stop()
-                        c.logs.clear()
-                        try:
-                            c.start([str(c.exe),"--device",c.args.device,"--tuner"]+c.audio_args(),None)
-                        except Exception:
-                            previous=c.tuner_return
+                        previous=c.active if c.proc and c.proc.poll() is None else None
+                        cmd=[str(c.exe),"--device",c.args.device,"--tuner"]+c.audio_args()
+                        if previous: c.replace_rig(cmd,None)
+                        else:
                             c.stop()
-                            c.tuner_return=None
-                            if previous: c.apply(previous,c.presets[previous],benchmark=False)
-                            raise
+                            c.start(cmd,None)
+                        c.tuner_return=previous
                 elif u.path=="/api/stop":
                     c.stop()
                     c.tuner_return=None
                 elif u.path in ("/api/save","/api/apply"):
                     v=json.loads(self.body(65536))
-                    if u.path=="/api/save":
-                        if c.active==v["slot"] and c.proc and c.proc.poll() is None:
-                            raise ValueError("Apply changes to the active preset instead")
-                        c.save(v["slot"],v["preset"])
+                    if u.path=="/api/save": c.edit_preset(v["slot"],v["preset"])
                     else: c.apply(v["slot"],v["preset"])
                 else:
                     self.send(404,dict(error="Not found"));return
