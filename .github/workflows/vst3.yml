@@ -53,11 +53,13 @@ jobs:
         shell: bash
         run: |
           cd build-vst3/TON3K_artefacts/Release/VST3
-          lipo -verify_arch arm64 x86_64 TON3K.vst3/Contents/MacOS/TON3K
+          lipo -archs "TON3K.vst3/Contents/MacOS/TON3K"
+          lipo "TON3K.vst3/Contents/MacOS/TON3K" -verify_arch arm64 x86_64
           codesign --force --deep --sign - TON3K.vst3
           ditto -c -k --keepParent TON3K.vst3 "$GITHUB_WORKSPACE/TON3K-macOS-universal.zip"
           cd ../AU
-          lipo -verify_arch arm64 x86_64 TON3K.component/Contents/MacOS/TON3K
+          lipo -archs "TON3K.component/Contents/MacOS/TON3K"
+          lipo "TON3K.component/Contents/MacOS/TON3K" -verify_arch arm64 x86_64
           codesign --force --deep --sign - TON3K.component
           ditto -c -k --keepParent TON3K.component "$GITHUB_WORKSPACE/TON3K-macOS-AU-universal.zip"
       - name: Validate Audio Unit (Intel slice)
