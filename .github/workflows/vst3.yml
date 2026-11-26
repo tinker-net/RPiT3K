@@ -1,4 +1,4 @@
-name: TON3K VST3 preview
+name: TON3K VST3 and AU preview
 on:
   push:
     branches: [vst3]
@@ -12,7 +12,7 @@ jobs:
           - os: windows-2022
             name: Windows-x64
             extra: '-A x64'
-          - os: macos-14
+          - os: macos-26
             name: macOS-universal
             extra: '-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64'
     runs-on: ${{ matrix.os }}
