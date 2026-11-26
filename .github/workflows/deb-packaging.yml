@@ -24,6 +24,10 @@ jobs:
           - runner: ubuntu-24.04-arm
             cpu: cortex-a76
             label: pi5
+          - runner: ubuntu-24.04-arm
+            cpu: cortex-a76
+            label: pisound
+            edition: pisound
     runs-on: ${{ matrix.runner }}
     container: debian:trixie
     steps:
@@ -32,10 +36,12 @@ jobs:
       - name: Build and validate
         env:
           CPU: ${{ matrix.cpu }}
+          EDITION: ${{ matrix.edition || 'general' }}
         run: |
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          bash packaging/build-deb.sh "0.1.0~preview${GITHUB_RUN_NUMBER}" "$CPU"
-      - name: Package smoke test
+          bash packaging/build-deb.sh "0.1.0~preview${GITHUB_RUN_NUMBER}" "$CPU" "$EDITION"
+      - name: Generic package smoke test
+        if: matrix.label != 'pisound'
         run: |
           apt-get install -y ./dist/*.deb
           /usr/lib/rpi-ton3k/build-rpi/rpit3k --bypass --verify
@@ -46,6 +52,21 @@ jobs:
           test -f /var/lib/rpi-ton3k/ci-marker
           apt-get remove -y rpi-ton3k
           test -f /var/lib/rpi-ton3k/ci-marker
+      - name: Pisound package contents and offline smoke test
+        if: matrix.label == 'pisound'
+        run: |
+          set -eu
+          deb=$(find dist -name '*.deb')
+          test "$(dpkg-deb -f "$deb" Package)" = rpi-ton3k-pisound
+          dpkg-deb -f "$deb" Depends | grep -q pisound-btn
+          dpkg-deb -x "$deb" /tmp/pisound-pkg
+          dpkg-deb -e "$deb" /tmp/pisound-control
+          for f in postinst preinst prerm postrm; do sh -n /tmp/pisound-control/$f; done
+          bash -n /tmp/pisound-pkg/usr/lib/rpi-ton3k/pisound/setup
+          bash -n /tmp/pisound-pkg/usr/lib/rpi-ton3k/pisound/rpit3k-button
+          test "$(grep -Ec '^(CLICK_[123]|HOLD_[135]S) ' /tmp/pisound-pkg/usr/lib/rpi-ton3k/pisound/button.conf)" -eq 6
+          /tmp/pisound-pkg/usr/lib/rpi-ton3k/build-rpi/rpit3k --bypass --verify
+          python3 /tmp/pisound-pkg/usr/lib/rpi-ton3k/rpi/server.py --help
       - uses: actions/upload-artifact@v4
         with:
           name: rpi-ton3k-${{ matrix.label }}
@@ -71,10 +92,10 @@ jobs:
           set -euo pipefail
           tag="deb-preview-${GITHUB_RUN_NUMBER}"
           cd release
-          test "$(find . -maxdepth 1 -name '*.deb' | wc -l)" -eq 4
+          test "$(find . -maxdepth 1 -name '*.deb' | wc -l)" -eq 5
           sha256sum *.deb > SHA256SUMS
           if gh release view "$tag" >/dev/null 2>&1; then
             gh release upload "$tag" *.deb SHA256SUMS --clobber
           else
-            gh release create "$tag" *.deb SHA256SUMS --target "$GITHUB_SHA" --prerelease --latest=false --title "RPi-Ton3K Debian preview ${GITHUB_RUN_NUMBER}" --notes "Experimental packages for Debian 13 / Raspberry Pi OS Trixie 64-bit. All CI build and smoke tests passed. Physical ALSA/Pisound and systemd operation on real hardware remain unverified. Install only the matching CPU variant on a spare system. Pisound drivers must already be installed. See the deb-packaging branch for configuration and migration instructions."
+            gh release create "$tag" *.deb SHA256SUMS --target "$GITHUB_SHA" --prerelease --latest=false --title "RPi-Ton3K Debian preview ${GITHUB_RUN_NUMBER}" --notes "Experimental packages for Debian 13 / Raspberry Pi OS Trixie 64-bit. All configured CI build and smoke tests passed. Generic packages have no Pisound integration; the separate Pisound package was extracted and smoke-tested offline, not installed on hardware. Install only the matching variant on a spare system. Pisound requires the official Blokas APT repository and supported Pi OS kernel. See the deb-packaging branch for configuration and migration instructions."
           fi
