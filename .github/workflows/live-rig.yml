@@ -36,6 +36,7 @@ jobs:
           ./build-rpi/rpit3k --bypass --verify
           python3 -m py_compile rpi/*.py
           python3 rpi/button_status_test.py
+          if [ -f rpi/practice_policy_test.py ]; then python3 rpi/practice_policy_test.py; fi
           for f in rpi/*.sh; do bash -n "$f"; done
       - name: Browser script syntax
         run: |

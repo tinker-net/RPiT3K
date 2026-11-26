@@ -1,6 +1,16 @@
 """On-demand backing track decoder and bounded waveform cache."""
 import subprocess, json, math, os, struct, time, threading, hashlib, pathlib, tempfile, shutil
 
+def background_command(args):
+    """Lower priority and exclude the engine CPU on systems with >= 4 allowed CPUs."""
+    prefix=[]
+    cpus=sorted(os.sched_getaffinity(0))
+    if len(cpus)>=4 and shutil.which("taskset") and os.getenv("RPIT3K_AUDIO_AFFINITY","1")!="0":
+        prefix+=["taskset","-c",",".join(map(str,cpus[:-1]))]
+    if shutil.which("nice"):prefix+=["nice","-n","10"]
+    if shutil.which("ionice"):prefix+=["ionice","-c","2","-n","7"]
+    return prefix+args
+
 def ffmpeg():
     if not shutil.which("ffmpeg") or not shutil.which("ffprobe"):
         raise ValueError("Install ffmpeg and ffprobe (sudo apt install ffmpeg)")
@@ -8,7 +18,7 @@ def ffmpeg():
 
 def duration(path):
     ffmpeg()
-    n=float(subprocess.check_output(["ffprobe","-v","error","-show_entries","format=duration","-of","default=nw=1:nk=1",str(path)],text=True,timeout=20))
+    n=float(subprocess.check_output(background_command(["ffprobe","-v","error","-show_entries","format=duration","-of","default=nw=1:nk=1",str(path)]),text=True,timeout=20))
     if not math.isfinite(n) or not 0<n<=7200:raise ValueError("Track duration unsupported")
     return n
 
@@ -20,7 +30,7 @@ def waveform(path,cache):
     if dest.is_file():return json.loads(dest.read_text())
     seconds=duration(path)
     # Decode at low rate; bounded peak envelope, not a whole-song PCM allocation.
-    proc=subprocess.Popen([ffmpeg(),"-nostdin","-v","error","-threads","1","-i",str(path),"-vn","-ac","1","-ar","4000","-f","s16le","pipe:1"],stdout=subprocess.PIPE,stderr=subprocess.DEVNULL)
+    proc=subprocess.Popen(background_command([ffmpeg(),"-nostdin","-v","error","-threads","1","-filter_threads","1","-i",str(path),"-vn","-ac","1","-ar","4000","-f","s16le","pipe:1"]),stdout=subprocess.PIPE,stderr=subprocess.DEVNULL)
     peaks=[0]*1200; pos=0
     try:
         while True:
@@ -55,13 +65,16 @@ class Practice:
                 except subprocess.TimeoutExpired:self.decoder.kill();self.decoder.wait()
             self.decoder=None
         if engine and engine.poll() is None:
-            engine.stdin.write("PRACTICE 0 0\n");engine.stdin.flush()
+            engine.practice_stopped.clear()
+            try:engine.stdin.write("PRACTICE 0 0\n");engine.stdin.flush()
+            except OSError:pass
     def start(self,engine,path,anchor,speed,pitch,volume,end):
         ffmpeg()
         self.stop(engine)
         # Drain old pipe contents in the controller before starting the new decoder.
         # Audio thread also drains on disable. Both only discard old audio here.
-        time.sleep(.04)
+        # Wait for the realtime reader to acknowledge the stop and discard stale PCM.
+        if not engine.practice_stopped.wait(timeout=.5):raise ValueError("Audio transport did not acknowledge stop")
         self.anchor,self.speed,self.end,self.volume=anchor,speed,end,volume
         ratio=2**(pitch/12)
         filters=[]
@@ -72,9 +85,9 @@ class Practice:
         if filters:args+=["-af",",".join(filters)]
         args+=["-f","f32le","pipe:1"]
         # FFmpeg runs at ordinary priority; pipe backpressure limits memory.
-        self.decoder=subprocess.Popen(args,stdout=engine.practice_write,stderr=subprocess.DEVNULL)
+        self.decoder=subprocess.Popen(background_command(args),stdout=engine.practice_write,stderr=subprocess.DEVNULL)
         engine.stdin.write(f"PRACTICE 1 {volume}\n");engine.stdin.flush()
         self.started=time.monotonic()
     def status(self):
         playing=self.decoder is not None and self.decoder.poll() is None
-        return dict(playing=playing,position=min(self.end,self.anchor+(time.monotonic()-self.started)*self.speed) if playing else self.anchor)
+        return dict(error="Decoder failed" if self.decoder is not None and self.decoder.poll() not in (None,0) else None,playing=playing,position=min(self.end,self.anchor+(time.monotonic()-self.started)*self.speed) if playing else self.anchor)

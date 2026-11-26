@@ -100,3 +100,6 @@ Offline backup: stop rpit3k.service, run as data owner `python3 rpi/data_backup.
 
 ### Native Practice Mode (experimental)
 Install `ffmpeg` (includes ffprobe; needs rubberband filter for pitch shifting). Rebuild native engine. Stereo decoded audio feeds a bounded nonblocking pipe and mixes after guitar FX and metronome. Waveform generated on demand and cached as 1200 peaks on disk. Speed .5–1.5, pitch ±12 semitones. Control changes restart decoder at estimated position; timing and A/B loops are not sample-accurate. No whole-track PCM buffer. Audio must be ON; tuner and engine stop stop playback. Browser sends controls only. Hardware xrun/latency validation pending.
+
+### Practice resource isolation
+On Linux with at least four allowed CPUs, the realtime engine thread is pinned to the highest allowed CPU; FFmpeg and ffprobe are confined to the other allowed CPUs, run with nice +10 and best-effort I/O priority 7. No boot/kernel changes. Set RPIT3K_AUDIO_AFFINITY=0 in the service environment to disable both affinity policies. Decoder and waveform analysis are guarded against overlap; stop acknowledgement prevents stale buffered samples from a previous track. Hardware validation still required. No hard CPU isolation from other system processes is claimed.

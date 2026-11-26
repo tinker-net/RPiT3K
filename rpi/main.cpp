@@ -30,6 +30,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <cstdio>
+#include <cstdlib>
 
 namespace {
 volatile std::sig_atomic_t running = 1;
@@ -357,6 +358,16 @@ int main(int argc,char** argv) {
             return std::make_unique<Chain>(next);
         });
         bool fade_in=false;
+        // Pin only the realtime thread; the rig loader was created before affinity changes.
+        const char* affinity=std::getenv("RPIT3K_AUDIO_AFFINITY");
+        cpu_set_t allowed;
+        CPU_ZERO(&allowed);
+        if((!affinity||std::string(affinity)!="0")&&sched_getaffinity(0,sizeof(allowed),&allowed)==0&&CPU_COUNT(&allowed)>=4){
+            int last=-1;for(int c=0;c<CPU_SETSIZE;++c)if(CPU_ISSET(c,&allowed))last=c;
+            cpu_set_t single;CPU_ZERO(&single);CPU_SET(last,&single);
+            if(sched_setaffinity(0,sizeof(single),&single)==0)std::cerr<<"Audio realtime CPU="<<last<<"\n";
+            else std::cerr<<"Audio CPU affinity unavailable\n";
+        }
         sched_param sp{};
         sp.sched_priority=60;
         if(sched_setscheduler(0,SCHED_FIFO,&sp)<0)
@@ -376,7 +387,7 @@ int main(int argc,char** argv) {
                     if(!overflow){line[used]=0;float i,out,b,m,t,g,c,pos,wet,d,type,mix,hz,profile,ch,cr,cd,dl,dm,df;char extra;
                         unsigned enabled,bpm,beats;float level;
                         if(std::sscanf(line,"STOMP %u %c",&enabled,&extra)==1&&enabled<=1)current->set_stomp(enabled!=0);
-                        else if(std::sscanf(line,"PRACTICE %u %f %c",&enabled,&level,&extra)==2&&enabled<=1&&std::isfinite(level)&&level>=0&&level<=1){backing_enabled=enabled!=0;backing_gain=level;if(!backing_enabled){backing_used=0;if(o.practice_fd>=0){char discard[4096];for(int j=0;j<32&&read(o.practice_fd,discard,sizeof(discard))>0;++j){}}}}
+                        else if(std::sscanf(line,"PRACTICE %u %f %c",&enabled,&level,&extra)==2&&enabled<=1&&std::isfinite(level)&&level>=0&&level<=1){backing_enabled=enabled!=0;backing_gain=level;if(!backing_enabled){backing_used=0;if(o.practice_fd>=0){char discard[4096];for(int j=0;j<32&&read(o.practice_fd,discard,sizeof(discard))>0;++j){}}std::cerr<<"PRACTICE STOPPED\n";}}
                         else if(std::sscanf(line,"METRO %u %u %u %f %c",&enabled,&bpm,&beats,&level,&extra)==4&&enabled<=1)metronome.set(enabled!=0,bpm,beats,level);
                         else if(std::sscanf(line,"%f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %c",&i,&out,&b,&m,&t,&g,&c,&pos,&wet,&d,&type,&mix,&hz,&profile,&ch,&cr,&cd,&dl,&dm,&df,&extra)==20)current->controls(i,out,b,m,t,g,c,pos,wet,d,type,mix,hz,profile,ch,cr,cd,dl,dm,df);
                         else if(std::sscanf(line,"%f %f %f %f %f %f %f %f %f %f %f %f %f %f %c",&i,&out,&b,&m,&t,&g,&c,&pos,&wet,&d,&type,&mix,&hz,&profile,&extra)==14)current->controls(i,out,b,m,t,g,c,pos,wet,d,type,mix,hz,profile);

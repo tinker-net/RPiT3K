@@ -1547,7 +1547,7 @@ el("practiceLoop").onclick=()=>{if(loopA===null||loopB===null||loopB<=loopA){msg
 el("practiceSpeed").oninput=()=>el("practiceRate").textContent=Math.round(Number(el("practiceSpeed").value)*100)+"%";
 el("practicePitch").oninput=()=>el("practicePitchValue").textContent=el("practicePitch").value+" st";
 for(const id of ["practiceSpeed","practicePitch","practiceVolume"])el(id).onchange=()=>{if(playing)sendTransport("play",position);};
-async function practicePoll(){if(practiceVisible&&!el("practiceView").hidden&&!transportBusy)try{const r=await request("/api/practice/status");const was=playing;playing=r.playing;if(playing)position=r.position;else if(was){position=anchor;if(loopOn&&state?.running&&state.active!==null)sendTransport("play",loopA);}displayTransport();}catch(e){msg(e.message);}setTimeout(practicePoll,150);}
+async function practicePoll(){if(practiceVisible&&!el("practiceView").hidden&&!transportBusy)try{const r=await request("/api/practice/status");const was=playing;playing=r.playing;if(r.error){loopOn=false;el("practiceLoop").setAttribute("aria-pressed","false");msg(r.error);}if(playing)position=r.position;else if(was){position=anchor;if(loopOn&&state?.running&&state.active!==null)sendTransport("play",loopA);}displayTransport();}catch(e){msg(e.message);}setTimeout(practicePoll,150);}
 practicePoll();
 document.addEventListener("keydown",e=>{if(!practiceVisible||el("practiceView").hidden||e.code!=="Space"||e.ctrlKey||e.altKey||e.metaKey||document.querySelector("dialog[open]")||e.target.closest("input,textarea,select,[contenteditable=true]"))return;e.preventDefault();if(!e.repeat)practiceToggle();},true);
 </script></body></html>

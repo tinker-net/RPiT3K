@@ -376,6 +376,9 @@ class Controller:
         # recovery. Count deltas, not log lines, to avoid double counting.
         for line in proc.stdout:
             line=line.rstrip()
+            if line=="PRACTICE STOPPED":
+                proc.practice_stopped.set()
+                continue
             if line.startswith("TUNER "):
                 try:
                     _,hz,confidence=line.split()
@@ -485,6 +488,7 @@ class Controller:
             raise
         finally:
             for fd in (wr,req_rd,ack_wr,practice_rd): os.close(fd)
+        self.proc.practice_stopped=threading.Event()
         self.proc.practice_write=practice_wr
         self.proc.rig_write=req_wr
         self.proc.rig_ack=ack_rd
@@ -751,6 +755,7 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 p=self.practice_path(parse_qs(urlsplit(self.path).query).get("name",[""])[0])
                 if not p.is_file():raise ValueError("Track not found")
+                if c.practice.status()["playing"]:raise ValueError("Stop playback before waveform analysis")
                 if not c.practice_analysis.acquire(blocking=False):raise ValueError("Analysis busy")
                 try:result=practice_waveform(p,c.data/"practice-waveforms")
                 finally:c.practice_analysis.release()
@@ -803,6 +808,7 @@ class Handler(BaseHTTPRequestHandler):
                 elif action=="play":
                     p=self.practice_path(v["name"])
                     if not p.is_file():raise ValueError("Track not found")
+                    if c.practice_analysis.locked():raise ValueError("Wait for waveform analysis to finish")
                     length=practice_duration(p)
                     anchor,speed,pitch,volume,end=(v[k] for k in ("anchor","speed","pitch","volume","end"))
                     if not all(type(n) in (float,int) and math.isfinite(n) for n in (anchor,speed,pitch,volume,end)) or not (0<=anchor<end<=length+.01 and .5<=speed<=1.5 and -12<=pitch<=12 and 0<=volume<=1):
