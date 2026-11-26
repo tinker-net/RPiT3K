@@ -11,7 +11,7 @@ RPiT3K is inspired by the [TONE3000 × Daisy DIY Pedal](https://github.com/tone-
 | [rpi-ui](https://github.com/tinker-net/RPiT3K/tree/rpi-ui) | Raspberry Pi + Blokas Pisound | rpit3k | Pi 5: 64 × 3 |
 | [rpi-general](https://github.com/tinker-net/RPiT3K/tree/rpi-general) | 64-bit Debian/Ubuntu/Pi OS, configurable ALSA | rpit3k-general | 256 × 3 |
 
-Both source editions share features; Pi 5 is the measured baseline, generic hardware remains experimental. Use separate checkouts/data; avoid sharing audio hardware; PiSound uses port 80 and generic uses port 8080. Historical branches and Debian packaging are not guaranteed current.
+Both source editions share features; Pi 5 is the measured baseline, generic hardware remains experimental. Use separate checkouts/data; avoid sharing audio hardware; PiSound uses port 80 and generic uses port 8080. Historical branches are retained for reference. Debian packaging builds both editions from explicit source pins; see the [packaging guide](https://github.com/tinker-net/RPiT3K/blob/deb-packaging/packaging/README.md).
 
 ## Features
 - Two independent serial NAM slots, automatic compatible A2 Embedded/Core dispatch, Full/Lite selection, native .nam.
@@ -23,7 +23,13 @@ Both source editions share features; Pi 5 is the measured baseline, generic hard
 - Browser library with folders, favorites, import, rename/move/delete; amp artwork, independent collapsible sidebars, fixed TONE3000-inspired interface.
 - Audio starts OFF; optional trusted-LAN access, host shutdown/reboot, experimental TONE3000 device OAuth with persisted session. Original Daisy Companion is separate.
 
-## Installation\n\nSee [Pisound installation guide](README-PISOUND.md). Clone the appropriate branch and run its installer as a normal sudo-enabled user. Start audio explicitly in the browser. Do not expose unauthenticated HTTP to the Internet.
+## Current interface
+
+Independent Pedal/Amplifier/IR bypass, Amplifier-only calibration, musical 0–10 knobs with exact dB editing, alias-aware capture search with optional metadata indexing, transient notifications, custom pedal artwork and six optional PiSound gestures. See the user guides for details.
+
+## Installation
+
+See [Pisound installation guide](README-PISOUND.md). Clone the appropriate branch and run its installer as a normal sudo-enabled user. Start audio explicitly in the browser. Do not expose unauthenticated HTTP to the Internet.
 
 ## Engineering evidence
 
@@ -41,6 +47,10 @@ Both source editions share features; Pi 5 is the measured baseline, generic hard
 [Current effect validation](docs/DAISYSP_VALIDATION.md) · [Historical engine measurements](docs/ENGINE_VALIDATION_2026-11-25.md) · [Technical architecture and reproduction](rpi/README.md) · [Project state and open validation](docs/PROJECT_STATE.md).
 
 No measured analog round-trip latency claim. Real-time results depend on captures, hardware, thermal conditions and buffering. Fresh installer, real OAuth and latest live hardware tests remain open. No current screenshot is claimed; archived screenshots may depict previous layouts.
+
+## Latest CI
+
+Both native regression workflows and the five-variant Debian packaging workflow passed for the latest functional source pins on 2026-11-26. See [project state](docs/PROJECT_STATE.md) for exact revisions and outstanding tests.
 
 ## Upstream and licensing
 

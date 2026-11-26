@@ -11,7 +11,11 @@ sudo apt update
 sudo apt install -y git
 git clone --branch rpi-ui https://github.com/tinker-net/RPiT3K.git
 cd RPiT3K
-# If Blokas driver is not installed:\nbash rpi/install-pisound.sh --install-blokas\n# Reboot, reconnect, then:\n# cd ~/RPiT3K\nbash rpi/install-pisound.sh
+# If Blokas driver is not installed:
+bash rpi/install-pisound.sh --install-blokas
+# Reboot, reconnect, then:
+# cd ~/RPiT3K
+bash rpi/install-pisound.sh
 ```
 
 The optional Blokas step downloads the vendor's current unpinned installer and exits; reboot before running normal installation. Confirm aplay -l and arecord -l show Pisound. Pi 5 initial 64×3, Pi 4 128×3, older Pi 256×3. Fixed left capture/dual mono playback.
@@ -24,15 +28,25 @@ Default loopback HTTP; SSH tunnel from another computer:
 ```sh
 ssh -N -L 8080:127.0.0.1:80 USER@HOST
 ```
-Open http://localhost:8080 through the SSH tunnel, or http://HOST directly in LAN mode (port 80). Existing source installations can migrate without changing their configuration using `bash rpi/migrate-http-port.sh`. Explicit --lan at install exposes unauthenticated HTTP to the trusted isolated LAN, including library and cloud/power access. Never expose to Internet/untrusted network. For existing build use bash rpi/install-service.sh --lan; repeat --button/--cloud if desired.
+Open http://localhost:8080 through the SSH tunnel, or http://HOST (including .local hostname) or http://LAN_IP directly in LAN mode (port 80). Use hostname -I to find the address; hotspot access is http://10.42.0.1. Existing source installations can migrate without changing their configuration using `bash rpi/migrate-http-port.sh`. Explicit --lan at install exposes unauthenticated HTTP to the trusted isolated LAN, including library and cloud/power access. Never expose to Internet/untrusted network. For existing build use bash rpi/install-service.sh --lan; repeat --button/--cloud if desired.
 
 ## First use
 
-Audio starts OFF every time. Last preset is selected, not playing. Import your own .nam and mono WAV IRs (up to 1 s after resampling to 48 kHz); use either NAM slot or both serially, optionally two parallel IRs. Choose Full/Lite only meaningfully for slimmable models. Disable NAM/IR bypass, start Audio with low output. Gate at -81 is off. Six knobs control input, gate, bass, mid, treble, output. Preset changes while running swap rigs with a brief fade, not guaranteed gapless; audio hardware setting changes reopen streams. While stopped edits autosave without opening ALSA.
+Audio starts OFF every time. Last preset is selected, not playing. Import your own .nam and mono WAV IRs (up to 1 s after resampling to 48 kHz); use either NAM slot or both serially, optionally two parallel IRs. Choose Full/Lite only meaningfully for slimmable models. Enable the desired Pedal, Amplifier and IR stages, then start Audio with low output. Gate at -81 is off. Six knobs control input, gate, bass, mid, treble, output. Preset changes while running swap rigs with a brief fade, not guaranteed gapless; audio hardware setting changes reopen streams. While stopped edits autosave without opening ALSA.
 
-Effects toolbar opens individual dialogs; Enable illuminates icon yellow and unlocks controls. Turning off remembers values. Compressor PRE/POST, chorus mix/rate/depth, delay mix/time/feedback, reverb mix/decay (.3–5 s)/Dark-Bright-Neutral. Hi-Z has independent enable and four pickup profiles; use only for assumed low impedance passive pickup loading, not external buffer or high-Z input. Tuner mutes output; practice metronome requires audio on. Calibration uses first active capture metadata and ADC reference, applies explicit input gain; nominal +1.14 dBu reference is an estimate at minimum analog gain, not measured for your hardware. Do not assume missing metadata means invalid capture.
+Effects toolbar opens individual dialogs; Enable illuminates icon yellow and unlocks controls. Turning off remembers values. Compressor PRE/POST, chorus mix/rate/depth, delay mix/time/feedback, reverb mix/decay (.3–5 s)/Dark-Bright-Neutral. Hi-Z has independent enable and four pickup profiles; use only for assumed low impedance passive pickup loading, not external buffer or high-Z input. Tuner mutes output; practice metronome requires audio on. Calibration uses only the selected Amplifier (NAM 2) metadata and ADC reference, applies explicit input gain; nominal +1.14 dBu reference is an estimate at minimum analog gain, not measured for your hardware. Do not assume missing metadata means invalid capture.
 
 Library search, folders, favorites, import/move/rename, confirmed permanent deletion. Sidebars can be hidden/resized; custom amp artwork is visual only. Four slots save automatically. Browser layout stored locally.
+
+## Current shared controls and library
+
+- **Pedal (NAM 1):** independent stomp with a 10 ms transition; its state is saved per preset. **Amplifier (NAM 2):** separate bypass. **Bypass IR:** disables both cabinet IRs, including a legacy WAV in slot 2. Captures remain selected and can be re-enabled. Structural changes use the existing live exchange and short fade; no gapless/spillover guarantee.
+- **Input calibration:** uses only the selected Amplifier NAM and its selected slimmable child/root metadata, never the Pedal. Applies the global pre-pedal input gain explicitly; no automatic inter-stage calibration. No amplifier or valid metadata/reference means no automatic correction. The amplifier remains the reference even when bypassed.
+- **Six knobs:** prominent 0–10 position plus editable technical dB underneath. Input 5 = unity, output 5 = half amplitude (about -6.02 dB), EQ 5 = 0 dB; gate OFF is the -81 sentinel. The scale is linear in the existing parameter, not a new gain curve. Input 0 and output 0 are silence. Drag normally, Shift-drag for 10× lower sensitivity, wheel for increments; focus/double-click the dB readout, Enter/blur to apply, Escape to cancel. Existing parameter ranges and quantization remain (input amplitude 0–2, step 0.000001; output 0–1, step .01; gate/EQ integer dB). Display rounding is not a new preset format.
+- **Capture picker:** search filenames and folders using unordered AND terms, abbreviation expansion (FNDR/Fender, MRSHL/Marshall, BFSR/Super Reverb, CLN/Clean, WRM/Warm, etc.), inferred family tags and relevance sorting. Examples: `fender clean fat`, `marshall crunch`, `blackface warm`. Quick filters vary by Pedal, Amplifier and IR; Favorites narrows results. Classification is heuristic, not audio analysis. Optional **Index metadata** reads local NAM metadata sequentially while audio is stopped; results are browser-session cached, not persisted. Closing the picker stops further indexing. A2 matching depends on available text/metadata; architecture alone does not establish model generation.
+- **Notifications:** contextual toast stack, success/info 3 s, warnings 6 s, errors and progress until dismissed/replaced (maximum five visible per stack). Dialog validation and ongoing import/cloud progress remain inline. No persistent Rig Details message.
+- **Artwork:** custom family-named WebP (maximum 2 MiB); Rams Head, Kingsley Page, Twin Bender and Octavio families included. Import `ramshead.webp`, `kingsleypage.webp`, `twinbender.webp`, `octavio.webp` for custom images; no commercial images or captures supplied. Selection stored locally per capture.
+- Shared UI changes require no native rebuild. For source installations pull the correct branch, restart its service and hard-refresh the browser; audio restarts OFF. Rebuild and run regression tests whenever native code/dependencies change.
 
 ## Optional cloud and power
 
