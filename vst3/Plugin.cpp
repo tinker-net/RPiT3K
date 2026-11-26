@@ -88,7 +88,7 @@ public:
                 state.replaceState(t);
                 std::lock_guard<std::mutex> lock(configLock);
                 for(int i=0;i<4;++i)paths[i]=t.getProperty("file"+juce::String(i)).toString();
-                try{savedSlots=nlohmann::json::parse(t.getProperty("webSlots","{}").toString().toStdString());activeSlot=juce::jlimit(1,4,int(t.getProperty("webActive",1)));auto lib=nlohmann::json::parse(t.getProperty("webLibrary","{}").toString().toStdString());library.clear();for(auto it=lib.begin();it!=lib.end();++it)library[juce::String(it.key())]=juce::String(it.value().get<std::string>());}catch(...){savedSlots=nlohmann::json::object();}dirty=true;
+                try{savedSlots=nlohmann::json::parse(t.getProperty("webSlots","{}").toString().toStdString());activeSlot=juce::jlimit(1,4,int(t.getProperty("webActive",1)));auto lib=nlohmann::json::parse(t.getProperty("webLibrary","{}").toString().toStdString());for(auto it=lib.begin();it!=lib.end();++it)library[juce::String(it.key())]=juce::String(it.value().get<std::string>());}catch(...){savedSlots=nlohmann::json::object();}dirty=true;wake.notify_one();
             }
         }
     }
@@ -96,12 +96,13 @@ public:
     std::set<juce::String> favorites, folders;
     static std::mutex& libraryMutex(){static std::mutex m;return m;}
     static juce::File libraryFile(){return juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory).getChildFile("TinkerNet").getChildFile("TON3K").getChildFile("library.json");}
+    juce::Time libraryStamp;
     void mergeLibraryUnlocked(){
-        try{auto f=libraryFile();if(!f.existsAsFile())return;auto j=nlohmann::json::parse(f.loadFileAsString().toStdString());
+        try{auto f=libraryFile();if(!f.existsAsFile())return;auto stamp=f.getLastModificationTime();if(stamp==libraryStamp)return;auto j=nlohmann::json::parse(f.loadFileAsString().toStdString());
             for(auto it=j.at("files").begin();it!=j.at("files").end();++it)library[juce::String(it.key())]=juce::String(it.value().get<std::string>());
             favorites.clear();folders.clear();
             for(auto& x:j.value("favorites",nlohmann::json::array()))favorites.insert(juce::String(x.get<std::string>()));
-            for(auto& x:j.value("folders",nlohmann::json::array()))folders.insert(juce::String(x.get<std::string>()));
+            for(auto& x:j.value("folders",nlohmann::json::array()))folders.insert(juce::String(x.get<std::string>()));libraryStamp=stamp;
         }catch(...){}
     }
     void loadLibrary(){std::lock_guard<std::mutex> g(libraryMutex());mergeLibraryUnlocked();}
@@ -111,7 +112,7 @@ public:
         for(auto& k:favorites)j["favorites"].push_back(k.toStdString());
         for(auto& k:folders)j["folders"].push_back(k.toStdString());
         auto f=libraryFile();f.getParentDirectory().createDirectory();
-        if(!f.replaceWithText(juce::String(j.dump(2))))throw std::runtime_error("Cannot save library");
+        if(!f.replaceWithText(juce::String(j.dump(2))))throw std::runtime_error("Cannot save library");libraryStamp=f.getLastModificationTime();
     }
     void registerFile(const juce::File& file,juce::String name){
         int n=2;auto original=name;while(library.count(name)&&library[name]!=file.getFullPathName())name=original.upToLastOccurrenceOf(".",false,false)+" ("+juce::String(n++)+")"+file.getFileExtension();
@@ -170,7 +171,7 @@ public:
             double ns=pr.value("slim",1.0),ns2=pr.value("slim2",1.0);if(ns!=slim||ns2!=slim2){slim=ns;slim2=ns2;dirty=true;} activeSlot=next;savedSlots[std::to_string(next)]=pr;
             auto set=[&](int i,float x){if(auto* q=state.getParameter(ids[i])){auto norm=q->convertTo0to1(x);if(std::abs(q->getValue()-norm)>1e-7f){q->beginChangeGesture();q->setValueNotifyingHost(norm);q->endChangeGesture();}}};
             for(int i=0;i<20;++i)if(pr.contains(webKeys[i])&&pr[webKeys[i]].is_number())set(i,pr[webKeys[i]].get<float>());
-            set(20,pr.value("nam1_enabled",true)?1:0);set(21,pr.value("bypass_nam2",false)?0:1);set(22,pr.value("bypass_ir",false)?0:1);
+            set(20,pr.value("nam1_enabled",true)?1:0);set(21,pr.value("bypass_nam2",false)?0:1);set(22,pr.value("bypass_ir",false)?0:1);wake.notify_one();
          }else if(path=="/api/favorite"||path=="/api/folder"){
             std::lock_guard<std::mutex> lock(configLock);std::lock_guard<std::mutex> g(libraryMutex());mergeLibraryUnlocked();
             auto k=juce::String(j.at("path").get<std::string>());
@@ -186,7 +187,7 @@ public:
     }
 
     std::atomic<float> inputPeak{0},outputPeak{0};
-    void select(int slot,juce::String file){std::lock_guard<std::mutex> lock(configLock);paths[slot]=file;dirty=true;}
+    void select(int slot,juce::String file){std::lock_guard<std::mutex> lock(configLock);paths[slot]=file;dirty=true;wake.notify_one();}
     juce::String status(){std::lock_guard<std::mutex> lock(configLock);return juce::String(supported.load()?"48 kHz | ":"Set DAW to 48 kHz (dry bypass) | ")+message;}
     juce::String filename(int i){std::lock_guard<std::mutex> lock(configLock);return paths[i].isEmpty()?"Empty":juce::File(paths[i]).getFileName();}
 private:
