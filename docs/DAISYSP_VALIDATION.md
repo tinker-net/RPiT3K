@@ -125,3 +125,25 @@ Real service restart/reboot OAuth, real NAM/IR/preset and audio-device testing, 
 Invert the three measured T30 RT60 anchors per voicing using piecewise linear interpolation in the previous decay parameter, with slight extrapolation at 5 s. Preserve upstream ReverbSc unchanged. Minimum nominal decay now 0.3 s (previous 0.2 s measured about 0.30 s); old presets below 0.3 s migrate to 0.3 s. 24 test points (.3/.5/1/1.5/2/3/4/5 s × three voices); acceptance absolute error <= max(0.08 s, 12% of target), monotonic decay. This is a proposed calibration, not measured until the next test run. T30 is an extrapolated broadband impulse metric, not frequency-independent physical RT60.
 
 Compressor/chorus/delay/reverb now store independent remembered nonzero amounts in *_amount. Existing effective amount keys and 20-float native protocol unchanged; zero means bypass. Legacy positive amounts migrate as active; legacy zero remains off and gets default remembered amount (.35 compressor/chorus, .25 delay/reverb). Toolbar opens dialogs; each dialog has explicit Enable switch and disabled parameters while off. Active icon yellow. Added effect_preset_state tests for migration, invalid inputs, persisted bypass/restore and effective native values. No runtime test yet.
+
+
+## Calibrated ReverbSc and independent effect state — measured 2026-11-26
+
+Source: user-provided validation-daisysp-calibrated.log, HWW-RPiT3K, rpi-ui 4b4a4bea4095a0d473a94c42e951f5100daa19bb. Incremental ARM64 build rebuilt main.cpp, DSP and characterization targets successfully. CTest 7/7 passed, zero failures, total 3.41 s. Characterization 2.54 s, OAuth 0.33 s, effect preset state 0.15 s. CMake FetchContent_Populate deprecation warning remains nonfatal.
+
+| Requested decay (s) | Dark T30 RT60 (s) | Bright | Neutral |
+|---:|---:|---:|---:|
+| .3 | .3000802 | .300102 | .3010704 |
+| .5 | .4752574 | .4698561 | .468056 |
+| 1 | .9720683 | .9776866 | .9732736 |
+| 1.5 | 1.50192 | 1.502002 | 1.500799 |
+| 2 | 2.017494 | 2.011233 | 2.014915 |
+| 3 | 3.041748 | 3.017683 | 3.027842 |
+| 4 | 4.021737 | 4.010767 | 4.014815 |
+| 5 | 4.994119 | 4.99139 | 4.989096 |
+
+24/24 points passed predefined max(.08 s, 12% of requested) tolerance and monotonicity checks. Maximum absolute error .04174815 s (Dark at 3 s); maximum relative error .06388795 (Neutral at .5 s). At 5 s maximum absolute error .01090436 s. Brightness ordering at 1.5 s: Dark .3740644, Neutral .5607134, Bright .7666537. Broadband T30 extrapolation, not a frequency-independent physical RT60. Calibration accepted; no further numerical tuning required under this test protocol.
+
+Compressor, delay, chorus and all previous regression groups passed again with unchanged logged static measurements. Combined effects automation: 10 s audio, elapsed .09208042 s, realtime percentage .9208042, peak .455166, energy 3698.036. Prior run .09216136 s; single-run timing difference is not a statistically established performance change. No ALSA deadline claim.
+
+Five effect preset tests passed: bad values, bypass/restore, legacy decay migration, legacy amount migration, live protocol and disk persistence. Eight mocked OAuth tests passed again. Tests verify server state and effective native values, not browser appearance or actual physical playback. Remaining validation: listening, real service/reboot OAuth, ALSA xruns and generic edition hardware. No production changes in this documentation update.
