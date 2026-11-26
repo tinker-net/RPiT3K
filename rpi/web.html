@@ -360,11 +360,11 @@ html body dialog[id] .modal-stack button{text-align:left;width:100%}
 .header-actions{gap:10px;flex-wrap:wrap}.toolbar-group{display:flex;align-items:center;gap:4px;padding:4px;border:1px solid var(--line);border-radius:9px;background:#ffffff04}.header-actions .toolbar-group button{display:grid;place-items:center;width:36px;height:36px;min-width:36px;padding:5px;margin:0;border-radius:6px;color:#aaa}.header-actions .effects-group button.selected,.header-actions #metroOpen[aria-pressed=true],.header-actions #tuner[aria-pressed=true]{color:var(--amber);border-color:var(--amber)}.header-actions #status.audio-active{color:#7cc68c;border-color:#7cc68c;background:#193020}.header-actions #status:not(.audio-active){color:#777;background:#151517}.hiz-heading{display:flex;justify-content:space-between;align-items:center;min-height:30px;font-size:12px;color:inherit}.hiz-heading small{color:var(--amber)}.popup-knobs{display:flex;justify-content:center;gap:18px;flex-wrap:wrap;padding:12px 0}.popup-knobs .knob{flex:1;min-width:75px}.controls#controls{grid-template-columns:repeat(6,minmax(0,1fr));width:100%;margin:auto}@media(max-width:420px){.controls#controls{grid-template-columns:repeat(3,minmax(0,1fr))}}.rig .hiz-panel{overflow:visible}.rig .rig-scroll{min-height:0;overflow-y:auto}
 
 /* Symmetric amplifier faceplate. Presets occupy their own left rail. */
-.controls-panel{--face-width:760px;display:grid;grid-template-columns:minmax(145px,1fr) minmax(0,var(--face-width)) minmax(145px,1fr);align-items:center;gap:12px;padding:12px 20px}
+.controls-panel{--face-width:960px;display:grid;grid-template-columns:minmax(145px,1fr) minmax(0,var(--face-width)) minmax(145px,1fr);align-items:center;gap:12px;padding:12px 20px}
 .controls-panel>div:first-child{width:min(100%,180px);justify-self:start}
 .controls-panel>div:nth-child(2){min-width:0;width:100%;justify-self:center}
-.controls-panel .meter-console{width:100%;margin:0 auto;display:grid;grid-template-columns:48px minmax(0,1fr) 48px;align-items:center;gap:18px}
-.controls-panel .controls#controls{width:100%;max-width:none;grid-template-columns:repeat(6,minmax(0,1fr));gap:clamp(6px,1vw,14px);margin:0;justify-items:center;align-items:center}
+.controls-panel .meter-console{width:100%;margin:0 auto;display:grid;grid-template-columns:48px minmax(0,1fr) 48px;align-items:center;gap:24px}
+.controls-panel .controls#controls{width:100%;max-width:none;grid-template-columns:repeat(6,minmax(0,1fr));gap:clamp(8px,2vw,28px);margin:0;justify-items:center;align-items:center}
 html .controls-panel .dial,html[data-skin=tone3000] .controls-panel .dial{width:clamp(46px,6.1vw,82px);max-width:100%}
 html[data-skin=tone3000] .controls-panel .knob .t3k-face{inset:0;width:100%;height:100%}
 .controls-panel .knob{width:100%;gap:5px}
@@ -372,8 +372,8 @@ html[data-skin=tone3000] .controls-panel .knob .t3k-face{inset:0;width:100%;heig
 html .controls-panel .meter-track,html[data-skin=tone3000] .controls-panel .meter-track{width:14px;height:82px;gap:2px}
 .controls-panel .signal-meter{align-self:center;gap:5px}
 .controls-panel .signal-meter output{min-width:0;max-width:100%}
-@media(min-width:1001px){.controls-panel{--face-width: min(760px,68vw)}}
-@media(max-width:1000px){.controls-panel{grid-template-columns:1fr;gap:12px;padding:12px}.controls-panel>div:first-child{justify-self:center;width:min(100%,240px)}.controls-panel>div:nth-child(2){width:min(100%,760px)}}
+@media(min-width:1001px){.controls-panel{--face-width: min(960px,76vw)}}
+@media(max-width:1000px){.controls-panel{grid-template-columns:1fr;gap:12px;padding:12px}.controls-panel>div:first-child{justify-self:center;width:min(100%,240px)}.controls-panel>div:nth-child(2){width:min(100%,960px)}}
 @media(max-width:600px){.controls-panel .meter-console{grid-template-columns:26px minmax(0,1fr) 26px;gap:6px}.controls-panel .controls#controls{gap:4px}html .controls-panel .meter-track,html[data-skin=tone3000] .controls-panel .meter-track{width:10px;height:64px;gap:1px}html .controls-panel .dial,html[data-skin=tone3000] .controls-panel .dial{width:clamp(30px,9vw,54px)}}
 @media(max-width:420px){.controls-panel .controls#controls{grid-template-columns:repeat(3,minmax(0,1fr));row-gap:12px}html .controls-panel .dial,html[data-skin=tone3000] .controls-panel .dial{width:48px}html .controls-panel .meter-track,html[data-skin=tone3000] .controls-panel .meter-track{height:110px}}
 </style></head><body>
