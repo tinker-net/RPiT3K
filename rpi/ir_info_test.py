@@ -19,6 +19,15 @@ class IRTests(unittest.TestCase):
     def test_info(self):
         d=ir_info(wav(extra=chunk(b"LIST",b"INFO"+chunk(b"IART",b"Author\0")+chunk(b"INAM",b"Cab\0"))))
         self.assertEqual(d["metadata"],{"author":"Author","name":"Cab"})
+    def test_binary_metadata_ignored(self):
+        info=chunk(b"LIST",b"INFO"+chunk(b"ICMT",b"g,k\x01xNX\x08\xff\xfe")+chunk(b"IART","José".encode("utf-8")+b"\0"))
+        bext=chunk(b"bext",b"\x01\xff\x08"+bytes(599))
+        d=ir_info(wav(extra=info+bext))
+        self.assertEqual(d["metadata"],{"author":"José"})
+    def test_clean_bext(self):
+        description=b"Cabinet microphone"
+        bext=chunk(b"bext",description+bytes(602-len(description)))
+        self.assertEqual(ir_info(wav(extra=bext))["metadata"]["description"],"Cabinet microphone")
     def test_limits(self):
         self.assertFalse(ir_info(wav(channels=2))["compatible"])
         self.assertFalse(ir_info(wav(rate=48000,frames=48001))["compatible"])

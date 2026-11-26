@@ -1,5 +1,20 @@
 """Bounded RIFF/WAVE header and INFO inspection, without decoding audio."""
 import struct
+import unicodedata
+
+
+def readable_text(raw):
+    # RIFF INFO and BEXT text fields may be NUL-padded. Reject binary data,
+    # embedded control characters and invalid UTF-8 instead of displaying it.
+    raw=raw.split(b"\0",1)[0].strip()
+    if not raw:return None
+    try:
+        value=raw.decode("utf-8",errors="strict")
+    except UnicodeDecodeError:
+        return None
+    if any(unicodedata.category(ch).startswith("C") and ch not in "\t\r\n" for ch in value):return None
+    if not any(ch.isalnum() for ch in value):return None
+    return " ".join(value.split())[:512] or None
 
 def ir_info(raw):
     if len(raw)<12 or raw[:4]!=b"RIFF" or raw[8:12]!=b"WAVE":
@@ -23,13 +38,13 @@ def ir_info(raw):
                 key,l=struct.unpack_from("<4sI",raw,j);a=j+8;b=a+l
                 if b>q:break
                 if key in names:
-                    value=raw[a:min(b,a+2048)].rstrip(b"\0").decode("utf-8",errors="replace").strip()
+                    value=readable_text(raw[a:min(b,a+2048)])
                     if value:meta[names[key]]=value
                 j=b+(l&1)
         elif tag==b"bext" and n>=256:
             for key,offset,length in (("description",0,256),("originator",256,32),("date",320,10)):
                 if n>=offset+length:
-                    v=raw[p+offset:p+offset+length].rstrip(b"\0 ").decode("utf-8",errors="replace").strip()
+                    v=readable_text(raw[p+offset:p+offset+length])
                     if v:meta.setdefault(key,v)
         pos=q+(n&1)
     if fmt is None or size is None:raise ValueError("Missing WAV format or data")
