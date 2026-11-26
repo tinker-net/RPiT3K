@@ -91,3 +91,9 @@ Audio starts OFF after restart. Hard-refresh the browser.
 ### Capture artwork persistence
 
 Manual pedal and amplifier appearance assignments are saved on the controller in `appearance.json`, keyed by capture library path. Existing browser assignments are imported when the browser reconnects (server choices take priority). Automatic is an explicit saved choice. No audio restart is required to change appearance.
+
+## Development preview
+
+Experimental branch only. Practice Mode replaces the amp view without changing the guitar chain. Separate practice-tracks directory; imports up to 256 MiB per track; HTTP range streaming to browser audio (not PiSound mixing). Browser-dependent codec and pitch-preserving playback rate. Space starts from a fixed reference, stops and returns to it, and restarts on next press. Pause/resume is separate. A/B loop uses browser time events, not sample-accurate. No waveform, pitch shifting, recording, or MIDI yet. Smart names are reversible display-only filename expansions; unknown tokens preserved, original path retained. No persistent metadata index yet.
+
+Offline backup: stop rpit3k.service, run as data owner `python3 rpi/data_backup.py backup ~/ton3k-backup.tar.gz`, restart service. Restore with `python3 rpi/data_backup.py restore ~/ton3k-backup.tar.gz` while service stopped; previous data retained. Includes all user data, not OS configuration or binaries. Do not migrate to DEB without checking data path.

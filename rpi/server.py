@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """LAN controller for the native RPiT3K engine. Standard library only."""
 import argparse
+import mimetypes
+import tempfile
 from tonecloud import ToneCloud
 from calibration import calibration, valid_number
 from capture_info import capture_info
@@ -685,11 +687,64 @@ class Handler(BaseHTTPRequestHandler):
             raise ValueError("Incomplete request")
         return data
 
+    def practice_path(self,name):
+        if not isinstance(name,str) or not NAME.fullmatch(name) or Path(name).suffix.lower() not in (".wav",".mp3",".flac",".m4a",".ogg"):
+            raise ValueError("Invalid track filename")
+        root=self.server.controller.data/"practice-tracks"
+        if root.is_symlink(): raise ValueError("Invalid tracks directory")
+        root.mkdir(exist_ok=True)
+        p=root/name
+        if p.is_symlink(): raise ValueError("Invalid track")
+        return p
+
+    def stream_track(self,p):
+        with p.open("rb") as f:
+            size=os.fstat(f.fileno()).st_size
+            start,end=0,size-1
+            header=self.headers.get("Range")
+            if header:
+                m=re.fullmatch(r"bytes=(\d*)-(\d*)",header)
+                if not m or not any(m.groups()):
+                    self.send_error(416);return
+                a,b=m.groups()
+                if a: start=int(a);end=min(end,int(b)) if b else end
+                else: start=max(0,size-int(b))
+                if start>end or start>=size:
+                    self.send_response(416);self.send_header("Content-Range",f"bytes */{size}");self.end_headers();return
+            self.send_response(206 if header else 200)
+            self.send_header("Content-Type",mimetypes.guess_type(p.name)[0] or "application/octet-stream")
+            self.send_header("Accept-Ranges","bytes")
+            self.send_header("X-Content-Type-Options","nosniff")
+            self.send_header("Content-Length",str(end-start+1))
+            if header:self.send_header("Content-Range",f"bytes {start}-{end}/{size}")
+            self.end_headers()
+            f.seek(start);remaining=end-start+1
+            while remaining:
+                chunk=f.read(min(65536,remaining))
+                if not chunk:break
+                self.wfile.write(chunk);remaining-=len(chunk)
+
     def do_GET(self):
         if not self.authorized(): return
         path=urlsplit(self.path).path
         if path=="/":
             self.send(200,(ROOT/"rpi/web.html").read_bytes(),"text/html; charset=utf-8")
+        elif path=="/api/practice":
+            root=self.server.controller.data/"practice-tracks"
+            files=[]
+            if root.is_dir() and not root.is_symlink():
+                for p in root.iterdir():
+                    try:
+                        if self.practice_path(p.name).is_file():files.append(p.name)
+                    except ValueError:pass
+            self.send(200,dict(files=sorted(files,key=str.casefold)))
+        elif path=="/api/practice/audio":
+            try:
+                p=self.practice_path(parse_qs(urlsplit(self.path).query).get("name",[""])[0])
+                if not p.is_file():self.send(404,dict(error="Track not found"));return
+                self.stream_track(p)
+            except (BrokenPipeError,ConnectionResetError):pass
+            except (ValueError,OSError):self.send(400,dict(error="Track unavailable"))
         elif path.startswith("/api/amp-art/"):
             try:
                 asset=self.server.controller.amp_art_path(path.rsplit("/",1)[-1])
@@ -722,6 +777,22 @@ class Handler(BaseHTTPRequestHandler):
         c=self.server.controller
         u=urlsplit(self.path)
         try:
+            if u.path=="/api/practice/import":
+                p=self.practice_path(parse_qs(u.query).get("name",[""])[0])
+                n=int(self.headers.get("Content-Length","0"))
+                if not 0<n<=256*1024*1024 or p.exists():raise ValueError("Invalid size or track already exists")
+                with tempfile.NamedTemporaryFile(dir=p.parent,prefix=".import-",delete=False) as f:
+                    tmp=Path(f.name)
+                    try:
+                        remaining=n
+                        while remaining:
+                            chunk=self.rfile.read(min(65536,remaining))
+                            if not chunk:raise ValueError("Incomplete upload")
+                            f.write(chunk);remaining-=len(chunk)
+                        f.flush()
+                        os.link(tmp,p)
+                    finally:tmp.unlink(missing_ok=True)
+                self.send(200,dict(imported=p.name));return
             if u.path in ("/api/poweroff","/api/reboot"):
                 if os.environ.get("RPIT3K_ENABLE_POWEROFF")!="1":
                     self.send(403,dict(error="Power controls are not enabled on this installation"));return
