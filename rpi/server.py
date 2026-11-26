@@ -27,7 +27,7 @@ LIMIT = 32 * 1024 * 1024
 AMP_ART_KEYS = frozenset(("blackface","silverface","tweed","vox","orange","plexi","matchless","dumble","hiewatt","boutique","generic","mesa","gibson","pedal","rat","ts808","centaur","bluesbreaker","tonebender","bigmuff","morningglory","distortionplus"))
 AMP_ART_LIMIT = 2 * 1024 * 1024
 NAME = re.compile(r"[\w .()+@-]{1,180}", re.UNICODE)
-DEFAULT = dict(model="", second="", ir="", ir2="", ir_mix=.5, hiz=0, hiz_profile=0, slim=1, slim2=1, input=1, output=.15,
+DEFAULT = dict(model="", second="", ir="", ir2="", ir_mix=.5, hiz=0, hiz_amount=.9, hiz_profile=0, slim=1, slim2=1, input=1, output=.15,
                bass=0, mid=0, treble=0, gate=-81, comp=0, comp_post=0, reverb=0, decay=1.5, reverb_type=0, bypass=True)
 RANGES = dict(hiz=(0,1), hiz_profile=(0,3), ir_mix=(0,1), slim=(0,1), slim2=(0,1), input=(0,2), output=(0,1),
               bass=(-20,20), mid=(-15,15), treble=(-10,10), gate=(-81,-30), comp=(0,1), comp_post=(0,1), reverb=(0,1), decay=(.2,5), reverb_type=(0,2))
@@ -244,6 +244,10 @@ class Controller:
         for k in p:
             if k in preset:
                 p[k] = preset[k]
+        if "hiz_amount" not in preset and p["hiz"]>0:
+            p["hiz_amount"]=p["hiz"]
+        if type(p["hiz_amount"]) not in (int,float) or not math.isfinite(p["hiz_amount"]) or not 0<=p["hiz_amount"]<=1:
+            raise ValueError("Invalid Hi-Z amount")
         if type(p["bypass"]) is not bool:
             raise ValueError("Invalid bypass")
         for k,(lo,hi) in RANGES.items():
@@ -517,6 +521,8 @@ class Controller:
         for k in keys:
             if k not in values: raise ValueError("Missing "+k)
             p[k]=values[k]
+        p=self.validate(p)
+        if "hiz_amount" in values: p["hiz_amount"]=values["hiz_amount"]
         p=self.validate(p)
         self.proc.stdin.write(" ".join(str(p[k]) for k in keys)+"\n")
         self.proc.stdin.flush()
