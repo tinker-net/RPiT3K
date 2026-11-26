@@ -459,6 +459,34 @@ class Controller:
         b,p=self.settings["buffer"],self.settings["periods"]
         return dict(cpu=self.cpu_pct,temp=temp,buffer=b,periods=p,period_ms=b/48,buffer_ms=b*p/48,**self.xrun_status())
 
+    def companion_bank(self):
+        # Return native presets, without converting or reducing NAM/IR data.
+        return dict(version=1, presets={k:dict(v) for k,v in self.presets.items()},
+                    active=self.active, running=self.proc is not None and self.proc.poll() is None,
+                    files=self.library_files(), cloud_enabled=not self.args.disable_cloud)
+
+    def companion_save(self, request):
+        if not isinstance(request,dict) or request.get("version")!=1:
+            raise ValueError("Unsupported companion protocol")
+        changes=request.get("changes")
+        original=request.get("original")
+        if not isinstance(changes,dict) or not changes or not isinstance(original,dict):
+            raise ValueError("Expected changes and original presets")
+        updated=dict(self.presets)
+        for slot,preset in changes.items():
+            if slot not in ("1","2","3","4"):
+                raise ValueError("Invalid slot")
+            if original.get(slot)!=self.presets[slot]:
+                raise ValueError("Preset "+slot+" changed; sync again")
+            if self.active==slot and self.proc and self.proc.poll() is None:
+                raise ValueError("Stop audio before replacing active preset "+slot)
+            if not isinstance(preset,dict) or any(k not in DEFAULT for k in preset):
+                raise ValueError("Invalid preset fields")
+            updated[slot]=self.validate(dict(self.presets[slot],**preset))
+        self.write_json(self.statefile,updated)
+        self.presets=updated
+        return self.companion_bank()
+
     def status(self):
         return dict(presets=self.presets,active=self.active,settings=self.settings,telemetry=self.telemetry(),
                     cloud_enabled=not self.args.disable_cloud,
@@ -512,6 +540,11 @@ class Handler(BaseHTTPRequestHandler):
         path=urlsplit(self.path).path
         if path=="/":
             self.send(200,(ROOT/"rpi/web.html").read_bytes(),"text/html; charset=utf-8")
+        elif path=="/companion":
+            self.send(200,(ROOT/"rpi/companion.html").read_bytes(),"text/html; charset=utf-8")
+        elif path=="/api/companion/bank":
+            with self.server.controller.lock:
+                self.send(200,self.server.controller.companion_bank())
         elif path.startswith("/api/amp-art/"):
             try:
                 asset=self.server.controller.amp_art_path(path.rsplit("/",1)[-1])
@@ -578,6 +611,8 @@ class Handler(BaseHTTPRequestHandler):
                 self.send(200,c.cloud.action(u.path.rsplit('/',1)[-1],v))
                 return
             with c.lock:
+                if u.path=="/api/companion/bank":
+                    self.send(200,c.companion_save(json.loads(self.body(65536))));return
                 if u.path.startswith("/api/amp-art/"):
                     key=u.path.rsplit("/",1)[-1]
                     c.install_amp_art(key,self.body(AMP_ART_LIMIT))
