@@ -53,3 +53,16 @@ if(RPIT3K_EMBEDDED)
   target_include_directories(rpit3k PRIVATE "${E76}/a2lite" "${E76}/a2full")
   target_compile_definitions(rpit3k PRIVATE RPIT3K_EMBEDDED NAM_A2LITE_MAX_BUFFER_SIZE=64 NAM_A2FULL_MAX_BUFFER_SIZE=64 NAM_A2LITE_BLOCK_HINT=64 NAM_A2FULL_BLOCK_HINT=64)
 endif()
+
+# Upstream DaisySP-LGPL, built as a replaceable shared library.
+set(DAISY_VENDOR "${CMAKE_CURRENT_SOURCE_DIR}/vendor/daisysp")
+add_library(rpit3k-daisysp SHARED
+  "${DAISY_VENDOR}/lgpl/Source/Dynamics/compressor.cpp"
+  "${DAISY_VENDOR}/lgpl/Source/Effects/reverbsc.cpp")
+target_include_directories(rpit3k-daisysp PUBLIC
+  "${DAISY_VENDOR}/mit"
+  "${DAISY_VENDOR}/lgpl/Source/Dynamics"
+  "${DAISY_VENDOR}/lgpl/Source/Effects")
+target_compile_options(rpit3k-daisysp PRIVATE $<$<CONFIG:Release>:-O3>)
+target_link_libraries(rpit3k PRIVATE rpit3k-daisysp)
+target_link_libraries(rpit3k-dsp-test PRIVATE rpit3k-daisysp)

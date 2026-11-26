@@ -236,3 +236,6 @@ For example, the Telecaster profile at 4 kHz measured +7.86 dB at 100%, +6.76 dB
 
 **Validation scope:** this is a digital, model-relative test, not a physical measurement of the guitar, Pisound ADC, or an actual 1 MΩ input. Pickup inductance, capacitance and pot values are illustrative assumptions; cable and pickup variations may change the real response. The test does not validate live-control delivery, real-time CPU overhead, noise recovery or electrical equivalence. The general Linux branch shares the filter implementation but these results are inherited from the Pi test, not a new x86/USB measurement. A controlled comparison with a physical high-impedance buffer or selectable input load remains future work. Allow headroom for resonance boosts (over 10 dB in some profiles).
 
+
+
+Native effects use DaisySP-LGPL. See [source and license information](vendor/daisysp/README.md).
