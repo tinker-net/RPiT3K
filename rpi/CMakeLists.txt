@@ -90,3 +90,7 @@ endif()
 if(Python3_Interpreter_FOUND)
   add_test(NAME capture_metadata COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/capture_info_test.py")
 endif()
+
+if(Python3_Interpreter_FOUND)
+  add_test(NAME ir_metadata COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/ir_info_test.py")
+endif()
