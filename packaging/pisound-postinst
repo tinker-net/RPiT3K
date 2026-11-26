@@ -1,0 +1,23 @@
+#!/bin/sh
+set -e
+if [ "$1" = configure ]; then
+ if ! getent passwd rpi-ton3k-pisound >/dev/null; then
+  adduser --system --group --home /var/lib/rpi-ton3k-pisound --no-create-home rpi-ton3k-pisound
+ fi
+ install -d -m700 -o rpi-ton3k-pisound -g rpi-ton3k-pisound /var/lib/rpi-ton3k-pisound
+ tmp=$(mktemp)
+ trap 'rm -f "$tmp"' EXIT
+ printf '%s\n' 'rpi-ton3k-pisound ALL=(root) NOPASSWD: /usr/bin/systemctl poweroff, /usr/bin/systemctl reboot' > "$tmp"
+ /usr/sbin/visudo -cf "$tmp"
+ install -m0440 "$tmp" /etc/sudoers.d/rpi-ton3k-pisound
+ if [ -d /run/systemd/system ]; then
+  systemctl daemon-reload
+  systemctl start NetworkManager.service
+  /usr/lib/rpi-ton3k/pisound/setup configure
+  systemctl restart pisound-btn.service
+  deb-systemd-helper enable rpi-ton3k-pisound.service rpi-ton3k-pisound-hotspot.timer >/dev/null
+  deb-systemd-invoke restart rpi-ton3k-pisound.service rpi-ton3k-pisound-hotspot.timer
+ else
+  echo 'PiSound integration requires a booted target; run sudo dpkg-reconfigure rpi-ton3k-pisound there.'
+ fi
+fi
