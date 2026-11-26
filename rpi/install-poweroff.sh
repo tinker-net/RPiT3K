@@ -15,16 +15,16 @@ if [[ "${1:-}" == "--disable" ]]; then
  exit 0
 fi
 [[ $# == 0 ]] || { echo "Usage: bash rpi/install-poweroff.sh [--disable]"; exit 1; }
-echo "WARNING: on unauthenticated LAN installations, anyone with API access can shut down the host."
-read -rp 'Enable power off on this trusted installation? [y/N] ' answer
+echo "WARNING: on unauthenticated LAN installations, anyone with API access can shut down or reboot the host."
+read -rp 'Enable power off and reboot on this trusted installation? [y/N] ' answer
 [[ "$answer" == y || "$answer" == Y ]] || exit 1
 tmp="$(mktemp)"
 trap 'rm -f "$tmp"' EXIT
-printf '%s ALL=(root) NOPASSWD: /usr/bin/systemctl poweroff\n' "$user" > "$tmp"
+printf '%s ALL=(root) NOPASSWD: /usr/bin/systemctl poweroff, /usr/bin/systemctl reboot\n' "$user" > "$tmp"
 sudo /usr/sbin/visudo -cf "$tmp"
 sudo install -m 0440 -o root -g root "$tmp" /etc/sudoers.d/rpit3k-poweroff
 sudo install -d -m 755 "/etc/systemd/system/$service.d"
 printf '[Service]\nEnvironment=RPIT3K_ENABLE_POWEROFF=1\n' | sudo tee "/etc/systemd/system/$service.d/90-poweroff.conf" >/dev/null
 sudo systemctl daemon-reload
 sudo systemctl restart "$service"
-echo "Power button enabled. No shutdown has been requested."
+echo "Power button enabled. No shutdown or reboot has been requested."

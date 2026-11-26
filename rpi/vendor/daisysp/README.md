@@ -7,4 +7,4 @@ The compressor (Electrosmith, GRAME) and ReverbSc (Electrosmith, Sean Costello, 
 
 CMake builds librpit3k-daisysp.so separately. Users can replace the LGPL library with an ABI-compatible modified build; source is included. When distributing binaries, include the shared library, applicable license texts and corresponding library source (or compliant offer), and allow replacement and debugging of modified library versions. The normal build-tree executable uses CMake's build RPATH. Do not copy the executable alone to another directory for distribution.
 
-The original 0/1/2 preset values now select Dark/Bright/Neutral damping of ReverbSc, not spring/plate/room models. Decay is an approximate feedback mapping. NAM, gate, EQ, IR, metronome and ALSA are unchanged.
+The original 0/1/2 preset values now select Dark/Bright/Neutral damping of ReverbSc, not spring/plate/room models. Decay is calibrated using measured broadband T30 anchors over .3–5 s; 24/24 points passed on Pi 5 at 4b4a4be. ChorusEngine and DelayLine are vendored MIT modules from the same pinned MIT revision. See ../../../docs/DAISYSP_VALIDATION.md for evidence and limitations.
