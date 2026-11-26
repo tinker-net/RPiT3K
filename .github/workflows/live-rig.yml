@@ -49,3 +49,4 @@ jobs:
           Path("/tmp/rpit3k-ui.js").write_text("\n".join(scripts))
           PY
           node --check /tmp/rpit3k-ui.js
+          if [ -f rpi/smart_ir_test.js ]; then node rpi/smart_ir_test.js; fi
