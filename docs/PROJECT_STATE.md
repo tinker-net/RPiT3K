@@ -18,8 +18,8 @@ Last reviewed: 2026-11-26. This is the canonical cross-branch handover, maintain
 | deb-packaging | cbffb7dc10a7bd0a21783f4b49854426fb6ede1e | Experimental Debian packages |
 | embedded-a76 | d95599e4ab573caa769145bd9b5e043b376d2a78 | Original hybrid backend development |
 | main | f11d98a394d652addf27da0475e19d5ae410d32e | GitHub default; not the stable Pisound baseline |
-| linux-native | 45de75bf79c4037e631f62da7d9124d6a2b2c5e3 | Existing branch; current role not audited |
-| rpi-native | 096ba12408654bd7d01335018f12326dd2bbc685 | Existing branch; current role not audited |
+| linux-native | 45de75bf79c4037e631f62da7d9124d6a2b2c5e3 | Earlier generic Linux ALSA prototype |
+| rpi-native | 096ba12408654bd7d01335018f12326dd2bbc685 | Original native ALSA/DSP prototype |
 
 ## Architecture and invariants
 
@@ -50,7 +50,7 @@ Next investigation (not yet authorized as a code change): inspect pinned upstrea
 
 - Long-session audio stability, broader capture coverage, controlled IR/dual-IR backend comparisons, physical ADC–DAC latency and input calibration/noise/headroom, other interfaces and Debian/x86 physical hardware validation.
 - TONE3000 account integration is experimental and not end-to-end validated. Companion integration was withdrawn in recent conversation; do not reintroduce without explicit request.
-- Recent UI requests: start with audio off; improve tuner and use tuning-fork icon; order tuner, explicit audio on/off and input calibration before power menu (shutdown/reboot). Implementation status of these specific requests was not audited for this document; inspect current code before changing anything.
+- Recent UI requests: start with audio off; improve tuner and use tuning-fork icon; order tuner, explicit audio on/off and input calibration before power menu (shutdown/reboot). Implemented in all three deployment branches according to commit history and server source: --autostart ignored, tuner pitch in fast telemetry, opt-in poweroff/reboot endpoints. Physical/UI operation not freshly tested.
 - Historical UI tags mentioned: ui-classic-original and ui-tone3000-v1; verify refs before using them.
 
 ## Primary references
@@ -63,3 +63,37 @@ Next investigation (not yet authorized as a code change): inspect pinned upstrea
 - [Debian CI workflow](https://github.com/tinker-net/RPiT3K/blob/cbffb7dc10a7bd0a21783f4b49854426fb6ede1e/.github/workflows/deb-packaging.yml)
 
 This review verified repository metadata, branch refs, CMake, hybrid source excerpts, technical report, general installer excerpts and Debian workflow. No builds, hardware tests or code changes were performed during this documentation review.
+
+## Historical commit review — 2026-11-26
+
+Reviewed commit subjects across all seven branches, paging through native development history, and sampled current controller, build/install scripts and UI. This is an architectural review, not a line-by-line audit of every patch.
+
+| Milestone | Representative commits (rpi-ui unless noted) |
+|---|---|
+| Native ALSA, duplex recovery and bypass | fa3dbb7d, 29eacd7b, 3d1d529f, f9f6b987 |
+| Controller, four presets, browser UI, FFT IR, tuner | 9183475d, abc1fdd3, 3eea9de9, 6676c334 |
+| Live controls and numerical reference | f889e9af, 977f999f, d73beff8, 18a3e227, f6339501, dea94c10 |
+| Generic Linux predecessor | linux-native: 6b750a1a, ec67bab8, d7fce887, d7fa7da0, 45de75bf |
+| Telemetry and cloud | b44cee69, 4497a317, 9e0042a4, b6657c72, 0b4bf527 |
+| Gate evolution | bd9b8639, 775e51da, 943533bf, 888dbca2, 11ab55f6 |
+| FX and explicit calibration | b93151cc, f9165cd4, 47200594, aa3b1287, 773d9cb3 |
+| Library and UI | fb3e9bd7, 28bc269b, fc0a40ed, 5f982088, f28afaf9 |
+| Dual IR and Hi-Z | fbeee090, 42e3bdc4, aa3d8c5e, 5c88a94e, 1ebd1ea3, 4f6547de |
+| General edition | rpi-general: af1f876c, 4a591528, d697b4e6, c7a19294, 0b989ae1 |
+| Packaging | deb-packaging: 1d66553d, e892dd29, de22fab7, fe0df44e |
+| Hybrid | embedded-a76: 26b65fd5, 14b27ea4, d95599e4; rpi-ui: 99f19910, 39c189a3 |
+| Classic/T3K skin | 4d42c383, dbdc2065, c774ebd4, e2cb03c4 |
+| Companion withdrawn | a6fd1a27, f7771170, 07650025, e6029489 |
+| Latest controls | 4c68b72b, e18170e3, d1c2e3ea, 8bee8135, 654dfd68; general f468bd64; packaging cbffb7dc |
+
+Preserve intentional behavior: soft-knee continuous downward expander (not binary gate), input-keyed downstream noise suppression, 120 ms hold/350 ms release history; optional pre/post compression, FDN reverb with tail draining and unused processing skipped; live smoothed controls; 64-frame IR partitions independent of ALSA periods, parallel dual IR linear blend; per-preset optional Hi-Z A/B and explicit ADC reference (invalidate on generic routing change); real nested library folders, favorites and preset reference migration on rename/move, confirmed permanent deletion rather than trash; custom WebP artwork and SVG fallback; selectable Classic/T3K skin; cloud off by default and separate from withdrawn Companion; confirmed opt-in host power actions. Preserve device/channel routing differences and separate data/service paths across editions.
+
+### Newly identified consistency risk (not fixed)
+
+All three current server.py files explicitly ignore --autostart and start audio stopped. The rpi-ui install-service.sh and rpi-general install-general.sh still pass --autostart and retain a live-audio telemetry readiness check. A clean install may report failure despite the service starting correctly in its intended silent state. Confirm actual installer behavior before fixing; do not restore automatic audio start. Reboot endpoint/UI existence does not prove sudo permissions are installed on every host.
+
+### x86 follow-up evidence
+
+Current general installer and packaging/build-deb.sh invoke CMake without disabling RPIT3K_EMBEDDED. Thus the default A76 source selection is requested on AMD64 too; this does not establish the compiled implementation or actual runtime routing. CI run retrieval attempted but rejected by connector; no successful run claimed. Inspect upstream engine source and actual build logs before proposing architecture changes.
+
+No new builds or hardware tests; only documentation updated.
