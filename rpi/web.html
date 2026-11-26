@@ -736,7 +736,12 @@ function identifyCapture(path){
  }
  return {raw,label,skin,model};
 }
-function smartName(path){const x=identifyCapture(path);if(!smartEnabled)return x.raw;if(x.model)return x.label;if(/\.wav$/i.test(path))return x.raw;return x.raw.replace(/\b(?:FNDR|MRSHL?|ORNG|HWTT|VX|MTCH)\b/gi,t=>({FNDR:"Fender",MRSH:"Marshall",MRSHL:"Marshall",ORNG:"Orange",HWTT:"Hiwatt",VX:"Vox",MTCH:"Matchless"})[t.toUpperCase()]);}
+function smartName(path){
+ const x=identifyCapture(path);if(!smartEnabled)return x.raw;
+ if(/\.wav$/i.test(path))return x.label;
+ const label=x.model?x.label:x.raw.replace(/\b(?:FNDR|MRSHL?|ORNG|HWTT|VX|MTCH)\b/gi,t=>({FNDR:"Fender",MRSH:"Marshall",MRSHL:"Marshall",ORNG:"Orange",HWTT:"Hiwatt",VX:"Vox",MTCH:"Matchless"})[t.toUpperCase()]);
+ return /\.nam$/i.test(path)?label.replace(/[\s_-]+DI$/i,"").replace(/[\s_-]+CAB$/i," · CAB"):label;
+}
 let smartEnabled=true;try{smartEnabled=localStorage.getItem("ton3k.originalNames")!=="1";}catch(e){}
 let practiceVisible=false;
 let treeKey=null;const openFolders=new Set();let libraryTarget="";
