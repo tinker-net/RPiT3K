@@ -1,0 +1,40 @@
+#!/bin/bash
+set -euo pipefail
+base=/usr/lib/rpi-ton3k/pisound
+state=/var/lib/rpi-ton3k-pisound-integration
+conf=/etc/pisound.conf
+install -d -m700 "$state"
+case "${1:-}" in
+ configure)
+  test -f "$conf"
+  test -r /usr/local/pisound/scripts/common/common.sh
+  test -x /usr/local/pisound/scripts/pisound-btn/shutdown.sh
+  if [[ ! -e "$state/button-original" ]]; then
+   grep -E '^[[:space:]]*(CLICK_1|CLICK_2|CLICK_3|HOLD_1S|HOLD_3S|HOLD_5S)[[:space:]]' "$conf" > "$state/button-original" || [[ $? == 1 ]]
+  fi
+  sed -i -E '/^[[:space:]]*(CLICK_1|CLICK_2|CLICK_3|HOLD_1S|HOLD_3S|HOLD_5S)[[:space:]]/d; /^# Ton3K autonomous Pisound mappings/d' "$conf"
+  printf '\n' >> "$conf"
+  cat "$base/button.conf" >> "$conf"
+  if ! nmcli connection show RPiT3K-fallback >/dev/null 2>&1; then
+   umask 077
+   if [[ ! -s "$state/hotspot-password" ]]; then python3 -c 'import secrets;print(secrets.token_hex(12))' > "$state/hotspot-password"; fi
+   nmcli connection add type wifi ifname wlan0 con-name RPiT3K-fallback ssid RPiT3K connection.autoconnect no 802-11-wireless.mode ap 802-11-wireless-security.key-mgmt wpa-psk 802-11-wireless-security.psk "$(cat "$state/hotspot-password")" ipv4.method shared ipv4.addresses 10.42.0.1/24 ipv6.method disabled
+   touch "$state/hotspot-owned"
+  fi
+  ;;
+ restore)
+  if [[ -f "$conf" && -f "$state/button-original" ]]; then
+   sed -i -E '\@^[[:space:]]*(CLICK_1|CLICK_2|CLICK_3|HOLD_1S|HOLD_3S|HOLD_5S)[[:space:]]+/usr/lib/rpi-ton3k/pisound/rpit3k-button-@d; /^# Ton3K autonomous Pisound mappings/d' "$conf"
+   while IFS= read -r line; do
+    key="$(awk '{print $1}' <<<"$line")"
+    if ! grep -Eq "^[[:space:]]*$key[[:space:]]" "$conf"; then printf '%s\n' "$line" >> "$conf"; fi
+   done < "$state/button-original"
+   rm -f "$state/button-original"
+  fi
+  if [[ -e "$state/hotspot-owned" ]]; then
+   if nmcli connection show RPiT3K-fallback >/dev/null 2>&1; then nmcli connection delete RPiT3K-fallback; fi
+   rm -f "$state/hotspot-owned"
+  fi
+  ;;
+ *) exit 2 ;;
+esac
