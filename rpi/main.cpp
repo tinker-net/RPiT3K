@@ -373,15 +373,15 @@ int main(int argc,char** argv) {
             if(n<=0)return;
             for(ssize_t k=0;k<n;++k){
                 if(buf[k]=='\n'){
-                    if(!overflow){line[used]=0;float i,o,b,m,t,g,c,pos,wet,d,type,mix,hz,profile,ch,cr,cd,dl,dm,df;char extra;
+                    if(!overflow){line[used]=0;float i,out,b,m,t,g,c,pos,wet,d,type,mix,hz,profile,ch,cr,cd,dl,dm,df;char extra;
                         unsigned enabled,bpm,beats;float level;
                         if(std::sscanf(line,"STOMP %u %c",&enabled,&extra)==1&&enabled<=1)current->set_stomp(enabled!=0);
                         else if(std::sscanf(line,"PRACTICE %u %f %c",&enabled,&level,&extra)==2&&enabled<=1&&std::isfinite(level)&&level>=0&&level<=1){backing_enabled=enabled!=0;backing_gain=level;if(!backing_enabled){backing_used=0;if(o.practice_fd>=0){char discard[4096];for(int j=0;j<32&&read(o.practice_fd,discard,sizeof(discard))>0;++j){}}}}
                         else if(std::sscanf(line,"METRO %u %u %u %f %c",&enabled,&bpm,&beats,&level,&extra)==4&&enabled<=1)metronome.set(enabled!=0,bpm,beats,level);
-                        else if(std::sscanf(line,"%f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %c",&i,&o,&b,&m,&t,&g,&c,&pos,&wet,&d,&type,&mix,&hz,&profile,&ch,&cr,&cd,&dl,&dm,&df,&extra)==20)current->controls(i,o,b,m,t,g,c,pos,wet,d,type,mix,hz,profile,ch,cr,cd,dl,dm,df);
-                        else if(std::sscanf(line,"%f %f %f %f %f %f %f %f %f %f %f %f %f %f %c",&i,&o,&b,&m,&t,&g,&c,&pos,&wet,&d,&type,&mix,&hz,&profile,&extra)==14)current->controls(i,o,b,m,t,g,c,pos,wet,d,type,mix,hz,profile);
-                        else if(std::sscanf(line,"%f %f %f %f %f %f %f %f %f %f %f %f %c",&i,&o,&b,&m,&t,&g,&c,&pos,&wet,&d,&type,&mix,&extra)==12)current->controls(i,o,b,m,t,g,c,pos,wet,d,type,mix);
-                        else if(std::sscanf(line,"%f %f %f %f %f %f %f %f %f %f %f %c",&i,&o,&b,&m,&t,&g,&c,&pos,&wet,&d,&type,&extra)==11)current->controls(i,o,b,m,t,g,c,pos,wet,d,type);}
+                        else if(std::sscanf(line,"%f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %c",&i,&out,&b,&m,&t,&g,&c,&pos,&wet,&d,&type,&mix,&hz,&profile,&ch,&cr,&cd,&dl,&dm,&df,&extra)==20)current->controls(i,out,b,m,t,g,c,pos,wet,d,type,mix,hz,profile,ch,cr,cd,dl,dm,df);
+                        else if(std::sscanf(line,"%f %f %f %f %f %f %f %f %f %f %f %f %f %f %c",&i,&out,&b,&m,&t,&g,&c,&pos,&wet,&d,&type,&mix,&hz,&profile,&extra)==14)current->controls(i,out,b,m,t,g,c,pos,wet,d,type,mix,hz,profile);
+                        else if(std::sscanf(line,"%f %f %f %f %f %f %f %f %f %f %f %f %c",&i,&out,&b,&m,&t,&g,&c,&pos,&wet,&d,&type,&mix,&extra)==12)current->controls(i,out,b,m,t,g,c,pos,wet,d,type,mix);
+                        else if(std::sscanf(line,"%f %f %f %f %f %f %f %f %f %f %f %c",&i,&out,&b,&m,&t,&g,&c,&pos,&wet,&d,&type,&extra)==11)current->controls(i,out,b,m,t,g,c,pos,wet,d,type);}
                     used=0;overflow=false;
                 }else if(used<sizeof(line)-1)line[used++]=buf[k];else overflow=true;
             }
