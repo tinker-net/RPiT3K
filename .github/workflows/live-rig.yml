@@ -1,0 +1,48 @@
+name: Experimental live rig validation
+on:
+  push:
+    branches: [rpi-ui, rpi-general, live-rig]
+    paths: ['rpi/**', '.github/workflows/live-rig.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            cpu: ''
+          - runner: ubuntu-24.04-arm
+            cpu: cortex-a76
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y build-essential cmake libasound2-dev python3 nodejs
+      - name: Checkout pinned NAM Core
+        run: |
+          git clone https://github.com/sdatkinson/NeuralAmpModelerCore.git
+          git -C NeuralAmpModelerCore checkout d3189ed482ded880c128bf312941266c4fa5ceec
+          git -C NeuralAmpModelerCore submodule update --init --recursive
+      - name: Native build and tests
+        env:
+          CPU: ${{ matrix.cpu }}
+        run: |
+          cmake -S rpi -B build-rpi -DCMAKE_BUILD_TYPE=Release -DRPIT3K_CPU="$CPU"
+          cmake --build build-rpi -j2
+          ctest --test-dir build-rpi --output-on-failure
+          ./build-rpi/rpit3k --bypass --verify
+          python3 -m py_compile rpi/server.py
+      - name: Browser script syntax
+        run: |
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          s = Path("rpi/web.html").read_text()
+          scripts = re.findall(r"<script(?:\\s[^>]*)?>(.*?)</script>", s, flags=re.S)
+          assert scripts
+          Path("/tmp/rpit3k-ui.js").write_text("\n".join(scripts))
+          PY
+          node --check /tmp/rpit3k-ui.js
