@@ -793,14 +793,16 @@ function normalYork(path,raw){
  const base=raw.replace(/^YA[\s_-]+/i,""),words=[...base.matchAll(/[^\s_-]+/g)],ks=key.split(" ");
  let count=0;while(count<ks.length&&words[count]?.[0].toUpperCase()===ks[count])count++;
  let tail=count>=Math.min(3,ks.length)?base.slice(words[count-1].index+words[count-1][0].length).replace(/^[\s_-]+/,""):base;
- tail=tail.replace(/^SH(?:[\s_-]+|$)/i,"Scott Henderson ");
+ // SH in the cabinet prefix identifies the cabinet, not the IR author/selection.
+ const artistSelection=artist&&parts.slice(0,-1).some(x=>/\bScott[\s_-]+Henderson\b/i.test(x))?artist:null;
+ if(artist)tail=tail.replace(/^SH(?:[\s_-]+|$)/i,"");
  const mic=tail.match(/^([a-z0-9]+)(?=[\s_-]|$)/i);
  if(mic&&Object.hasOwn(yorkMics,mic[1].toUpperCase()))tail=yorkMics[mic[1].toUpperCase()]+tail.slice(mic[0].length);
  tail=tail.replace(/^(Mix)[\s_-]*(\d+)/i,"Mix $2");
  const phase=parts.find(x=>/^(?:Minimum|Natural) Phase/i.test(x))||"";
  const phaseLabel=/^Minimum/i.test(phase)?"Minimum Phase":/^Natural/i.test(phase)?"Natural Phase":"";
  const stereo=parts.some(x=>/\bStereo\b/i.test(x))?"Stereo":"";
- return result(raw,title,[speaker,artist,tail,phaseLabel,stereo],null,title);
+ return result(raw,title,[speaker,artistSelection,tail,phaseLabel,stereo],null,title);
 }
 function normalAmalgamIR(path,raw){
  let n=raw.replace(/_/g," ").trim(),title="",m;
