@@ -33,13 +33,22 @@ class FXTests(unittest.TestCase):
         p=dict(DEFAULT)
         for k in FX_DEFAULT_AMOUNTS:p[k]=0;p[k+"_amount"]=.73
         self.c.live_controls("1",p)
-        self.assertEqual(len(self.c.proc.stdin.getvalue().split()),20)
+        lines=self.c.proc.stdin.getvalue().splitlines()
+        self.assertEqual(len(lines),2)
+        self.assertEqual(lines[0],"STOMP 1")
+        self.assertEqual(len(list(map(float,lines[1].split()))),20)
         saved=json.loads(self.c.statefile.read_text())["1"]
         for k in FX_DEFAULT_AMOUNTS:
             self.assertEqual(saved[k],0);self.assertEqual(saved[k+"_amount"],.73)
         for k in FX_DEFAULT_AMOUNTS:p[k]=.73
+        p["nam1_enabled"]=False
         self.c.live_controls("1",p)
-        values=list(map(float,self.c.proc.stdin.getvalue().splitlines()[-1].split()))
+        lines=self.c.proc.stdin.getvalue().splitlines()
+        self.assertEqual(len(lines),4)
+        self.assertEqual(lines[2],"STOMP 0")
+        self.assertFalse(json.loads(self.c.statefile.read_text())["1"]["nam1_enabled"])
+        values=list(map(float,lines[3].split()))
+        self.assertEqual(len(values),20)
         for i in (6,8,14,17):self.assertAlmostEqual(values[i],.73)
     def test_bad_values(self):
         for value in (float("nan"),float("inf"),-1,2,".5",True,0):
