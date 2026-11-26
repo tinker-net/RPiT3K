@@ -3,5 +3,4 @@
 BIND=127.0.0.1
 PORT=8080
 PCM=default
-# Set AUTOSTART=--autostart after configuring audio.
-AUTOSTART=
+# Audio always starts OFF.
