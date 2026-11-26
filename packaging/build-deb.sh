@@ -23,8 +23,7 @@ pin=d3189ed482ded880c128bf312941266c4fa5ceec
 git clone https://github.com/sdatkinson/NeuralAmpModelerCore.git "$src/NeuralAmpModelerCore"
 git -C "$src/NeuralAmpModelerCore" checkout --detach "$pin"
 git -C "$src/NeuralAmpModelerCore" submodule update --init --recursive
-embedded=OFF
-if [[ "$cpu" == cortex-a76 ]]; then embedded=ON; fi
+embedded=ON # upstream also supplies a scalar fallback on non-NEON hosts
 cmake -S "$src/rpi" -B "$src/build-rpi" -DCMAKE_BUILD_TYPE=Release -DRPIT3K_CPU="$cpu" -DRPIT3K_EMBEDDED="$embedded" -DCMAKE_BUILD_RPATH_USE_ORIGIN=ON
 cmake --build "$src/build-rpi" -j"${JOBS:-2}"
 ctest --test-dir "$src/build-rpi" --output-on-failure
@@ -85,6 +84,6 @@ printf '/etc/default/%s\n' "$package" > "$root/DEBIAN/conffiles"
 python3 "$prefix/rpi/server.py" --help >/dev/null
 if [[ "$edition" == general ]]; then
  test ! -e "$prefix/pisound"
- ! find "$root" -iname '*pisound*' | grep -q .
+ if [[ -n "$(find "$root" -iname '*pisound*' -print -quit)" ]]; then echo 'Unexpected Pisound payload in generic package' >&2; exit 1; fi
 fi
 dpkg-deb --root-owner-group --build "$root" "$dist/${package}_${version}_${arch}${cpu:+-$cpu}.deb"
