@@ -8,9 +8,9 @@ cpu="${2:-}"
 edition="${3:-general}"
 arch="$(dpkg --print-architecture)"
 case "$arch:$cpu:$edition" in
- arm64:cortex-a76:pisound) source_ref=e9b21b0576a1bf67d602b75384a9379b321a3b08; package=rpi-ton3k-pisound ;;
+ arm64:cortex-a76:pisound) source_ref=54ea14b0a95c8b97767b9f5566852b8b9012b19e; package=rpi-ton3k-pisound ;;
  arm64::general|arm64:cortex-a72:general|arm64:cortex-a76:general|amd64::general)
-  source_ref=962720409783e516fc9e37aa4fb4af068cbc52db; package=rpi-ton3k ;;
+  source_ref=5e4d47904e27d67af0b73e9c2f5fee599f59a82e; package=rpi-ton3k ;;
  *) echo "Unsupported architecture/CPU/edition"; exit 1 ;;
 esac
 work="$(mktemp -d)"
