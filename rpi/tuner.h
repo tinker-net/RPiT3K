@@ -6,7 +6,7 @@
 // Monophonic pitch estimator, decimated to 6 kHz with a boxcar antialias stage.
 // Normalized difference (YIN-style), suitable for standard guitar/bass tuning.
 class GuitarTuner {
-    static constexpr unsigned N=1024, MAXLAG=150, MINLAG=6;
+    static constexpr unsigned N=1200, MAXLAG=200, MINLAG=5;
     std::array<float,N> ring{};
     unsigned head=0, filled=0, dec=0, since=0;
     float sum=0;
@@ -17,7 +17,7 @@ public:
             sum+=in[i];
             if(++dec==8){ring[head]=sum/8;head=(head+1)%N;filled=std::min(N,filled+1);sum=0;dec=0;++since;}
         }
-        if(filled==N&&since>=600){since=0;return true;}
+        if(filled==N&&since>=300){since=0;return true;}
         return false;
     }
     Reading analyze() const {
@@ -36,10 +36,11 @@ public:
         }
         unsigned best=0;
         for(unsigned lag=MINLAG;lag<MAXLAG;++lag)
-            if(d[lag]<.15f&&d[lag]<=d[lag+1]){best=lag;break;}
+            if(d[lag]<.20f&&d[lag]<=d[lag-1]&&d[lag]<=d[lag+1]){best=lag;break;}
         if(!best)return {};
         float a=d[best-1],b=d[best],c=d[best+1],den=a-2*b+c;
         float delta=std::abs(den)>1e-8f?std::clamp(.5f*(a-c)/den,-.5f,.5f):0;
-        return {6000.f/(best+delta),1-b};
+        const float hz=6000.f/(best+delta);
+        return (hz>=30.f&&hz<=1200.f)?Reading{hz,1-b}:Reading{};
     }
 };
