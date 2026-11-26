@@ -7,6 +7,9 @@
 #include <juce_gui_extra/juce_gui_extra.h>
 #include "BinaryData.h"
 #include <map>
+#include <set>
+#include <thread>
+#include <condition_variable>
 
 class Ton3k final : public juce::AudioProcessor, private juce::Timer {
 public:
@@ -20,7 +23,7 @@ public:
         f("gate","Gate (-81 = off)",-81,-30,1,-81);
         f("comp","Compressor",0,1,.01f,0);f("compPost","Compressor position (0 pre / 1 post)",0,1,1,0);
         f("reverb","Reverb",0,1,.01f,0);f("decay","Decay (s)",.2f,5,.01f,1.5f);f("reverbType","Reverb type",0,2,1,0);
-        f("mix","IR blend",0,1,.01f,.5f);f("hiz","Hi-Z",0,1,1,0);f("profile","Hi-Z profile",0,3,1,0);
+        f("mix","IR blend",0,1,.01f,.5f);f("hiz","Hi-Z",0,1,.01f,0);f("profile","Hi-Z profile",0,3,1,0);
         f("chorus","Chorus",0,1,.01f,0);f("chorusRate","Chorus rate",.1f,5,.01f,.8f);f("chorusDepth","Chorus depth",0,1,.01f,.5f);
         f("delay","Delay",0,1,.01f,0);f("delayMs","Delay (ms)",20,1000,1,350);f("feedback","Feedback",0,.85f,.01f,.35f);
         f("stomp","Pedal enabled",0,1,1,1);
@@ -31,9 +34,9 @@ public:
     Ton3k():AudioProcessor(BusesProperties().withInput("Input",juce::AudioChannelSet::mono(),true).withOutput("Output",juce::AudioChannelSet::stereo(),true)),state(*this,nullptr,"TON3K",layout()){
         for(auto* id:ids) params.push_back(state.getRawParameterValue(id));
         ton3k::Options initial; initial.output=.5f; current=new ton3k::Chain(initial);
-        startTimerHz(10);
+        loadLibrary(); loader=std::thread([this]{loadLoop();}); startTimerHz(10);
     }
-    ~Ton3k() override {stopTimer(); delete current;delete pending.exchange(nullptr);delete retired.exchange(nullptr);}
+    ~Ton3k() override {stopTimer(); {std::lock_guard<std::mutex> lock(configLock); quitting=true;} wake.notify_all(); if(loader.joinable())loader.join(); delete current;delete pending.exchange(nullptr);delete retired.exchange(nullptr);}
     const juce::String getName() const override{return "TON3K";}
     bool acceptsMidi() const override{return false;} bool producesMidi() const override{return false;}
     bool isMidiEffect() const override{return false;} double getTailLengthSeconds() const override{return 20.;}
@@ -90,22 +93,49 @@ public:
         }
     }
     std::map<juce::String,juce::String> library;
+    std::set<juce::String> favorites, folders;
+    static std::mutex& libraryMutex(){static std::mutex m;return m;}
+    static juce::File libraryFile(){return juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory).getChildFile("TinkerNet").getChildFile("TON3K").getChildFile("library.json");}
+    void mergeLibraryUnlocked(){
+        try{auto f=libraryFile();if(!f.existsAsFile())return;auto j=nlohmann::json::parse(f.loadFileAsString().toStdString());
+            for(auto it=j.at("files").begin();it!=j.at("files").end();++it)library[juce::String(it.key())]=juce::String(it.value().get<std::string>());
+            favorites.clear();folders.clear();
+            for(auto& x:j.value("favorites",nlohmann::json::array()))favorites.insert(juce::String(x.get<std::string>()));
+            for(auto& x:j.value("folders",nlohmann::json::array()))folders.insert(juce::String(x.get<std::string>()));
+        }catch(...){}
+    }
+    void loadLibrary(){std::lock_guard<std::mutex> g(libraryMutex());mergeLibraryUnlocked();}
+    void saveLibraryUnlocked(){
+        nlohmann::json j={{"files",nlohmann::json::object()},{"favorites",nlohmann::json::array()},{"folders",nlohmann::json::array()}};
+        for(auto& [k,v]:library)j["files"][k.toStdString()]=v.toStdString();
+        for(auto& k:favorites)j["favorites"].push_back(k.toStdString());
+        for(auto& k:folders)j["folders"].push_back(k.toStdString());
+        auto f=libraryFile();f.getParentDirectory().createDirectory();
+        if(!f.replaceWithText(juce::String(j.dump(2))))throw std::runtime_error("Cannot save library");
+    }
+    void registerFile(const juce::File& file,juce::String name){
+        int n=2;auto original=name;while(library.count(name)&&library[name]!=file.getFullPathName())name=original.upToLastOccurrenceOf(".",false,false)+" ("+juce::String(n++)+")"+file.getFileExtension();
+        library[name]=file.getFullPathName();
+        auto parent=name.upToLastOccurrenceOf("/",false,false);while(parent.isNotEmpty()){folders.insert(parent);parent=parent.upToLastOccurrenceOf("/",false,false);}
+    }
+    void importFiles(const juce::Array<juce::File>& files){
+        std::lock_guard<std::mutex> lock(configLock);std::lock_guard<std::mutex> g(libraryMutex());mergeLibraryUnlocked();
+        for(auto& f:files){
+            if(f.isDirectory()){for(auto& child:f.findChildFiles(juce::File::findFiles,true,"*"))if(child.hasFileExtension("nam;wav"))registerFile(child,f.getFileName()+"/"+child.getRelativePathFrom(f).replaceCharacter('\\','/'));}
+            else if(f.existsAsFile()&&f.hasFileExtension("nam;wav"))registerFile(f,f.getFileName());
+        }saveLibraryUnlocked();
+    }
     nlohmann::json savedSlots=nlohmann::json::object();
     int activeSlot=1;
 
     using Json=nlohmann::json;
     static constexpr const char* webKeys[]={"input","output","bass","mid","treble","gate","comp","comp_post","reverb","decay","reverb_type","ir_mix","hiz","hiz_profile","chorus","chorus_rate","chorus_depth","delay","delay_ms","delay_feedback"};
-    void importFile(const juce::File& file){
-        std::lock_guard<std::mutex> lock(configLock);
-        auto name=file.getFileName();int n=2;
-        while(library.count(name)&&library[name]!=file.getFullPathName())name=file.getFileNameWithoutExtension()+" ("+juce::String(n++)+")"+file.getFileExtension();
-        library[name]=file.getFullPathName();
-    }
+    void importFile(const juce::File& file){juce::Array<juce::File> a;a.add(file);importFiles(a);}
     Json webPreset(){
         Json j=Json::object();
         for(int i=0;i<20;++i)j[webKeys[i]]=v(i);
         j["nam1_enabled"]=v(20)>.5f;j["bypass_nam2"]=v(21)<.5f;j["bypass_ir"]=v(22)<.5f;
-        j["slim"]=1;j["slim2"]=1;
+        j["slim"]=slim;j["slim2"]=slim2;
         const char* keys[]={"model","second","ir","ir2"};
         for(int i=0;i<4;++i){
             j[keys[i]]="";
@@ -121,10 +151,10 @@ public:
     }
     Json webStatus(){
         std::lock_guard<std::mutex> lock(configLock);
-        auto currentPreset=webPreset();savedSlots[std::to_string(activeSlot)]=currentPreset;
+        loadLibrary(); auto currentPreset=webPreset();savedSlots[std::to_string(activeSlot)]=currentPreset;
         for(int i=1;i<=4;++i){auto key=std::to_string(i);if(!savedSlots.contains(key)){auto empty=currentPreset;for(auto* k:{"model","second","ir","ir2"})empty[k]="";savedSlots[key]=empty;}}
-        Json files=Json::array();for(const auto& kv:library)files.push_back(kv.first.toStdString());
-        return Json{{"files",files},{"folders",Json::array()},{"favorites",Json::array()},{"presets",savedSlots},{"active",std::to_string(activeSlot)},{"settings",{{"last",std::to_string(activeSlot)},{"reference_dbu",nullptr}}},{"running",supported.load()},{"logs",Json::array({message.toStdString()})},{"cloud_enabled",false},{"poweroff_enabled",false},{"amp_art",Json::object()}};
+        Json files=Json::array(), fs=Json::array(), fav=Json::array();for(const auto& kv:library)files.push_back(kv.first.toStdString());for(auto& k:folders)fs.push_back(k.toStdString());for(auto& k:favorites)fav.push_back(k.toStdString());
+        return Json{{"files",files},{"folders",fs},{"favorites",fav},{"presets",savedSlots},{"active",std::to_string(activeSlot)},{"settings",{{"last",std::to_string(activeSlot)},{"reference_dbu",nullptr}}},{"running",supported.load()},{"logs",Json::array({message.toStdString()})},{"cloud_enabled",false},{"poweroff_enabled",false},{"amp_art",Json::object()}};
     }
     Json webRequest(const juce::String& path,const juce::String& body){
         if(path=="/api/status")return webStatus();
@@ -137,10 +167,16 @@ public:
             juce::String newPaths[4];const char* keys[]={"model","second","ir","ir2"};
             for(int i=0;i<4;++i){auto k=juce::String(pr.value(keys[i],std::string{}));if(k.isNotEmpty()){auto it=library.find(k);if(it==library.end())throw std::runtime_error("File not in library");newPaths[i]=it->second;}}
             for(int i=0;i<4;++i)if(paths[i]!=newPaths[i]){paths[i]=newPaths[i];dirty=true;}
-            activeSlot=next;savedSlots[std::to_string(next)]=pr;
+            double ns=pr.value("slim",1.0),ns2=pr.value("slim2",1.0);if(ns!=slim||ns2!=slim2){slim=ns;slim2=ns2;dirty=true;} activeSlot=next;savedSlots[std::to_string(next)]=pr;
             auto set=[&](int i,float x){if(auto* q=state.getParameter(ids[i])){auto norm=q->convertTo0to1(x);if(std::abs(q->getValue()-norm)>1e-7f){q->beginChangeGesture();q->setValueNotifyingHost(norm);q->endChangeGesture();}}};
             for(int i=0;i<20;++i)if(pr.contains(webKeys[i])&&pr[webKeys[i]].is_number())set(i,pr[webKeys[i]].get<float>());
             set(20,pr.value("nam1_enabled",true)?1:0);set(21,pr.value("bypass_nam2",false)?0:1);set(22,pr.value("bypass_ir",false)?0:1);
+         }else if(path=="/api/favorite"||path=="/api/folder"){
+            std::lock_guard<std::mutex> lock(configLock);std::lock_guard<std::mutex> g(libraryMutex());mergeLibraryUnlocked();
+            auto k=juce::String(j.at("path").get<std::string>());
+            if(path=="/api/folder"){if(k.isNotEmpty())folders.insert(k);}
+            else if(j.value("enabled",false)){if(library.count(k))favorites.insert(k);}else favorites.erase(k);
+            saveLibraryUnlocked();
         }else if(path=="/api/capture-info"){
             juce::String file;{std::lock_guard<std::mutex> lock(configLock);auto it=library.find(juce::String(j.at("model").get<std::string>()));if(it==library.end())throw std::runtime_error("Unknown capture");file=it->second;}
             std::ifstream f(std::filesystem::u8path(file.toStdString()));Json raw;f>>raw;
@@ -161,22 +197,27 @@ private:
     ton3k::Chain* current=nullptr;
     std::atomic<ton3k::Chain*> pending{nullptr},retired{nullptr};
     float in[64]{},out[64]{};unsigned pos=0;
-    std::mutex configLock;juce::String paths[4],message="Ready";bool dirty=true;
+    std::mutex configLock;std::condition_variable wake;std::thread loader;bool quitting=false;double slim=1.,slim2=1.;juce::String paths[4],message="Ready";bool dirty=true;
     bool lastAmp=true,lastCab=true;
     void timerCallback() override{
         delete retired.exchange(nullptr,std::memory_order_acq_rel);
-        std::lock_guard<std::mutex> lock(configLock);
+        {std::lock_guard<std::mutex> lock(configLock);
         bool amp=v(21)>.5f,cab=v(22)>.5f;
-        if(amp!=lastAmp||cab!=lastCab){dirty=true;lastAmp=amp;lastCab=cab;}
-        if(!dirty)return;dirty=false;
-        try{
+        if(amp!=lastAmp||cab!=lastCab){dirty=true;lastAmp=amp;lastCab=cab;}}
+        wake.notify_one();
+    }
+    void loadLoop(){
+        for(;;){
             ton3k::Options o;
-            o.model=paths[0].toStdString();if(amp)o.second=paths[1].toStdString();
-            if(cab){o.ir=paths[2].toStdString();o.ir2=paths[3].toStdString();}
-            o.input=v(0);o.output=v(1);o.nam1_enabled=v(20)>.5f;
-            auto next=std::make_unique<ton3k::Chain>(o);
-            delete pending.exchange(next.release(),std::memory_order_acq_rel);message="Rig loaded";
-        }catch(const std::exception& e){message=juce::String("Load failed: ")+e.what();}
+            {std::unique_lock<std::mutex> lock(configLock);wake.wait(lock,[&]{return quitting||dirty;});if(quitting)return;dirty=false;
+            o.model=paths[0].toStdString();if(v(21)>.5f)o.second=paths[1].toStdString();
+            if(v(22)>.5f){o.ir=paths[2].toStdString();o.ir2=paths[3].toStdString();}
+            o.slim=slim;o.slim2=slim2;o.input=v(0);o.output=v(1);o.nam1_enabled=v(20)>.5f;message="Loading rig";}
+            try{auto next=std::make_unique<ton3k::Chain>(o);
+                std::lock_guard<std::mutex> lock(configLock);if(quitting)return;if(dirty)continue;
+                delete pending.exchange(next.release(),std::memory_order_acq_rel);message="Rig loaded";
+            }catch(const std::exception& e){std::lock_guard<std::mutex> lock(configLock);message=juce::String("Load failed: ")+e.what();}
+        }
     }
 };
 
@@ -344,13 +385,12 @@ class WebEditor final:public juce::AudioProcessorEditor{
                 try{
                     if(args.size()<2)throw std::runtime_error("Invalid request");
                     auto path=args[0].toString();
-                    if(path=="/plugin/import"){
-                        chooser=std::make_unique<juce::FileChooser>("Import NAM and WAV files",juce::File{},"*.nam;*.wav");
+                    if(path=="/plugin/import"||path=="/plugin/import-folder"){
+                        bool directory=path=="/plugin/import-folder";chooser=std::make_unique<juce::FileChooser>(directory?"Import library folder":"Import NAM and WAV files",juce::File{},directory?"*":"*.nam;*.wav");
                         auto safe=juce::Component::SafePointer<WebEditor>(this);
-                        chooser->launchAsync(juce::FileBrowserComponent::openMode|juce::FileBrowserComponent::canSelectFiles|juce::FileBrowserComponent::canSelectMultipleItems,[safe,done](const juce::FileChooser& c){
+                        chooser->launchAsync(juce::FileBrowserComponent::openMode|(directory?juce::FileBrowserComponent::canSelectDirectories:juce::FileBrowserComponent::canSelectFiles|juce::FileBrowserComponent::canSelectMultipleItems),[safe,done](const juce::FileChooser& c){
                             if(safe==nullptr)return;
-                            for(auto& f:c.getResults())if(f.existsAsFile()&&(f.hasFileExtension("nam")||f.hasFileExtension("wav")))safe->p.importFile(f);
-                            done(juce::String(safe->p.webStatus().dump()));
+                            try{safe->p.importFiles(c.getResults());done(juce::String(safe->p.webStatus().dump()));}catch(const std::exception& e){done(juce::String(Ton3k::Json{{"error",e.what()}}.dump()));}
                         });return;
                     }
                     done(juce::String(p.webRequest(path,args[1].toString()).dump()));

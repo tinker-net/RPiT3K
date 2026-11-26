@@ -656,7 +656,7 @@ async function request(path,body){
   window.ton3kBridge=(path,body)=>new Promise((resolve,reject)=>{
     const resultId=++id;pending.set(resultId,resolve);
     backend.emitEvent("__juce__invoke",{name:"ton3k",params:[path,body||""],resultId});
-    setTimeout(()=>{if(pending.delete(resultId))reject(Error("Plugin response timeout"));},15000);
+    setTimeout(()=>{if(pending.delete(resultId))reject(Error("Plugin response timeout"));},path.startsWith("/plugin/import")?600000:15000);
   });
  }
  if(body instanceof Blob)throw Error("Use Import files to select local files");
@@ -742,7 +742,7 @@ function status(){
 async function action(fn,success="Changes saved"){if(busy)return;busy=true;await flushLive();for(const id of ["save","status","uploadBtn","tuner","calibrate","audioSettings"])el(id).disabled=true;
  notify("Working…","progress","action");try{await fn();dismissToast("action");if(success)notify(typeof success==="function"?success():success);}catch(e){dismissToast("action");notify(e.message,"error");}
  finally{busy=false;for(const id of ["save","status","uploadBtn","tuner","calibrate","audioSettings"])el(id).disabled=false;status();}}
-el("filter").oninput=()=>{render(read());renderTree(true);};
+el("filter").oninput=()=>{renderTree(true);};
 for(const id of ["model","second","ir","ir2","slim","slim2","bypass_nam2","bypass_ir"])el(id).addEventListener("change",()=>{updateAmp();renderTree(true);queueLive();});
 // Move the original ADC input and its label/help into the calibration dialog.
 const adcLabel=el("reference_dbu").closest("label"),adcHelp=adcLabel.nextElementSibling;
@@ -817,9 +817,10 @@ el("poweroff").onclick=async()=>{
 };
 
 el("uploadBtn").onclick=()=>action(async()=>{state=await request("/plugin/import");render(state.presets[slot]);},"Library updated");
+el("folderBrowse").onclick=()=>action(async()=>{state=await request("/plugin/import-folder");render(state.presets[slot]);},"Library updated");
 el("folderBrowse").onclick=()=>{if(!busy)el("uploadFolder").click();};
 el("upload").onchange=()=>{const entries=Array.from(el("upload").files,f=>({file:f,path:f.name}));el("upload").value="";importEntries(entries);};
-(async()=>{try{state=await request("/api/status");slot=state.active||state.settings.last||slot;render(state.presets[slot]);status();setInterval(async()=>{if(!busy&&!liveBusy&&!livePending){try{const s=await request("/api/status");if(!busy&&!liveBusy&&!livePending){state=s;if(s.presets[slot]&&!document.querySelector(".dial:active")&&!document.querySelector("input:focus"))render(s.presets[slot]);status();}}catch(e){el("status").setAttribute("aria-label","Disconnected");el("status").title="Disconnected";el("status").disabled=true;el("calibrate").disabled=true;el("poweroff").disabled=true;el("tuner").disabled=true;el("tuner").classList.remove("selected");el("tuner").setAttribute("aria-pressed","false");drawPitch(null);el("status").classList.remove("audio-active");el("status").setAttribute("aria-pressed","false");el("xruns").textContent="—";el("xrunMetric").classList.remove("xrun-ok","xrun-warn");clearTelemetryColors();}}},2000);}catch(e){notify(e.message,"error");}})();
+(async()=>{try{state=await request("/api/status");slot=state.active||state.settings.last||slot;render(state.presets[slot]);status();setInterval(async()=>{if(!busy&&!liveBusy&&!livePending){try{const s=await request("/api/status");if(!busy&&!liveBusy&&!livePending){const changed=JSON.stringify([s.files,s.folders,s.favorites,s.presets[slot]])!==JSON.stringify([state.files,state.folders,state.favorites,state.presets[slot]]);state=s;if(changed&&s.presets[slot]&&!document.querySelector(".dial:active")&&!document.querySelector("input:focus"))render(s.presets[slot]);if(changed)status();}}catch(e){el("status").setAttribute("aria-label","Disconnected");el("status").title="Disconnected";el("status").disabled=true;el("calibrate").disabled=true;el("poweroff").disabled=true;el("tuner").disabled=true;el("tuner").classList.remove("selected");el("tuner").setAttribute("aria-pressed","false");drawPitch(null);el("status").classList.remove("audio-active");el("status").setAttribute("aria-pressed","false");el("xruns").textContent="—";el("xrunMetric").classList.remove("xrun-ok","xrun-warn");clearTelemetryColors();}}},2000);}catch(e){notify(e.message,"error");}})();
 
 function ampStyle(name){const n=name.toLowerCase();if(/orange|or120|rv100|rocker/.test(n))return ["orange","ORANGE"];if(/vox|\bvx\b|ac30|tb30|matchless|chieftain/.test(n))return ["diamond","BRITISH CLASS A"];if(/fender|super reverb|panoverb|bfsr|deluxe|bassman|tone king/.test(n))return ["silver","AMERICAN"];if(/marshall|jtm|jt50|mrsh|plexi/.test(n))return ["gold","BRITISH"];return ["black","NAM"];}
 function updateAmp(){refreshCaptureFields();el("irBlendRow").hidden=!(el("ir2").value&&(el("ir").value||/\.wav$/i.test(el("second").value)));const name=firstNAM();updateAmpArtwork(name);el("ampName").textContent=name?name.split("/").pop().replace(/\.nam$/i,""):"No capture selected";el("ampCaption").textContent="";el("currentTitle").textContent="Preset "+slot+" · "+(name?name.split("/").pop().replace(/\.nam$/i,""):"Empty");}
@@ -1047,9 +1048,9 @@ pollLevels();
 
 function syncStompArtwork(){el("firstUnit").classList.toggle("nam1-off",!!el("model").value&&el("nam1Toggle").getAttribute("aria-pressed")==="false");}
 function setStompUI(enabled){const b=el("nam1Toggle");b.setAttribute("aria-pressed",String(enabled));b.textContent=enabled?"ON":"OFF";syncStompArtwork();}
-el("nam1Toggle").onclick=()=>{if(busy||!el("model").value)return;setStompUI(el("nam1Toggle").getAttribute("aria-pressed")!=="true");queueLive();};
+el("nam1Toggle").onclick=()=>{if(busy)return;setStompUI(el("nam1Toggle").getAttribute("aria-pressed")!=="true");queueLive();};
 function refreshCaptureFields(){
- el("nam1Toggle").disabled=!el("model").value;
+ el("nam1Toggle").disabled=false;
  for(const id of ["model","second","ir","ir2"]){
   const value=el(id).value,button=el(id+"Picker"),parts=value.split("/");
   button.querySelector(".picker-name").textContent=value?parts.pop().replace(/\.(nam|wav)$/i,""):"None";
