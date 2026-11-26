@@ -3,6 +3,7 @@
 import argparse
 from tonecloud import ToneCloud
 from calibration import calibration, valid_number
+from capture_info import capture_info
 import base64
 import hmac
 import json
@@ -682,6 +683,14 @@ class Handler(BaseHTTPRequestHandler):
                     if result.returncode:
                         raise ValueError("Power action failed: "+(result.stderr.strip() or "Permission denied"))
                     self.send(200,dict(operation=operation,accepted=True))
+                return
+            if u.path=="/api/capture-info":
+                v=json.loads(self.body(65536))
+                with c.lock:
+                    path=c.file(v["model"],(".nam",))
+                    if path.stat().st_size>LIMIT: raise ValueError("Model too large")
+                    model=json.loads(path.read_text())
+                self.send(200,capture_info(model))
                 return
             if u.path=="/api/calibrate":
                 v=json.loads(self.body(65536))
