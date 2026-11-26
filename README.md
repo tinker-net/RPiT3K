@@ -14,7 +14,7 @@ Independent, open-source NAM guitar processor for dedicated hardware, Linux and 
 
 ## TON3K PiSound
 
-A dedicated guitar rig for Raspberry Pi 5 and Blokas PiSound. Browser control, physical button gestures, optional hotspot, four presets and offline audio processing.
+A dedicated guitar rig for Raspberry Pi 5 and Blokas PiSound. Browser control, physical button gestures, optional hotspot, four presets and offline audio processing. Current PiSound source includes Practice Mode, smart NAM/IR library and offline backup. [Validation and rollback](docs/PROJECT_STATE.md). Published DEBs are older snapshots.
 
 [Installation guide](README-PISOUND.md) · [Debian packages](https://github.com/tinker-net/RPiT3K/releases/tag/deb-preview-54)
 

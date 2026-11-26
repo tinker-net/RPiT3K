@@ -75,3 +75,45 @@ sudo systemctl start rpit3k
 Run sequentially and stop on failures. Service restarts with audio OFF. If audio fails check browser logs, aplay -l, arecord -l, sudo journalctl -u rpit3k -n 100 --no-pager. Increase period size/count if xruns; counter includes suspend recoveries, nominal per-direction buffer not round-trip latency. Audio OFF means no valid live meters; controller can be healthy without audio. 
 
 Data lives in ~/.local/share/rpit3k. Back up privately, including library/settings/presets/favorites/artwork; OAuth file contains secrets, never share. Uninstall by disabling power helper (if enabled), disabling/stopping service, removing service unit and reloading systemd; preserve data unless deliberately deleting it. Restore Pisound button backup if appropriate, remove optional hotspot separately. No commercial models provided. See technical guide for licenses and current test limitations.
+
+## Live button response (2026-11-26)
+
+The physical mappings remain unchanged. The local helper requests compact responses rather than scanning the capture library. Browser meter polling also carries a lightweight button state, so changes can be reflected on the next approximately 80 ms poll instead of the 2 s full status cycle. Preset identification flashes no longer hold the action lock. Journal entries `BUTTON stomp lock_ms=... action_ms=...` and `BUTTON next ...` measure server-side dispatch, not physical gesture or analog response. The upstream Blokas daemon uses a 400 ms multi-click recognition timeout; installed versions may differ. Structural preset changes still prepare a new rig; no preloading or measured hardware latency is claimed.
+
+Update an existing source install without changing its network/service configuration:
+
+    git pull --ff-only origin rpi-ui
+    sudo install -m 755 rpi/pisound-button.sh /usr/local/bin/rpit3k-button
+    sudo systemctl restart rpit3k.service pisound-btn.service
+
+Audio starts OFF after restart. Hard-refresh the browser.
+
+### Capture artwork persistence
+
+Manual pedal and amplifier appearance assignments are saved on the controller in `appearance.json`, keyed by capture library path. Existing browser assignments are imported when the browser reconnects (server choices take priority). Automatic is an explicit saved choice. No audio restart is required to change appearance.
+
+## Development preview
+
+Experimental branch only. Practice Mode replaces the amp view without changing the guitar chain. Separate practice-tracks directory; imports up to 256 MiB per track; HTTP range streaming to browser audio (not PiSound mixing). Browser-dependent codec and pitch-preserving playback rate. Space starts playback and toggles pause/resume. The dedicated Stop control returns to the selected reference point. A/B loop uses browser time events, not sample-accurate. No waveform, pitch shifting, recording, or MIDI yet. Smart names are reversible display-only filename expansions; unknown tokens preserved, original path retained. No persistent metadata index yet.
+
+Offline backup: stop rpit3k.service, run as data owner `python3 rpi/data_backup.py backup ~/ton3k-backup.tar.gz`, restart service. Restore with `python3 rpi/data_backup.py restore ~/ton3k-backup.tar.gz` while service stopped; previous data retained. Includes all user data, not OS configuration or binaries. Do not migrate to DEB without checking data path.
+
+### Native Practice Mode (experimental)
+Install `ffmpeg` (includes ffprobe; needs rubberband filter for pitch shifting). Rebuild native engine. Stereo decoded audio feeds a bounded nonblocking pipe and mixes after guitar FX and metronome. Waveform generated on demand and cached as 1200 peaks on disk. Speed .5–1.5, pitch ±12 semitones. Control changes restart decoder at estimated position; timing and A/B loops are not sample-accurate. No whole-track PCM buffer. Audio must be ON; tuner and engine stop stop playback. Browser sends controls only. Hardware xrun/latency validation pending.
+
+### Practice resource isolation
+On Linux with at least four allowed CPUs, the realtime engine thread is pinned to the highest allowed CPU; FFmpeg and ffprobe are confined to the other allowed CPUs, run with nice +10 and best-effort I/O priority 7. No boot/kernel changes. Set RPIT3K_AUDIO_AFFINITY=0 in the service environment to disable both affinity policies. Decoder and waveform analysis are guarded against overlap; stop acknowledgement prevents stale buffered samples from a previous track. Hardware validation still required. No hard CPU isolation from other system processes is claimed.
+
+The Space key now toggles play/pause/resume; the separate Stop button returns to the selected waveform reference. Pause position is estimated from transport polling, not sample-accurate.
+
+### Practice transport controls
+Space play/pause/resume; Enter restart from selected reference; period stop; U clear selection; Home beginning; Left/Right jump 5 seconds (Shift 1 second); L loop. Drag waveform to select a loop, drag edges to adjust or inside to move; click/double-click to clear selection and place reference. Ctrl/Cmd-wheel or +/- zoom, pan slider scrolls visible range. Waveform remains the cached 1200-point envelope, so zoom enlarges existing data rather than adding sample detail. Transport timing remains approximate; changes may restart FFmpeg. Inspired by https://www.seventhstring.com/xscribe/faq3.html, with Space intentionally configured for resume.
+
+### Smart Library model recognition
+Catalog identities take precedence over incidental pedal words in amp captures. BLBM, BFBM and TWBM identify distinct Bassman variants. Unknown artwork uses existing family or generic fallback. Original files unchanged. Model codes and EQ terminology based on https://amalgamcaptures.com/how-it-works/ and the published amp catalog. Manual appearance overrides remain authoritative.
+
+### Smart IR names
+WAV-only parser, separate from NAM. York Audio YA-prefixed files (or York Audio folder) use a cab-pack catalog and suffix microphone codes; Mix numbers remain opaque. Amalgam-style cabinet/speaker/filter tokens are expanded conservatively. Original WAVs, phase/version/position suffixes and preset paths are unchanged. Sources: https://www.yorkaudio.co/ and individual pack pages, https://amalgamcaptures.com/how-it-works/. Unknown names retain original labels; no inference of microphone blends. No audio processing changes.
+
+### Capture channels
+Model-scoped channel aliases expand the channel slot immediately following a recognized model (optionally after its year) when followed by a known gain designation. Bassman Blonde/Blackface B = Bass, N = Normal; Fender reverb amps N/V = Normal/Vibrato; classic Marshall JU = Jumped, BR/B = Bright, N = Normal; Vox TB = Top Boost; Imperial R/L = Rhythm/Lead; Rockerverb C/D = Clean/Dirty; Phoenix I/II = channels I/II. Unknown codes remain intact. No WAV, original filename, preset or audio processing changes. Naming structure: https://amalgamcaptures.com/how-it-works/. Channel abbreviations beyond documented examples are conservative model-specific conventions and need checking against actual pack filenames.

@@ -1,7 +1,7 @@
 name: Native Linux regression
 on:
   push:
-    branches: [rpi-ui, rpi-general]
+    branches: [main, rpi-ui, rpi-general, development]
     paths: ['rpi/**', '.github/workflows/live-rig.yml']
   workflow_dispatch:
 permissions:
@@ -35,6 +35,8 @@ jobs:
           ctest --test-dir build-rpi --output-on-failure
           ./build-rpi/rpit3k --bypass --verify
           python3 -m py_compile rpi/*.py
+          python3 rpi/button_status_test.py
+          if [ -f rpi/practice_policy_test.py ]; then python3 rpi/practice_policy_test.py; fi
           for f in rpi/*.sh; do bash -n "$f"; done
       - name: Browser script syntax
         run: |

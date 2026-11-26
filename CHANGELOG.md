@@ -1,5 +1,11 @@
 # Changelog
 
+## PiSound source — 2026-11-26
+- Faster physical controls, persistent artwork, offline backup/restore.
+- Practice Mode: stereo FFmpeg, independent speed/pitch, waveform zoom and selection, A/B, keyboard transport; realtime CPU affinity and reduced decoder priority.
+- Smart amp/model/channel and York/Amalgam IR names; DI hidden, CAB retained, original files unchanged.
+- ARM/x86 and local Pi regression passed. Zero late blocks/xruns in reported windows; full stress pending. [Evidence and rollback](docs/PROJECT_STATE.md).
+
 ## Native 0.2 — development preview (2026-11-26)
 - Persistent library references, folders and favorites.
 - Background NAM/IR rig preparation and reduced UI refreshes.

@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """LAN controller for the native RPiT3K engine. Standard library only."""
 import argparse
+import mimetypes
+from practice import Practice, duration as practice_duration, waveform as practice_waveform
+import tempfile
 from tonecloud import ToneCloud
 from calibration import calibration, valid_number
 from capture_info import capture_info
@@ -80,6 +83,8 @@ class Controller:
         self.active = None
         self.tuner_return = None
         self.metronome = dict(enabled=False,bpm=120,beats=4,volume=.15)
+        self.practice=Practice()
+        self.practice_analysis=threading.Lock()
         self.settingsfile = self.data / "settings.json"
         self.settings = dict(buffer=64, periods=3, last="1", reference_dbu=1.14)
         if self.settingsfile.exists(): self.settings.update(json.loads(self.settingsfile.read_text()))
@@ -90,6 +95,8 @@ class Controller:
             self.presets.update({k:dict(DEFAULT, **normalize_fx(v)) for k,v in json.loads(self.statefile.read_text()).items()})
         self.favoritesfile=self.data/"favorites.json"
         self.favorites=set(json.loads(self.favoritesfile.read_text())) if self.favoritesfile.exists() else set()
+        self.appearancefile=self.data/"appearance.json"
+        self.appearance=json.loads(self.appearancefile.read_text()) if self.appearancefile.exists() else {}
         self.exe = ROOT / "build-rpi/rpit3k"
         if not self.exe.is_file():
             raise RuntimeError("Compile build-rpi/rpit3k first")
@@ -218,6 +225,18 @@ class Controller:
         if path.is_symlink(): raise ValueError("Invalid artwork path")
         return path
 
+    def set_appearance(self,values,merge=False):
+        if not isinstance(values,dict): raise ValueError("Invalid appearance map")
+        updated=dict(self.appearance)
+        for name,key in values.items():
+            if key not in AMP_ART_KEYS and key!="auto": raise ValueError("Unknown artwork")
+            if not self.file(name,(".nam",)).is_file():
+                if merge: continue
+                raise ValueError("Capture not found")
+            if not merge or name not in updated: updated[name]=key
+        self.write_json(self.appearancefile,updated)
+        self.appearance=updated
+
     def amp_art_versions(self):
         versions={}
         for key in AMP_ART_KEYS:
@@ -335,6 +354,7 @@ class Controller:
         return p
 
     def stop(self):
+        self.practice.stop(self.proc)
         if self.proc is not None:
             if self.proc.poll() is None:
                 self.proc.terminate()
@@ -343,7 +363,7 @@ class Controller:
                 except subprocess.TimeoutExpired:
                     self.proc.kill()
                     self.proc.wait()
-            for fd in (getattr(self.proc,'rig_write',None),getattr(self.proc,'rig_ack',None)):
+            for fd in (getattr(self.proc,'rig_write',None),getattr(self.proc,'rig_ack',None),getattr(self.proc,'practice_write',None)):
                 if fd is not None:
                     try: os.close(fd)
                     except OSError: pass
@@ -356,6 +376,9 @@ class Controller:
         # recovery. Count deltas, not log lines, to avoid double counting.
         for line in proc.stdout:
             line=line.rstrip()
+            if line=="PRACTICE STOPPED":
+                proc.practice_stopped.set()
+                continue
             if line.startswith("TUNER "):
                 try:
                     _,hz,confidence=line.split()
@@ -455,15 +478,18 @@ class Controller:
         rd,wr=os.pipe()
         req_rd,req_wr=os.pipe()
         ack_rd,ack_wr=os.pipe()
+        practice_rd,practice_wr=os.pipe()
         self.meter=None
         try:
-            self.proc=subprocess.Popen(cmd+["--live-controls","--meter-fd",str(wr),"--rig-fd",str(req_rd),"--rig-ack-fd",str(ack_wr)],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,
-                                       text=True,bufsize=1,pass_fds=(wr,req_rd,ack_wr))
+            self.proc=subprocess.Popen(cmd+["--live-controls","--meter-fd",str(wr),"--rig-fd",str(req_rd),"--rig-ack-fd",str(ack_wr),"--practice-fd",str(practice_rd)],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,
+                                       text=True,bufsize=1,pass_fds=(wr,req_rd,ack_wr,practice_rd))
         except Exception:
-            for fd in (rd,req_wr,ack_rd): os.close(fd)
+            for fd in (rd,req_wr,ack_rd,practice_wr): os.close(fd)
             raise
         finally:
-            for fd in (wr,req_rd,ack_wr): os.close(fd)
+            for fd in (wr,req_rd,ack_wr,practice_rd): os.close(fd)
+        self.proc.practice_stopped=threading.Event()
+        self.proc.practice_write=practice_wr
         self.proc.rig_write=req_wr
         self.proc.rig_ack=ack_rd
         self.proc.rpit3k_xruns=0
@@ -620,12 +646,15 @@ class Controller:
         b,p=self.settings["buffer"],self.settings["periods"]
         return dict(cpu=self.cpu_pct,temp=temp,buffer=b,periods=p,period_ms=b/48,buffer_ms=b*p/48,**self.xrun_status())
 
+    def button_status(self):
+        return dict(presets={k:dict(v) for k,v in self.presets.items()},active=self.active,settings=dict(self.settings),running=self.proc is not None and self.proc.poll() is None,button_revision=getattr(self,"button_revision",0))
+
     def status(self):
-        return dict(presets=self.presets,active=self.active,settings=self.settings,telemetry=self.telemetry(),
+        return dict(presets=self.presets,active=self.active,settings=self.settings,button_revision=getattr(self,"button_revision",0),telemetry=self.telemetry(),
                     cloud_enabled=not self.args.disable_cloud,
                     poweroff_enabled=os.environ.get("RPIT3K_ENABLE_POWEROFF")=="1",
                     running=self.proc is not None and self.proc.poll() is None,
-                    files=self.library_files(),folders=self.library_folders(),favorites=sorted(self.favorites),amp_art=self.amp_art_versions(),
+                    files=self.library_files(),folders=self.library_folders(),favorites=sorted(self.favorites),amp_art=self.amp_art_versions(),appearance=dict(self.appearance),
                     logs=list(self.logs), tuner=self.tuner_reading(), metronome=self.metronome)
 
 class Handler(BaseHTTPRequestHandler):
@@ -668,11 +697,77 @@ class Handler(BaseHTTPRequestHandler):
             raise ValueError("Incomplete request")
         return data
 
+    def practice_path(self,name):
+        if not isinstance(name,str) or not NAME.fullmatch(name) or Path(name).suffix.lower() not in (".wav",".mp3",".flac",".m4a",".ogg"):
+            raise ValueError("Invalid track filename")
+        root=self.server.controller.data/"practice-tracks"
+        if root.is_symlink(): raise ValueError("Invalid tracks directory")
+        root.mkdir(exist_ok=True)
+        p=root/name
+        if p.is_symlink(): raise ValueError("Invalid track")
+        return p
+
+    def stream_track(self,p):
+        with p.open("rb") as f:
+            size=os.fstat(f.fileno()).st_size
+            start,end=0,size-1
+            header=self.headers.get("Range")
+            if header:
+                m=re.fullmatch(r"bytes=(\d*)-(\d*)",header)
+                if not m or not any(m.groups()):
+                    self.send_error(416);return
+                a,b=m.groups()
+                if a: start=int(a);end=min(end,int(b)) if b else end
+                else: start=max(0,size-int(b))
+                if start>end or start>=size:
+                    self.send_response(416);self.send_header("Content-Range",f"bytes */{size}");self.end_headers();return
+            self.send_response(206 if header else 200)
+            self.send_header("Content-Type",mimetypes.guess_type(p.name)[0] or "application/octet-stream")
+            self.send_header("Accept-Ranges","bytes")
+            self.send_header("X-Content-Type-Options","nosniff")
+            self.send_header("Content-Length",str(end-start+1))
+            if header:self.send_header("Content-Range",f"bytes {start}-{end}/{size}")
+            self.end_headers()
+            f.seek(start);remaining=end-start+1
+            while remaining:
+                chunk=f.read(min(65536,remaining))
+                if not chunk:break
+                self.wfile.write(chunk);remaining-=len(chunk)
+
     def do_GET(self):
         if not self.authorized(): return
         path=urlsplit(self.path).path
         if path=="/":
             self.send(200,(ROOT/"rpi/web.html").read_bytes(),"text/html; charset=utf-8")
+        elif path=="/api/practice":
+            root=self.server.controller.data/"practice-tracks"
+            files=[]
+            if root.is_dir() and not root.is_symlink():
+                for p in root.iterdir():
+                    try:
+                        if self.practice_path(p.name).is_file():files.append(p.name)
+                    except ValueError:pass
+            self.send(200,dict(files=sorted(files,key=str.casefold)))
+        elif path=="/api/practice/status":
+            self.send(200,self.server.controller.practice.status())
+        elif path=="/api/practice/waveform":
+            c=self.server.controller
+            try:
+                p=self.practice_path(parse_qs(urlsplit(self.path).query).get("name",[""])[0])
+                if not p.is_file():raise ValueError("Track not found")
+                if c.practice.status()["playing"]:raise ValueError("Stop playback before waveform analysis")
+                if not c.practice_analysis.acquire(blocking=False):raise ValueError("Analysis busy")
+                try:result=practice_waveform(p,c.data/"practice-waveforms")
+                finally:c.practice_analysis.release()
+                self.send(200,result)
+            except (ValueError,OSError,subprocess.SubprocessError) as e:self.send(400,dict(error=str(e)))
+        elif path=="/api/practice/audio":
+            try:
+                p=self.practice_path(parse_qs(urlsplit(self.path).query).get("name",[""])[0])
+                if not p.is_file():self.send(404,dict(error="Track not found"));return
+                self.stream_track(p)
+            except (BrokenPipeError,ConnectionResetError):pass
+            except (ValueError,OSError):self.send(400,dict(error="Track unavailable"))
         elif path.startswith("/api/amp-art/"):
             try:
                 asset=self.server.controller.amp_art_path(path.rsplit("/",1)[-1])
@@ -681,7 +776,16 @@ class Handler(BaseHTTPRequestHandler):
             except (OSError,ValueError):
                 self.send(404,dict(error="Artwork unavailable"))
         elif path=="/api/levels":
-            self.send(200,self.server.controller.levels())
+            c=self.server.controller
+            data=c.levels()
+            if c.lock.acquire(blocking=False):
+                try: data["button"]=c.button_status()
+                finally: c.lock.release()
+            self.send(200,data)
+        elif path=="/api/button-status":
+            c=self.server.controller
+            with c.lock: data=c.button_status()
+            self.send(200,data)
         elif path=="/api/status":
             with self.server.controller.lock:
                 self.send(200,self.server.controller.status())
@@ -696,6 +800,40 @@ class Handler(BaseHTTPRequestHandler):
         c=self.server.controller
         u=urlsplit(self.path)
         try:
+            if u.path=="/api/practice/transport":
+                v=json.loads(self.body(4096))
+                action=v.get("action")
+                if action=="stop":
+                    with c.lock:c.practice.stop(c.proc)
+                elif action=="play":
+                    p=self.practice_path(v["name"])
+                    if not p.is_file():raise ValueError("Track not found")
+                    if c.practice_analysis.locked():raise ValueError("Wait for waveform analysis to finish")
+                    length=practice_duration(p)
+                    anchor,speed,pitch,volume,end=(v[k] for k in ("anchor","speed","pitch","volume","end"))
+                    if not all(type(n) in (float,int) and math.isfinite(n) for n in (anchor,speed,pitch,volume,end)) or not (0<=anchor<end<=length+.01 and .5<=speed<=1.5 and -12<=pitch<=12 and 0<=volume<=1):
+                        raise ValueError("Invalid playback controls")
+                    with c.lock:
+                        if not c.proc or c.proc.poll() is not None or c.active is None:raise ValueError("Turn Audio ON first")
+                        c.practice.start(c.proc,p,anchor,speed,pitch,volume,min(end,length))
+                else:raise ValueError("Unknown transport action")
+                self.send(200,c.practice.status());return
+            if u.path=="/api/practice/import":
+                p=self.practice_path(parse_qs(u.query).get("name",[""])[0])
+                n=int(self.headers.get("Content-Length","0"))
+                if not 0<n<=256*1024*1024 or p.exists():raise ValueError("Invalid size or track already exists")
+                with tempfile.NamedTemporaryFile(dir=p.parent,prefix=".import-",delete=False) as f:
+                    tmp=Path(f.name)
+                    try:
+                        remaining=n
+                        while remaining:
+                            chunk=self.rfile.read(min(65536,remaining))
+                            if not chunk:raise ValueError("Incomplete upload")
+                            f.write(chunk);remaining-=len(chunk)
+                        f.flush()
+                        os.link(tmp,p)
+                    finally:tmp.unlink(missing_ok=True)
+                self.send(200,dict(imported=p.name));return
             if u.path in ("/api/poweroff","/api/reboot"):
                 if os.environ.get("RPIT3K_ENABLE_POWEROFF")!="1":
                     self.send(403,dict(error="Power controls are not enabled on this installation"));return
@@ -748,6 +886,21 @@ class Handler(BaseHTTPRequestHandler):
                 if not isinstance(v,dict): raise ValueError('Expected object')
                 self.send(200,c.cloud.action(u.path.rsplit('/',1)[-1],v))
                 return
+            # Physical controls must not walk the library or render telemetry.
+            if u.path in ("/api/stomp","/api/next","/api/audio-toggle"):
+                if self.client_address[0] not in ("127.0.0.1","::1"): raise ValueError("Local button endpoint only")
+                started=time.monotonic()
+                with c.lock:
+                    acquired=time.monotonic()
+                    if u.path=="/api/stomp": c.toggle_stomp()
+                    elif u.path=="/api/next": c.next_preset()
+                    else: c.toggle_audio()
+                    c.button_revision=getattr(c,"button_revision",0)+1
+                    compact=parse_qs(u.query).get("compact")==["1"]
+                    data=c.button_status() if compact else c.status()
+                print("BUTTON "+u.path.rsplit("/",1)[-1]+" lock_ms=%.1f action_ms=%.1f"%((acquired-started)*1000,(time.monotonic()-acquired)*1000),flush=True)
+                self.send(200,data)
+                return
             with c.lock:
                 if u.path.startswith("/api/amp-art/"):
                     key=u.path.rsplit("/",1)[-1]
@@ -765,6 +918,11 @@ class Handler(BaseHTTPRequestHandler):
                 elif u.path=="/api/delete":
                     v=json.loads(self.body(65536))
                     c.delete_library(v["path"],v["kind"])
+                elif u.path=="/api/appearance":
+                    v=json.loads(self.body(65536))
+                    c.set_appearance(v["values"],merge=v.get("merge") is True)
+                    self.send(200,dict(appearance=dict(c.appearance)))
+                    return
                 elif u.path=="/api/favorite":
                     v=json.loads(self.body(65536))
                     c.set_favorite(v["path"],v["enabled"])
@@ -780,13 +938,6 @@ class Handler(BaseHTTPRequestHandler):
                     if not name: raise ValueError("Choose a folder name")
                     p=c.folder(name)
                     p.mkdir(parents=True,exist_ok=True)
-                elif u.path in ("/api/stomp","/api/audio-toggle"):
-                    if self.client_address[0] not in ("127.0.0.1","::1"): raise ValueError("Local button endpoint only")
-                    if u.path=="/api/stomp":c.toggle_stomp()
-                    else:c.toggle_audio()
-                elif u.path=="/api/next":
-                    if self.client_address[0] not in ("127.0.0.1","::1"): raise ValueError("Local button endpoint only")
-                    c.next_preset()
                 elif u.path=="/api/edit":
                     v=json.loads(self.body(65536))
                     c.edit_preset(v["slot"],v["preset"])
@@ -798,6 +949,7 @@ class Handler(BaseHTTPRequestHandler):
                 elif u.path=="/api/settings":
                     c.configure(json.loads(self.body(65536)))
                 elif u.path=="/api/tuner":
+                    c.practice.stop(c.proc)
                     if c.proc and c.proc.poll() is None and c.active is None:
                         previous=c.tuner_return
                         if previous:
