@@ -173,3 +173,6 @@ User reported HTTP 302 during model download. NoRedirect prevented binary downlo
 
 ### Observed download origin and authorization correction
 Real user error after redirect fix: HTTP 403 (download; host=files.tone3000.com; redirects=1). The previous host-change rule removed the OAuth bearer before the official file origin. Explicitly allow the exact files.tone3000.com host to retain the credential on HTTPS port 443, alongside existing API origins. Unrelated hosts still strip authorization permanently, even on return to a trusted origin. Added two mock regression tests; actual authenticated download and new tests pending. No DSP changes.
+
+### Live HTTP diagnostic — 2026-11-26
+HWW-RPiT3K, model 927219. API recent tones returned 10 entries; model_url returned 302 to files.tone3000.com. Direct requests to redirected URL: without bearer 403, with bearer 403 (both Cloudflare, application/json), with bearer plus User-Agent Mozilla/5.0 and Accept */* returned 200 application/json and 4096 bytes read. Both headers changed together, so individual necessity and Cloudflare's exact rejection reason are not established. Binary GET now uses the verified pair on every hop; API/OAuth JSON headers unchanged, credential restrictions unchanged. Added regression test checking both requests. Full NAM parsing/import and new regression tests pending on target. No DSP changes.
