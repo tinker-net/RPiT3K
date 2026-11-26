@@ -6,9 +6,11 @@ import threading
 import time
 import urllib.request
 import urllib.error
-from urllib.parse import urlencode, urlsplit
+from urllib.parse import urlencode, urlsplit, urljoin
 from pathlib import Path
 import tempfile
+import ipaddress
+import socket
 
 BASE = "https://www.tone3000.com/api/v1/"
 LIMIT = 32 * 1024 * 1024
@@ -57,6 +59,23 @@ class ToneCloud:
         finally:
             if os.path.exists(path): os.unlink(path)
 
+    @staticmethod
+    def download_redirect(url, location):
+        target=urljoin(url,location)
+        u=urlsplit(target)
+        if u.scheme!='https' or not u.hostname or u.port not in (None,443) or u.username or u.password:
+            raise ValueError('Unsafe TONE3000 download redirect')
+        host=u.hostname.lower()
+        if host not in ('www.tone3000.com','tone3000.com'):
+            # External signed download URL: reject non-public addresses and never forward OAuth.
+            try:
+                addresses=socket.getaddrinfo(host,443,type=socket.SOCK_STREAM)
+                if not addresses or any(not ipaddress.ip_address(a[4][0]).is_global for a in addresses):
+                    raise ValueError('Unsafe TONE3000 download redirect host')
+            except OSError:
+                raise ValueError('TONE3000 download host unavailable') from None
+        return target
+
     def fetch(self, url, form=None, token=None, binary=False):
         u = urlsplit(url)
         if u.scheme != "https" or u.hostname not in ("www.tone3000.com","tone3000.com") or u.port not in (None,443) or u.username or u.password:
@@ -67,22 +86,36 @@ class ToneCloud:
         if form is not None:
             headers["Content-Type"] = "application/x-www-form-urlencoded"
             data = urlencode(form).encode()
-        req = urllib.request.Request(url,data=data,headers=headers)
-        try:
-            with self.http.open(req, timeout=15) as res:
-                raw = res.read(LIMIT+1 if binary else 2*1024*1024+1)
-            if len(raw) > (LIMIT if binary else 2*1024*1024):
-                raise ValueError("Response too large")
-            return raw if binary else json.loads(raw)
-        except urllib.error.HTTPError as e:
-            if not binary:
-                try: body = json.loads(e.read(65536))
-                except (ValueError,OSError): body = {}
-                if isinstance(body,dict) and body.get("error") in ("authorization_pending","slow_down","expired_token","access_denied","invalid_grant","invalid_client"):
-                    return {"error":body["error"]}
-            raise ValueError("TONE3000 HTTP "+str(e.code)) from None
-        except urllib.error.URLError:
-            raise ValueError("TONE3000 network unavailable") from None
+        # Only authenticated binary GETs may follow redirects. API/OAuth
+        # requests remain fail-closed. Once outside the origin, never reattach
+        # the bearer credential, even if a subsequent redirect returns.
+        for hop in range(6):
+            req = urllib.request.Request(url,data=data,headers=headers)
+            try:
+                with self.http.open(req, timeout=15) as res:
+                    raw = res.read(LIMIT+1 if binary else 2*1024*1024+1)
+                if len(raw) > (LIMIT if binary else 2*1024*1024):
+                    raise ValueError("Response too large")
+                return raw if binary else json.loads(raw)
+            except urllib.error.HTTPError as e:
+                if binary and form is None and e.code in (301,302,303,307,308):
+                    location=e.headers.get("Location")
+                    e.close()
+                    if not location or hop==5:
+                        raise ValueError("TONE3000 download redirect missing or limit exceeded") from None
+                    target=self.download_redirect(url,location)
+                    if urlsplit(target).hostname!=urlsplit(url).hostname:
+                        headers.pop("Authorization",None)
+                    url=target
+                    continue
+                if not binary:
+                    try: body = json.loads(e.read(65536))
+                    except (ValueError,OSError): body = {}
+                    if isinstance(body,dict) and body.get("error") in ("authorization_pending","slow_down","expired_token","access_denied","invalid_grant","invalid_client"):
+                        return {"error":body["error"]}
+                raise ValueError("TONE3000 HTTP "+str(e.code)) from None
+            except urllib.error.URLError:
+                raise ValueError("TONE3000 network unavailable") from None
 
     def store_tokens(self, data):
         if not data.get("access_token"): raise ValueError("Authorization failed")

@@ -6,7 +6,10 @@ import time
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
+from urllib.error import HTTPError
+from io import BytesIO
+from email.message import Message
 from tonecloud import ToneCloud
 
 class SessionTests(unittest.TestCase):
@@ -60,4 +63,40 @@ class SessionTests(unittest.TestCase):
         c=self.saved(0,None)
         with self.assertRaises(ValueError):c.token()
         self.assertFalse(c.tokenfile.exists())
+
+class DownloadTests(unittest.TestCase):
+    def setUp(self):
+        tmp=tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.c=ToneCloud(SimpleNamespace(data=Path(tmp.name)))
+        self.c.http=Mock()
+        self.url="https://www.tone3000.com/api/v1/models/1/download"
+    def redirect(self,location):
+        headers=Message();headers["Location"]=location
+        return HTTPError(self.url,302,"Found",headers,BytesIO())
+    def response(self,content=b"model"):
+        return BytesIO(content)
+    def test_same_host(self):
+        self.c.http.open.side_effect=[self.redirect("/download/file"),self.response()]
+        self.assertEqual(self.c.fetch(self.url,token="fake",binary=True),b"model")
+        self.assertEqual(self.c.http.open.call_args.args[0].get_header("Authorization"),"Bearer fake")
+    @patch("tonecloud.socket.getaddrinfo",return_value=[(2,1,6,"",("8.8.8.8",443))])
+    def test_external_no_bearer(self,_):
+        self.c.http.open.side_effect=[self.redirect("https://cdn.example.com/signed"),self.response()]
+        self.assertEqual(self.c.fetch(self.url,token="fake",binary=True),b"model")
+        self.assertIsNone(self.c.http.open.call_args.args[0].get_header("Authorization"))
+    def test_http_blocked(self):
+        self.c.http.open.side_effect=self.redirect("http://www.tone3000.com/file")
+        with self.assertRaisesRegex(ValueError,"Unsafe"):self.c.fetch(self.url,token="fake",binary=True)
+    @patch("tonecloud.socket.getaddrinfo",return_value=[(2,1,6,"",("127.0.0.1",443))])
+    def test_private_host_blocked(self,_):
+        self.c.http.open.side_effect=self.redirect("https://localhost/file")
+        with self.assertRaisesRegex(ValueError,"Unsafe"):self.c.fetch(self.url,token="fake",binary=True)
+    def test_api_redirect_rejected(self):
+        self.c.http.open.side_effect=self.redirect("/other")
+        with self.assertRaisesRegex(ValueError,"302"):self.c.fetch(self.url,token="fake")
+    def test_redirect_limit(self):
+        self.c.http.open.side_effect=[self.redirect("/loop") for _ in range(6)]
+        with self.assertRaisesRegex(ValueError,"limit"):self.c.fetch(self.url,token="fake",binary=True)
+
 if __name__=="__main__":unittest.main(verbosity=2)

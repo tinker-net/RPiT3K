@@ -167,3 +167,6 @@ New production_chain: synthetic Linear identity NAM(s), mono PCM16 WAV IRs, 4096
 | NAM/IR bypass | 0 |
 
 All within 2e-6 tolerance. Distinct IR response check passed. Identity NAM comparison alone cannot establish that both nonlinear stages are applied in order; this test is a routing smoke test, not proof of arbitrary capture correctness. No new real ALSA, installer, browser, OAuth network or generic hardware tests performed. No production changes in this evidence update.
+
+## TONE3000 HTTP 302 download fix
+User reported HTTP 302 during model download. NoRedirect prevented binary download redirects. Allow up to five HTTPS redirects for binary GET only, retain authorization only on same hostname, remove it permanently when crossing host; external destinations must resolve to global addresses. DNS precheck does not pin the resolved IP, so it is not a complete DNS-rebinding defense. OAuth/API redirects remain blocked. Six mocked regression tests added; actual CDN hostname and live download remain to be verified. No DSP changes.
