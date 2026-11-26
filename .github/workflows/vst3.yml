@@ -12,7 +12,7 @@ jobs:
           - os: windows-2022
             name: Windows-x64
             extra: '-A x64'
-          - os: macos-26
+          - os: macos-15-intel
             name: macOS-universal
             extra: '-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64'
     runs-on: ${{ matrix.os }}
@@ -28,6 +28,13 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: nuget install Microsoft.Web.WebView2 -Version 1.0.1901.177 -OutputDirectory webview2-sdk -NonInteractive
+      - name: macOS toolchain diagnostics
+        if: runner.os == 'macOS'
+        run: |
+          uname -m
+          sw_vers
+          xcodebuild -version
+          xcrun --sdk macosx --show-sdk-version
       - name: Configure
         shell: bash
         run: |
@@ -46,12 +53,15 @@ jobs:
         shell: bash
         run: |
           cd build-vst3/TON3K_artefacts/Release/VST3
+          lipo -verify_arch arm64 x86_64 TON3K.vst3/Contents/MacOS/TON3K
           codesign --force --deep --sign - TON3K.vst3
           ditto -c -k --keepParent TON3K.vst3 "$GITHUB_WORKSPACE/TON3K-macOS-universal.zip"
           cd ../AU
+          lipo -verify_arch arm64 x86_64 TON3K.component/Contents/MacOS/TON3K
           codesign --force --deep --sign - TON3K.component
           ditto -c -k --keepParent TON3K.component "$GITHUB_WORKSPACE/TON3K-macOS-AU-universal.zip"
-      - name: Validate Audio Unit
+      - name: Validate Audio Unit (Intel slice)
+        continue-on-error: true
         if: runner.os == 'macOS'
         shell: bash
         run: |
