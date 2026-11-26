@@ -94,7 +94,7 @@ Manual pedal and amplifier appearance assignments are saved on the controller in
 
 ## Development preview
 
-Experimental branch only. Practice Mode replaces the amp view without changing the guitar chain. Separate practice-tracks directory; imports up to 256 MiB per track; HTTP range streaming to browser audio (not PiSound mixing). Browser-dependent codec and pitch-preserving playback rate. Space starts from a fixed reference, stops and returns to it, and restarts on next press. Pause/resume is separate. A/B loop uses browser time events, not sample-accurate. No waveform, pitch shifting, recording, or MIDI yet. Smart names are reversible display-only filename expansions; unknown tokens preserved, original path retained. No persistent metadata index yet.
+Experimental branch only. Practice Mode replaces the amp view without changing the guitar chain. Separate practice-tracks directory; imports up to 256 MiB per track; HTTP range streaming to browser audio (not PiSound mixing). Browser-dependent codec and pitch-preserving playback rate. Space starts playback and toggles pause/resume. The dedicated Stop control returns to the selected reference point. A/B loop uses browser time events, not sample-accurate. No waveform, pitch shifting, recording, or MIDI yet. Smart names are reversible display-only filename expansions; unknown tokens preserved, original path retained. No persistent metadata index yet.
 
 Offline backup: stop rpit3k.service, run as data owner `python3 rpi/data_backup.py backup ~/ton3k-backup.tar.gz`, restart service. Restore with `python3 rpi/data_backup.py restore ~/ton3k-backup.tar.gz` while service stopped; previous data retained. Includes all user data, not OS configuration or binaries. Do not migrate to DEB without checking data path.
 
@@ -103,3 +103,5 @@ Install `ffmpeg` (includes ffprobe; needs rubberband filter for pitch shifting).
 
 ### Practice resource isolation
 On Linux with at least four allowed CPUs, the realtime engine thread is pinned to the highest allowed CPU; FFmpeg and ffprobe are confined to the other allowed CPUs, run with nice +10 and best-effort I/O priority 7. No boot/kernel changes. Set RPIT3K_AUDIO_AFFINITY=0 in the service environment to disable both affinity policies. Decoder and waveform analysis are guarded against overlap; stop acknowledgement prevents stale buffered samples from a previous track. Hardware validation still required. No hard CPU isolation from other system processes is claimed.
+
+The Space key now toggles play/pause/resume; the separate Stop button returns to the selected waveform reference. Pause position is estimated from transport polling, not sample-accurate.
