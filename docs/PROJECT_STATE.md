@@ -126,3 +126,7 @@ Both maintained editions now allow NAM 2 alone without moving the preset's store
 ## Toolbar and effect dialogs — 2026-11-26
 
 Both editions group device controls separately from gate, EQ, compressor and reverb icon buttons. Existing controls moved into dialogs without changing DSP or preset keys; input/output remain visible. Audio status is icon-only, green on and grey off. Hi-Z is always expanded; ALSA diagnostics moved to settings dialog. UI commits c00abf5 and 4e97cdb. Script syntax checked; actual browser rendering not verified. Daisy pedal firmware t3k_pedal.cpp uses gate and EQ, no chorus/delay effect; upstream DaisySP offers chorus, flanger, phaser, tremolo and delay line. No new DSP effects integrated in this change. Calibration popup follow-up commits 2b622fa/e65ac24 retain either-slot calibration even with bypass. No new branches.
+
+
+## Native DaisySP effects
+Replaced custom compressor and FDN with pinned upstream DaisySP-LGPL Compressor and ReverbSc, shared library; original preset keys retained, reverb modes now damping voicings. Native build and listening validation pending. See rpi/vendor/daisysp/README.md.
