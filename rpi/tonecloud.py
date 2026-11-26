@@ -113,7 +113,18 @@ class ToneCloud:
                     except (ValueError,OSError): body = {}
                     if isinstance(body,dict) and body.get("error") in ("authorization_pending","slow_down","expired_token","access_denied","invalid_grant","invalid_client"):
                         return {"error":body["error"]}
-                raise ValueError("TONE3000 HTTP "+str(e.code)) from None
+                # Do not log paths, query strings, response bodies or credentials.
+                host=urlsplit(url).hostname or "unknown"
+                stage=("download" if binary else "OAuth" if form is not None else "API")
+                detail=f"TONE3000 HTTP {e.code} ({stage}; host={host}; redirects={hop})"
+                if binary:
+                    try:
+                        body=e.read(8192)
+                        match=re.search(rb"<Code>([A-Za-z0-9_]{1,64})</Code>",body)
+                        if match: detail+="; storage_code="+match.group(1).decode("ascii")
+                    except OSError: pass
+                e.close()
+                raise ValueError(detail) from None
             except urllib.error.URLError:
                 raise ValueError("TONE3000 network unavailable") from None
 
