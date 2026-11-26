@@ -462,6 +462,53 @@ html[data-skin=tone3000] .rig .stomp-toggle[aria-pressed=true]{color:var(--amber
  .controls-panel>div:nth-child(2){grid-column:2;grid-row:1}
 }
 
+
+/* Responsive guardrails: desktop layout stays stationary when sidebars hide. */
+#firstUnit #ampArtwork,#firstUnit #ampName{transition:opacity .18s ease,filter .18s ease}
+#firstUnit.nam1-off #ampArtwork{opacity:.38;filter:grayscale(.7) brightness(.72)}
+#firstUnit.nam1-off #ampName{opacity:.55}
+header,.layout,.controls-panel,.metrics,.header-actions{min-width:0}
+@media(min-width:1001px){
+ #ampChain{gap:40px}
+ .controls-panel .meter-console{container-type:inline-size;grid-template-columns:clamp(24px,4cqw,48px) minmax(0,1fr) clamp(24px,4cqw,48px);gap:clamp(4px,1cqw,12px)}
+ .controls-panel .controls#controls{gap:clamp(4px,1.2cqw,24px)}
+ .controls-panel .knob>span{font-size:clamp(9px,1.6cqw,12px)}
+ html .controls-panel .dial,html[data-skin=tone3000] .controls-panel .dial{width:min(82px,100%);aspect-ratio:1}
+}
+@media(min-width:1001px) and (max-width:1250px){
+ #ampChain{gap:24px}
+ .controls-panel .controls#controls{gap:5px}
+ .controls-panel .signal-meter output{font-size:9px}
+ .header-actions{flex:1 1 auto}
+}
+@media(max-width:1000px){
+ html[data-skin=tone3000] body{height:auto;min-height:100dvh;display:flex;flex-direction:column;overflow:visible}
+ .layout{height:auto;overflow:visible;grid-template-columns:minmax(0,1fr);grid-template-rows:auto;gap:8px}
+ .layout>.stage{grid-column:1;grid-row:1;container-type:normal;min-height:250px;overflow:hidden}
+ .layout>#libraryPanel,.layout>#rigPanel{grid-column:1;min-width:0;max-height:none}
+ .layout>#libraryPanel{grid-row:2}
+ .layout>#rigPanel{grid-row:3}
+ #ampView{height:auto;min-height:250px}
+ #ampChain{gap:clamp(10px,3vw,24px);height:clamp(220px,48vw,420px)}
+ #ampChain .chain-unit{flex:1 1 0;min-width:0}
+ #ampChain .chain-unit.is-pedal{flex:.38 1 0}
+ .controls-panel>div:first-child,.controls-panel>div:nth-child(2){grid-column:1;grid-row:auto}
+ .header-actions{flex:1 1 100%;justify-content:flex-start}
+ #currentTitle{min-width:0;flex:1 1 120px}
+ .rig .rig-scroll{overflow:visible}
+}
+@media(max-width:480px){
+ .controls-panel .controls#controls{grid-template-columns:repeat(3,minmax(0,1fr));row-gap:10px}
+ .toolbar-group{gap:2px;padding:3px}
+ .header-actions .toolbar-group button{width:32px;height:32px;min-width:32px}
+ #ampChain .chain-appearance{font-size:9px;padding:3px}
+}
+@media(min-width:1001px) and (max-height:680px){
+ html[data-skin=tone3000] body{height:auto;min-height:100dvh;grid-template-rows:auto minmax(300px,1fr) auto auto}
+ .layout{min-height:300px}
+}
+@media(prefers-reduced-motion:reduce){#firstUnit #ampArtwork,#firstUnit #ampName{transition:none}}
+
 </style></head><body>
 <header><div><div class="brand" aria-label="Ton3K"><svg class="brand-wordmark" viewBox="0 0 154 38" role="img" aria-label="Ton3K" xmlns="http://www.w3.org/2000/svg"><g font-family="Arial Black,Arial,system-ui,sans-serif" font-weight="900" font-style="italic" font-size="32" letter-spacing="-1" text-anchor="middle"><text x="65" y="25" textLength="143" lengthAdjust="spacingAndGlyphs" fill="#ff1600">Ton3K</text><text x="65" y="34" textLength="143" lengthAdjust="spacingAndGlyphs" fill="#1600ff">Ton3K</text><text x="65" y="29.5" textLength="143" lengthAdjust="spacingAndGlyphs" fill="#ffff00">Ton3K</text></g></svg></div><div class="subtitle">NATIVE GUITAR PROCESSOR</div></div><button id="libraryToggle" type="button" aria-label="Toggle library sidebar" aria-controls="libraryPanel" aria-expanded="true" title="Show or hide library"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg></button><button id="rigToggle" type="button" aria-label="Toggle rig sidebar" aria-controls="rigPanel" aria-expanded="true" title="Show or hide rig details"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/></svg></button><div id="currentTitle">Connecting…</div><div class="metrics"><span class="metric">CPU <strong id="cpu" title="CPU utilization: green <30%, amber 30–84%, red ≥85%. Not audio-thread deadline utilization.">—</strong><meter id="cpuMeter" min="0" max="100"></meter></span><span class="metric">TEMP <strong id="temp" title="Temperature: green <55 °C, amber 55–79 °C, red ≥80 °C.">—</strong></span><span class="metric">BUFFER <strong id="latency" title="Nominal ALSA buffer per direction: green <6 ms, amber 6–<12 ms, red ≥12 ms. Not measured round-trip latency.">—</strong></span><span class="metric" id="xrunMetric" title="ALSA recoveries since service start (includes suspend recovery)">XRUNS <strong id="xruns" title="Cumulative ALSA recoveries since service start: green 0 while running, amber 1–4, red ≥5.">—</strong></span></div><div class="header-actions"><div class="toolbar-group effects-group" role="group" aria-label="Effects"><button id="compOpen" type="button" aria-label="Compressor" title="Compressor" aria-haspopup="dialog" aria-pressed="false"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 18l6-7h5l7-6M3 21h18M3 3v18"/></svg></button><button id="chorusOpen" type="button" aria-label="Chorus" title="Chorus" aria-haspopup="dialog" aria-pressed="false"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 8q5-7 10 0t10 0M2 16q5-7 10 0t10 0"/></svg></button><button id="delayOpen" type="button" aria-label="Delay" title="Delay" aria-haspopup="dialog" aria-pressed="false"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5v14M8 8v11M13 11v8M18 14v5M22 17v2"/></svg></button><button id="reverbOpen" type="button" aria-label="Reverb" title="Reverb" aria-haspopup="dialog" aria-pressed="false"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h3m3-7v14m4-11v8m4-6v4m4-3v2"/></svg></button></div><div class="toolbar-group device-group" role="group" aria-label="Device controls"><button id="tuner" type="button" aria-label="Toggle chromatic tuner" aria-pressed="false" title="Toggle tuner" disabled><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3v6a5 5 0 0 0 10 0V3M12 14v7M10 21h4"/></svg></button><button id="metroOpen" type="button" title="Practice metronome" aria-label="Practice metronome" aria-haspopup="dialog" aria-pressed="false"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3h6l5 18H4L9 3Z M12 17l5-10 M10 17h4"/><circle cx="17" cy="7" r="1.5"/></svg></button><button id="calibrate" type="button" disabled title="Calibrate from capture metadata and ADC reference" aria-label="Input calibration" aria-haspopup="dialog"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="7.5"/><circle cx="12" cy="12" r="3.5"/><circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none"/><path d="M12 2.5v2"/><path d="M12 19.5v2"/><path d="M2.5 12h2"/><path d="M19.5 12h2"/></svg></button><button id="settingsOpen" type="button" aria-label="Audio settings & diagnostics" title="Audio settings & diagnostics" aria-haspopup="dialog" aria-pressed="false"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3M5 5l2 2m10 10 2 2M5 19l2-2M17 7l2-2"/></svg></button><button id="status" type="button" aria-pressed="false" disabled><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 9v6h4l5 4V5L7 9H3Z"/><path d="M16 9a4 4 0 0 1 0 6m3-9a8 8 0 0 1 0 12"/></svg></button></div><div class="toolbar-power"><button id="poweroff" type="button" title="Power options" aria-label="Power options" aria-haspopup="dialog" disabled><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2v10M6 5a9 9 0 1 0 12 0"/></svg></button></div></div></header>
 <main class="layout"><aside class="panel" id="libraryPanel"><h2>Library</h2><div class="library"><input id="filter" type="search" placeholder="Find NAM or IR"><div class="folder-tools"><button id="newFolder" title="Create folder in selected location">+ Folder</button><button id="collapseTree" title="Collapse all folders">Collapse</button></div><small id="folderTarget" title="Upload destination">Import to: /</small><div id="fileTree" aria-label="Local file tree"></div><div id="importDrop" tabindex="0" aria-label="Drop files or folders to import"><span>Drop files or folders here</span><small id="importProgress">NAM / WAV · preserves folder structure</small></div><div class="import-buttons"><button id="uploadBtn" type="button">Import files</button><button id="folderBrowse" type="button" title="Browser may request folder access confirmation">Browse folder</button></div><input id="uploadFolder" type="file" webkitdirectory multiple hidden><input id="upload" type="file" accept=".nam,.wav" multiple hidden><button id="cloudOpen">Browse TONE3000</button></div></aside><div class="layout-resizer" id="resizeLibrary" role="separator" aria-label="Library width" aria-orientation="vertical" tabindex="0" title="Drag to resize · double-click to reset"></div>
@@ -861,7 +908,7 @@ pollLevels();
  try{const data=JSON.parse(localStorage.getItem(key)||"{}");for(const k of ["library","rig"])if(Number.isFinite(data[k]))preferred[k]=data[k];}catch(e){}
  const minimum={library:170,rig:245};
  const variable=k=>"--"+k+"-width";
- function limits(k){const other=k==="library"?"rig":"library";const otherPanel=other==="rig"?rig:library;return Math.max(minimum[k],Math.min(700,layout.clientWidth-16-300-otherPanel.getBoundingClientRect().width));}
+ function limits(k){const other=k==="library"?"rig":"library";const cs=getComputedStyle(layout),raw=parseFloat(cs.getPropertyValue(variable(other)));const otherWidth=Number.isFinite(raw)?raw:(other==="library"?Math.max(180,Math.min(350,innerWidth*.18)):Math.max(260,Math.min(320,innerWidth*.17)));return Math.max(minimum[k],Math.min(700,layout.clientWidth-16-420-otherWidth));}
  function clamp(k,v){return Math.round(Math.max(minimum[k],Math.min(limits(k),v)));}
  function updateAria(k,handle){const panel=k==="library"?library:rig;handle.setAttribute("aria-valuemin",minimum[k]);handle.setAttribute("aria-valuemax",limits(k));handle.setAttribute("aria-valuenow",Math.round(panel.getBoundingClientRect().width));}
  function save(){try{localStorage.setItem(key,JSON.stringify(preferred));}catch(e){}}
@@ -886,7 +933,8 @@ pollLevels();
  window.addEventListener("resize",fit);fit();
 })();
 
-function setStompUI(enabled){const b=el("nam1Toggle");b.setAttribute("aria-pressed",String(enabled));b.textContent=enabled?"ON":"OFF";}
+function syncStompArtwork(){el("firstUnit").classList.toggle("nam1-off",!!el("model").value&&!el("bypass").checked&&el("nam1Toggle").getAttribute("aria-pressed")==="false");}
+function setStompUI(enabled){const b=el("nam1Toggle");b.setAttribute("aria-pressed",String(enabled));b.textContent=enabled?"ON":"OFF";syncStompArtwork();}
 el("nam1Toggle").onclick=()=>{if(busy||!el("model").value||el("bypass").checked)return;setStompUI(el("nam1Toggle").getAttribute("aria-pressed")!=="true");queueLive();};
 function refreshCaptureFields(){
  el("nam1Toggle").disabled=!el("model").value||el("bypass").checked;
@@ -1167,6 +1215,7 @@ function artworkChoice(name){
  return ampSkins[overrides[name]]?overrides[name]:autoAmpSkin(name);
 }
 function updateAmpArtwork(name){
+ syncStompArtwork();
  const second=el("second").value,show=!!el("model").value&&/\.nam$/i.test(second)&&!el("bypass").checked;
  el("secondUnit").hidden=!show;el("chainArrow").hidden=!show;
  const key=artworkChoice(name),signature=key+":"+(state?.amp_art?.[key]||"svg");
