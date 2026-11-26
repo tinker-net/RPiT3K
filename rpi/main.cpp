@@ -72,6 +72,7 @@ struct Options {
     float gate = -81.f;
     float ir_mix=.5f, hiz=0, hiz_profile=0;
     float comp=0, comp_post=0, reverb=0, decay=1.5f, reverb_type=0;
+    float chorus=0.0f, chorus_rate=0.8f, chorus_depth=0.5f, delay=0.0f, delay_ms=350.0f, delay_feedback=0.35f;
     int meter_fd = -1, rig_fd = -1, rig_ack_fd = -1;
     bool benchmark = false, bypass = false, tuner = false, live = false, verify = false;
 };
@@ -108,6 +109,12 @@ Options parse(int argc, char** argv, bool rig_only=false) {
         else if(k=="--reverb") o.reverb=std::stof(v);
         else if(k=="--decay") o.decay=std::stof(v);
         else if(k=="--reverb_type") o.reverb_type=std::stof(v);
+        else if(k=="--chorus") o.chorus=std::stof(v);
+        else if(k=="--chorus_rate") o.chorus_rate=std::stof(v);
+        else if(k=="--chorus_depth") o.chorus_depth=std::stof(v);
+        else if(k=="--delay") o.delay=std::stof(v);
+        else if(k=="--delay_ms") o.delay_ms=std::stof(v);
+        else if(k=="--delay_feedback") o.delay_feedback=std::stof(v);
         else if(k=="--gate") o.gate=std::stof(v);
         else if(k=="--input") o.input=std::stof(v);
         else if(k=="--output") o.output=std::stof(v);
@@ -122,6 +129,7 @@ Options parse(int argc, char** argv, bool rig_only=false) {
     if(o.input<0||o.input>2||o.output<0||o.output>1) throw std::runtime_error("Gain outside range");
     if(std::abs(o.bass)>20||std::abs(o.mid)>15||std::abs(o.treble)>10) throw std::runtime_error("EQ outside range");
     if(!std::isfinite(o.gate)||!(o.gate==-81.f||(o.gate>=-80.f&&o.gate<=-30.f)))throw std::runtime_error("Invalid gate threshold");
+    if(!std::isfinite(o.chorus)||o.chorus<0||o.chorus>1||!std::isfinite(o.chorus_rate)||o.chorus_rate<0.1||o.chorus_rate>5||!std::isfinite(o.chorus_depth)||o.chorus_depth<0||o.chorus_depth>1||!std::isfinite(o.delay)||o.delay<0||o.delay>1||!std::isfinite(o.delay_ms)||o.delay_ms<20||o.delay_ms>1000||!std::isfinite(o.delay_feedback)||o.delay_feedback<0||o.delay_feedback>0.85)throw std::runtime_error("Invalid chorus/delay controls");
     if(!std::isfinite(o.comp)||o.comp<0||o.comp>1||!(o.comp_post==0||o.comp_post==1)||!std::isfinite(o.reverb)||o.reverb<0||o.reverb>1||!std::isfinite(o.decay)||o.decay<.2f||o.decay>5||!(o.reverb_type==0||o.reverb_type==1||o.reverb_type==2))throw std::runtime_error("Invalid effects controls");
     if(!std::isfinite(o.ir_mix)||o.ir_mix<0||o.ir_mix>1)throw std::runtime_error("Invalid IR mix");
     if(!std::isfinite(o.hiz)||o.hiz<0||o.hiz>1||!(o.hiz_profile==0||o.hiz_profile==1||o.hiz_profile==2||o.hiz_profile==3))throw std::runtime_error("Invalid Hi-Z compensation");
@@ -173,6 +181,8 @@ struct Chain {
     HiZCompensation hiz;
     RigCompressor pre, post;
     RigReverb verb;
+    RigChorus chorus;
+    RigDelay delay;
     bool tuning;
     float input,output;
     float target_input,target_output,bass,mid,treble,target_bass,target_mid,target_treble;
@@ -181,13 +191,14 @@ struct Chain {
         hiz.set(o.hiz,int(o.hiz_profile));
         gate.set(o.gate);
         effects(o.comp,o.comp_post,o.reverb,o.decay,o.reverb_type);
+        chorus.set(o.chorus,o.chorus_rate,o.chorus_depth);delay.set(o.delay,o.delay_ms,o.delay_feedback);
         eq.Init(rate);eq.SetBass(o.bass);eq.SetMid(o.mid);eq.SetTreble(o.treble);
     }
     void effects(float c,float pos,float wet,float d,float type){
         if(!std::isfinite(c)||c<0||c>1||!(pos==0||pos==1)||!std::isfinite(wet)||wet<0||wet>1||!std::isfinite(d)||d<.2f||d>5||!(type==0||type==1||type==2))return;
         pre.set(pos==0?c:0);post.set(pos==1?c:0);verb.set(wet,d,int(type));
     }
-    void controls(float i,float o,float b,float m,float t,float g=-81.f,float c=0,float pos=0,float wet=0,float d=1.5f,float type=0,float mix=-1,float hz=-1,float profile=0) {
+    void controls(float i,float o,float b,float m,float t,float g=-81.f,float c=0,float pos=0,float wet=0,float d=1.5f,float type=0,float mix=-1,float hz=-1,float profile=0,float ch=0.0f,float cr=0.8f,float cd=0.5f,float dl=0.0f,float dm=350.0f,float df=0.35f) {
         if(!std::isfinite(i)||!std::isfinite(o)||!std::isfinite(b)||!std::isfinite(m)||!std::isfinite(t))return;
         if(i<0||i>2||o<0||o>1||std::abs(b)>20||std::abs(m)>15||std::abs(t)>10)return;
         if(!std::isfinite(g)||!(g==-81.f||(g>=-80.f&&g<=-30.f)))return;
@@ -195,6 +206,7 @@ struct Chain {
         if(std::isfinite(profile)&&(profile==0||profile==1||profile==2||profile==3))hiz.set(hz,int(profile));
         gate.set(g);
         effects(c,pos,wet,d,type);
+        if(!(!std::isfinite(ch)||ch<0||ch>1||!std::isfinite(cr)||cr<0.1||cr>5||!std::isfinite(cd)||cd<0||cd>1||!std::isfinite(dl)||dl<0||dl>1||!std::isfinite(dm)||dm<20||dm>1000||!std::isfinite(df)||df<0||df>0.85)){chorus.set(ch,cr,cd);delay.set(dl,dm,df);}
         target_input=i;target_output=o;target_bass=b;target_mid=m;target_treble=t;
     }
     void process() {
@@ -236,7 +248,7 @@ struct Chain {
             if(std::abs(output-target_output)<1e-6f)output=target_output;
             float s=eq.Process(out[i]);
             if(gated)s*=gate_gain[i];
-            s=verb.process(post.process(s))*output;
+            s=verb.process(delay.process(chorus.process(post.process(s))))*output;
             y[i]=std::isfinite(s)?std::clamp(s,-1.f,1.f):0.f;
         }
     }
@@ -337,16 +349,17 @@ int main(int argc,char** argv) {
         // Private nonblocking stdin pipe from the controller; fixed storage, bounded work.
         if(o.live){int flags=fcntl(STDIN_FILENO,F_GETFL);if(flags<0||fcntl(STDIN_FILENO,F_SETFL,flags|O_NONBLOCK)<0)throw std::runtime_error("Cannot configure live controls");}
         PracticeMetronome metronome;
-        char line[256]{}; unsigned used=0; bool overflow=false;
+        char line[512]{}; unsigned used=0; bool overflow=false;
         auto poll_controls=[&]{
             if(!o.live)return;
             char buf[512];auto n=read(STDIN_FILENO,buf,sizeof(buf));
             if(n<=0)return;
             for(ssize_t k=0;k<n;++k){
                 if(buf[k]=='\n'){
-                    if(!overflow){line[used]=0;float i,o,b,m,t,g,c,pos,wet,d,type,mix,hz,profile;char extra;
+                    if(!overflow){line[used]=0;float i,o,b,m,t,g,c,pos,wet,d,type,mix,hz,profile,ch,cr,cd,dl,dm,df;char extra;
                         unsigned enabled,bpm,beats;float level;
                         if(std::sscanf(line,"METRO %u %u %u %f %c",&enabled,&bpm,&beats,&level,&extra)==4&&enabled<=1)metronome.set(enabled!=0,bpm,beats,level);
+                        else if(std::sscanf(line,"%f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %c",&i,&o,&b,&m,&t,&g,&c,&pos,&wet,&d,&type,&mix,&hz,&profile,&ch,&cr,&cd,&dl,&dm,&df,&extra)==20)current->controls(i,o,b,m,t,g,c,pos,wet,d,type,mix,hz,profile,ch,cr,cd,dl,dm,df);
                         else if(std::sscanf(line,"%f %f %f %f %f %f %f %f %f %f %f %f %f %f %c",&i,&o,&b,&m,&t,&g,&c,&pos,&wet,&d,&type,&mix,&hz,&profile,&extra)==14)current->controls(i,o,b,m,t,g,c,pos,wet,d,type,mix,hz,profile);
                         else if(std::sscanf(line,"%f %f %f %f %f %f %f %f %f %f %f %f %c",&i,&o,&b,&m,&t,&g,&c,&pos,&wet,&d,&type,&mix,&extra)==12)current->controls(i,o,b,m,t,g,c,pos,wet,d,type,mix);
                         else if(std::sscanf(line,"%f %f %f %f %f %f %f %f %f %f %f %c",&i,&o,&b,&m,&t,&g,&c,&pos,&wet,&d,&type,&extra)==11)current->controls(i,o,b,m,t,g,c,pos,wet,d,type);}

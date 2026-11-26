@@ -25,6 +25,37 @@ class ToneCloud:
         self.tokens = None
         self.pending = None
         self.http = urllib.request.build_opener(NoRedirect())
+        self.tokenfile = self.c.data / "tone3000-session.json"
+        self.load_tokens()
+
+
+    def load_tokens(self):
+        try:
+            with self.tokenfile.open("r") as f: saved=json.load(f)
+            if not isinstance(saved,dict) or not isinstance(saved.get("client"),str): return
+            data=saved.get("tokens")
+            if not isinstance(data,dict) or not isinstance(data.get("access_token"),str): return
+            remaining=max(0.0,float(saved["expires_at"])-time.time())
+            self.client=saved["client"]
+            self.tokens=dict(data,deadline=time.monotonic()+remaining)
+        except (OSError,ValueError,TypeError,KeyError,OverflowError):
+            return
+
+    def persist_tokens(self):
+        if not self.tokens:
+            self.tokenfile.unlink(missing_ok=True)
+            return
+        data={k:v for k,v in self.tokens.items() if k!="deadline"}
+        saved=dict(client=self.client,tokens=data,expires_at=time.time()+max(0,self.tokens["deadline"]-time.monotonic()))
+        fd,path=tempfile.mkstemp(prefix=".tone3000-",dir=self.tokenfile.parent)
+        try:
+            with os.fdopen(fd,"w") as f:
+                json.dump(saved,f)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(path,self.tokenfile)
+        finally:
+            if os.path.exists(path): os.unlink(path)
 
     def fetch(self, url, form=None, token=None, binary=False):
         u = urlsplit(url)
@@ -56,13 +87,19 @@ class ToneCloud:
     def store_tokens(self, data):
         if not data.get("access_token"): raise ValueError("Authorization failed")
         self.tokens = dict(data, deadline=time.monotonic()+float(data.get("expires_in",3600)))
+        self.persist_tokens()
 
     def token(self):
         if not self.tokens: raise ValueError("Connect to TONE3000 first")
         if time.monotonic()+30 >= self.tokens["deadline"]:
+            if not self.tokens.get("refresh_token"):
+                self.tokens=None
+                self.persist_tokens()
+                raise ValueError("Session expired; reconnect")
             result=self.fetch(BASE+"oauth/token",form={"grant_type":"refresh_token","refresh_token":self.tokens["refresh_token"],"client_id":self.client})
             if not result.get("access_token"):
                 self.tokens=None
+                self.persist_tokens()
                 raise ValueError("Session expired; reconnect")
             result.setdefault("refresh_token",self.tokens["refresh_token"])
             self.store_tokens(result)
@@ -78,6 +115,7 @@ class ToneCloud:
             if op=="disconnect":
                 self.tokens=self.pending=None
                 self.client=""
+                self.persist_tokens()
                 return {"connected":False}
             if op=="connect":
                 client=v.get("client_id","").strip()
@@ -87,6 +125,7 @@ class ToneCloud:
                 interval=max(5,int(result.get("interval",5)))
                 self.client=client
                 self.tokens=None
+                self.persist_tokens()
                 self.pending=dict(code=result["device_code"],deadline=time.monotonic()+int(result["expires_in"]),interval=interval,next=time.monotonic()+interval)
                 return {"user_code":result["user_code"],"interval":interval,"expires_in":result["expires_in"]}
             if op=="poll":
