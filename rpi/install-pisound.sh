@@ -32,7 +32,7 @@ while (($#)); do
 done
 [[ "$jobs" =~ ^[1-9][0-9]*$ && "$buffer" =~ ^(64|128|256|512)$ && "$periods" =~ ^[234]$ ]] || { echo "Invalid settings"; exit 1; }
 sudo apt-get update
-sudo apt-get install -y git build-essential cmake libasound2-dev alsa-utils python3 curl ca-certificates
+sudo apt-get install -y git build-essential cmake libasound2-dev alsa-utils python3 curl ca-certificates ffmpeg
 if [[ "$blokas" == yes ]]; then
  tmp="$(mktemp)"
  trap 'rm -f "$tmp"' EXIT

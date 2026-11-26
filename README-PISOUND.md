@@ -9,7 +9,7 @@ Normal sudo-enabled user, not root. Reliable power/cooling, preferably 2 GB or m
 ```sh
 sudo apt update
 sudo apt install -y git
-git clone --branch rpi-ui https://github.com/tinker-net/RPiT3K.git
+git clone --branch main https://github.com/tinker-net/RPiT3K.git
 cd RPiT3K
 # If Blokas driver is not installed:
 bash rpi/install-pisound.sh --install-blokas
@@ -120,3 +120,8 @@ Model-scoped channel aliases expand the channel slot immediately following a rec
 
 ### Structured smart library
 Smart names use a common identity (title, details, searchable label, skin) with Amalgam NAM, Amalgam IR and York pack-specific interpretation. Channels are concise; numbered tonal variants retain numbers; A1/A2 and known model years are displayed. York M25-SH identifies the cabinet; Scott Henderson is displayed only for IRs in a dedicated Scott Henderson folder. Phase and stereo distinctions retained. Original paths remain unchanged. Unknown tokens are retained, not guessed. Run `node rpi/smart_ir_test.js [optional-inventory.txt]` for regression and inventory coverage. The module is kept in an isolated pure section of the self-contained HTML to avoid a new server endpoint or package dependency.
+
+## Portable backup and clean recovery
+In Audio settings & diagnostics, turn Audio OFF, then Download backup or Restore backup. Backups include library, presets, settings, favorites, appearance, artwork, practice tracks and trash. Version 1 tar.gz contains SHA-256 manifest; archive is verified before download and before replacement. Credentials, browser local storage, waveform cache and OS/network configuration are excluded. Restore replaces saved data, retains previous directory beside it, reloads controller with audio OFF; re-login to cloud if needed. Trusted LAN only; do not distribute commercial captures. Large backups require free disk space for archive and verification staging and browser download memory. 8 GiB expanded limit. Older unversioned archives are not accepted by this version; use previous offline helper to recover them separately.
+Fresh SD: install 64-bit Raspberry Pi OS Lite, configure user/SSH/network, clone main as above, install Blokas driver and reboot if needed, then run `bash rpi/install-pisound.sh --lan --button --cloud` (trusted LAN only; omit optional flags if undesired). FFmpeg is installed automatically. Restore through settings with Audio OFF. Hostname, Wi-Fi, analog input gain and external service configuration are not portable. Check presets and low-volume audio before normal use.
+Offline CLI (service stopped, normal service user): `python3 rpi/data_backup.py backup ~/ton3k.tar.gz`, `python3 rpi/data_backup.py verify ~/ton3k.tar.gz`, `python3 rpi/data_backup.py restore ~/ton3k.tar.gz`. Start service after completion. Test: `python3 rpi/data_backup_test.py`. Physical fresh-SD and full browser restore acceptance pending.

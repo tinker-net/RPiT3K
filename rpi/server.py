@@ -4,6 +4,7 @@ import argparse
 import mimetypes
 from practice import Practice, duration as practice_duration, waveform as practice_waveform
 import tempfile
+import data_backup
 from tonecloud import ToneCloud
 from calibration import calibration, valid_number
 from capture_info import capture_info
@@ -735,6 +736,57 @@ class Handler(BaseHTTPRequestHandler):
                 self.wfile.write(chunk);remaining-=len(chunk)
 
     def do_GET(self):
+        self.dispatch(False)
+
+    def do_POST(self):
+        self.dispatch(True)
+
+    def dispatch(self,post):
+        # Only maintenance is exclusive; normal audio/control requests remain concurrent.
+        maintenance=post and urlsplit(self.path).path in ("/api/backup/export","/api/backup/restore")
+        server=self.server
+        with server.maintenance_condition:
+            if server.maintenance or (maintenance and server.requests_active):
+                self.send(409,dict(error="Maintenance or another request is active; retry shortly"));return
+            if maintenance:server.maintenance=True
+            server.requests_active+=1
+        try:
+            if post:self.handle_post()
+            else:self.handle_get()
+        finally:
+            with server.maintenance_condition:
+                server.requests_active-=1
+                if maintenance:server.maintenance=False
+
+    def backup_request(self,c,path):
+        if c.proc is not None or c.practice_analysis.locked():
+            raise ValueError("Turn Audio OFF and finish waveform analysis first")
+        with tempfile.TemporaryDirectory(dir=c.data.parent) as td:
+            archive=Path(td)/"ton3k.tar.gz"
+            if path=="/api/backup/export":
+                data_backup.backup(c.data,archive)
+                self.send_response(200)
+                self.send_header("Content-Type","application/gzip")
+                self.send_header("Content-Disposition",'attachment; filename="ton3k-backup.tar.gz"')
+                self.send_header("Cache-Control","no-store")
+                self.send_header("Content-Length",str(archive.stat().st_size))
+                self.end_headers()
+                with archive.open("rb") as f:shutil.copyfileobj(f,self.wfile,1024*1024)
+                return
+            if self.headers.get("X-TON3K-Restore")!="replace":raise ValueError("Explicit restore confirmation required")
+            size=int(self.headers.get("Content-Length","0"))
+            if not 0<size<=data_backup.MAX:raise ValueError("Invalid backup size")
+            self.connection.settimeout(60)
+            with archive.open("wb") as f:
+                while size:
+                    chunk=self.rfile.read(min(size,1024*1024))
+                    if not chunk:raise ValueError("Incomplete backup upload")
+                    f.write(chunk);size-=len(chunk)
+            n,old,new=data_backup.restore(c.data,archive,lambda:Controller(c.args))
+            self.server.controller=new
+            self.send(200,dict(restored=n,previous_data=old.name if old else None))
+
+    def handle_get(self):
         if not self.authorized(): return
         path=urlsplit(self.path).path
         if path=="/":
@@ -791,7 +843,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.send(200,self.server.controller.status())
         else: self.send(404,dict(error="Not found"))
 
-    def do_POST(self):
+    def handle_post(self):
         if not self.authorized(): return
         # Require a custom header: prevents cross-origin browser form submissions.
         if self.headers.get("X-RPiT3K")!="1":
@@ -800,6 +852,8 @@ class Handler(BaseHTTPRequestHandler):
         c=self.server.controller
         u=urlsplit(self.path)
         try:
+            if u.path in ("/api/backup/export","/api/backup/restore"):
+                self.backup_request(c,u.path);return
             if u.path=="/api/practice/transport":
                 v=json.loads(self.body(4096))
                 action=v.get("action")
@@ -975,7 +1029,7 @@ class Handler(BaseHTTPRequestHandler):
                 else:
                     self.send(404,dict(error="Not found"));return
                 self.send(200,c.status())
-        except (ValueError,KeyError,TypeError,OSError,subprocess.SubprocessError) as e:
+        except (ValueError,KeyError,TypeError,OSError,subprocess.SubprocessError, data_backup.tarfile.TarError, EOFError) as e:
             self.send(400,dict(error=str(e)))
 
 def main():
@@ -992,6 +1046,9 @@ def main():
     password=None if a.no_auth else (os.getenv("RPIT3K_PASSWORD") or secrets.token_urlsafe(12))
     server=ThreadingHTTPServer((a.bind,a.port),Handler)
     server.controller=c
+    server.maintenance_condition=threading.Lock()
+    server.maintenance=False
+    server.requests_active=0
     server.password=password
     server.username=os.getenv("RPIT3K_USERNAME","rpit3k")
     print(f"RPiT3K http://{a.bind}:{a.port}  "+("no authentication (trusted LAN only)" if password is None else f"user={server.username}"),flush=True)
@@ -1004,6 +1061,6 @@ def main():
     except KeyboardInterrupt: pass
     finally:
         server.server_close()
-        with c.lock: c.stop()
+        with server.controller.lock: server.controller.stop()
 
 if __name__=="__main__": main()
