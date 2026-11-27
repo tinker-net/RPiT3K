@@ -791,6 +791,15 @@ class Handler(BaseHTTPRequestHandler):
         path=urlsplit(self.path).path
         if path=="/":
             self.send(200,(ROOT/"rpi/web.html").read_bytes(),"text/html; charset=utf-8")
+        elif path.startswith("/score-assets/"):
+            name=path.removeprefix("/score-assets/")
+            allowed={"alphaTab.min.js":"text/javascript","font/Bravura.woff2":"font/woff2","font/Bravura.woff":"font/woff","font/Bravura.ttf":"font/ttf","font/Bravura.otf":"font/otf"}
+            if name not in allowed:
+                self.send(404,dict(error="Unknown score asset"));return
+            asset=ROOT/"rpi/vendor/alphatab"/name
+            if not asset.is_file():
+                self.send(404,dict(error="Score reader not installed"));return
+            self.send(200,asset.read_bytes(),allowed[name])
         elif path=="/api/practice":
             root=self.server.controller.data/"practice-tracks"
             files=[]
