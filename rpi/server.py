@@ -791,6 +791,15 @@ class Handler(BaseHTTPRequestHandler):
         path=urlsplit(self.path).path
         if path=="/":
             self.send(200,(ROOT/"rpi/web.html").read_bytes(),"text/html; charset=utf-8")
+        elif path=="/api/version":
+            info=ROOT/"rpi/build-info.json"
+            if info.is_file():
+                self.send(200,json.loads(info.read_text()))
+            else:
+                try:
+                    commit=subprocess.check_output(["git","-C",str(ROOT),"rev-parse","--short","HEAD"],text=True,timeout=2).strip()
+                except (OSError,subprocess.SubprocessError):commit="unknown"
+                self.send(200,dict(edition="Source",version="development",commit=commit))
         elif path.startswith("/score-assets/"):
             name=path.removeprefix("/score-assets/")
             allowed={"alphaTab.min.js":"text/javascript","alphaTab.worker.js":"text/javascript","alphaTab.worklet.js":"text/javascript","alphaTab.min.worker.js":"text/javascript","alphaTab.min.worklet.js":"text/javascript","soundfont/sonivox.sf2":"application/octet-stream","font/Bravura.woff2":"font/woff2","font/Bravura.woff":"font/woff","font/Bravura.ttf":"font/ttf","font/Bravura.otf":"font/otf"}

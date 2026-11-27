@@ -70,3 +70,6 @@ The first command is ARM64 only. Generic CPU argument can be empty for portable 
 ## Latest validation
 
 [Five-variant package CI passed at 8ab4841](https://github.com/tinker-net/RPiT3K/actions/runs/45853780731), using source pins 0275920 (PiSound) and 37952ec (General). Physical installation and browser/ALSA tests are not established by this run. See the [current project state and acceptance checklist](https://github.com/tinker-net/RPiT3K/blob/rpi-ui/docs/PROJECT_STATE.md). Documentation-only commits do not change the functional source pins.
+
+## Experimental PiSound package (Practice)
+On experimental/guitar-pro the PiSound build uses HEAD (or explicit RPIT3K_SOURCE_REF) and bundles FFmpeg dependency, score assets and new modules. Requires npm at build time. The dedicated service stores data in /var/lib/rpi-ton3k-pisound/data; the previous package roots are copied on first upgrade and retained. For source migration export a verified backup in Settings, stop and disable source service and hotspot timer, install matching DEB and restore through Settings with Audio OFF. Do not delete the source data until physical acceptance. No automatic root-level installation via LAN web UI; Settings displays version and links releases. Generic edition pins unchanged. Experimental workflow uploads DEB only if build checks pass; no public release yet.
