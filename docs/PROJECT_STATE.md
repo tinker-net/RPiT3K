@@ -27,3 +27,6 @@ git switch --detach origin/fallback/pre-practice
 cmake -S rpi -B build-rpi -DCMAKE_BUILD_TYPE=Release -DRPIT3K_CPU=cortex-a76 && cmake --build build-rpi -j2 && ctest --test-dir build-rpi --output-on-failure && sudo systemctl start rpit3k.service
 ```
 No personal files deleted; audio starts OFF. Hard refresh browser. Return with git switch main, rebuild and restart. FFmpeg can remain installed.
+
+## Experimental practice reader — 2026-11-28
+Branch `experimental/guitar-pro`, based on stable main 735caad. Local alphaTab 1.8.4, GP3–8 reader, track/notation/zoom; optional score below existing waveform. Browser-only MIDI synthesis with local SONiVOX, separate transport, loop selection, per-track mute/solo/volume and tempo. Waveform Device/Browser selector; Device path unchanged, Browser uses media streaming, speed preserving pitch, independent semitone adjustment unavailable in Browser, approximate loops and browser-dependent codecs. No automatic synchronization or transcription. No changes to ALSA/DSP, stable main, or published packages. Score files are browser-local, not persistent. Pending: npm asset installation on Pi, actual GP8 rendering, MIDI readiness/mixer/selection, HTTP browser audio fallback, route switches, pause/seek/loop/close, mobile sizing and regression testing. Do not merge until tested.

@@ -10,8 +10,11 @@ npm pack "@coderline/alphatab@$version" --pack-destination "$tmp"
 tar -xzf "$tmp"/*.tgz -C "$tmp"
 test -s "$tmp/package/dist/alphaTab.min.js"
 test -s "$tmp/package/dist/font/Bravura.woff2"
-mkdir -p "$dest/font"
+test -s "$tmp/package/dist/soundfont/sonivox.sf2"
+mkdir -p "$dest/font" "$dest/soundfont"
 cp "$tmp/package/dist/alphaTab.min.js" "$dest/"
+for f in "$tmp/package/dist/"*worker.js "$tmp/package/dist/"*worklet.js; do [[ ! -f "$f" ]] || cp "$f" "$dest/"; done
+cp "$tmp/package/dist/soundfont/sonivox.sf2" "$dest/soundfont/"
 cp "$tmp/package/dist/font/"Bravura.* "$dest/font/"
 find "$tmp/package" -maxdepth 1 -iname '*license*' -exec cp {} "$dest/" \;
 echo "alphaTab $version installed locally."
