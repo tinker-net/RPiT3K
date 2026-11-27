@@ -698,6 +698,16 @@ class Handler(BaseHTTPRequestHandler):
             raise ValueError("Incomplete request")
         return data
 
+    def score_path(self,name):
+        if not isinstance(name,str) or not NAME.fullmatch(name) or name.startswith(".") or Path(name).suffix.lower() not in (".gp",".gp3",".gp4",".gp5",".gpx"):
+            raise ValueError("Invalid score filename")
+        root=self.server.controller.data/"practice-scores"
+        if root.is_symlink():raise ValueError("Invalid score directory")
+        root.mkdir(exist_ok=True)
+        p=root/name
+        if p.is_symlink():raise ValueError("Invalid score")
+        return p
+
     def practice_path(self,name):
         if not isinstance(name,str) or not NAME.fullmatch(name) or Path(name).suffix.lower() not in (".wav",".mp3",".flac",".m4a",".ogg"):
             raise ValueError("Invalid track filename")
@@ -809,6 +819,21 @@ class Handler(BaseHTTPRequestHandler):
             if not asset.is_file():
                 self.send(404,dict(error="Score reader not installed"));return
             self.send(200,asset.read_bytes(),allowed[name])
+        elif path=="/api/scores":
+            root=self.server.controller.data/"practice-scores"
+            files=[]
+            if root.is_dir() and not root.is_symlink():
+                for p in root.iterdir():
+                    try:
+                        if self.score_path(p.name).is_file():files.append(p.name)
+                    except ValueError:pass
+            self.send(200,dict(files=sorted(files,key=str.casefold)))
+        elif path=="/api/scores/file":
+            try:
+                p=self.score_path(parse_qs(urlsplit(self.path).query).get("name",[""])[0])
+                if not p.is_file() or p.stat().st_size>64*1024*1024:raise ValueError("Score missing or too large")
+                self.send(200,p.read_bytes(),"application/octet-stream")
+            except (ValueError,OSError) as e:self.send(400,dict(error=str(e)))
         elif path=="/api/practice":
             root=self.server.controller.data/"practice-tracks"
             files=[]
@@ -890,10 +915,11 @@ class Handler(BaseHTTPRequestHandler):
                         c.practice.start(c.proc,p,anchor,speed,pitch,volume,min(end,length))
                 else:raise ValueError("Unknown transport action")
                 self.send(200,c.practice.status());return
-            if u.path=="/api/practice/import":
-                p=self.practice_path(parse_qs(u.query).get("name",[""])[0])
+            if u.path in ("/api/practice/import","/api/scores/import"):
+                is_score=u.path=="/api/scores/import"
+                p=(self.score_path if is_score else self.practice_path)(parse_qs(u.query).get("name",[""])[0])
                 n=int(self.headers.get("Content-Length","0"))
-                if not 0<n<=256*1024*1024 or p.exists():raise ValueError("Invalid size or track already exists")
+                if not 0<n<=(64 if is_score else 256)*1024*1024 or p.exists():raise ValueError("Invalid size or track already exists")
                 with tempfile.NamedTemporaryFile(dir=p.parent,prefix=".import-",delete=False) as f:
                     tmp=Path(f.name)
                     try:

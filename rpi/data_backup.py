@@ -4,7 +4,7 @@ import argparse, hashlib, json, os, pathlib, shutil, tarfile, tempfile, uuid
 P=pathlib.Path
 MAX=8*1024**3
 MAX_FILES=100000
-ROOTS={"library","presets.json","settings.json","favorites.json","appearance.json","amp-art","practice-tracks","trash"}
+ROOTS={"library","presets.json","settings.json","favorites.json","appearance.json","amp-art","practice-tracks","practice-scores","trash"}
 MANIFEST="manifest.json"
 def digest(p):
     with p.open("rb") as f:return hashlib.file_digest(f,"sha256").hexdigest()

@@ -8,7 +8,7 @@ if [ "$1" = configure ]; then
  # Keep the service-owned parent writable for transactional restore.
  if [ ! -e /var/lib/rpi-ton3k-pisound/data ]; then
   stage=$(mktemp -d /var/lib/rpi-ton3k-pisound/.migration.XXXXXX)
-  for f in library presets.json settings.json favorites.json appearance.json amp-art practice-tracks trash; do
+  for f in library presets.json settings.json favorites.json appearance.json amp-art practice-tracks practice-scores trash; do
    if [ -e "/var/lib/rpi-ton3k-pisound/$f" ]; then
     cp -a "/var/lib/rpi-ton3k-pisound/$f" "$stage/"
    fi
