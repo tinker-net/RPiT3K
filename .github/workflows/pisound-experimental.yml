@@ -1,0 +1,27 @@
+name: PiSound experimental DEB
+on:
+  push:
+    branches: [experimental/guitar-pro]
+    paths: ['rpi/**','packaging/**','.github/workflows/pisound-experimental.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-24.04-arm
+    container: debian:trixie
+    steps:
+      - run: apt-get update && apt-get install -y git ca-certificates build-essential cmake libasound2-dev python3 nodejs npm dpkg-dev ffmpeg
+      - uses: actions/checkout@v4
+      - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - run: bash packaging/build-deb.sh "0.2.0~practice${GITHUB_RUN_NUMBER}" cortex-a76 pisound
+      - run: |
+          dpkg-deb --info dist/*.deb
+          dpkg-deb -x dist/*.deb /tmp/ton3k
+          test -s /tmp/ton3k/usr/lib/rpi-ton3k/rpi/vendor/alphatab/soundfont/sonivox.sf2
+          python3 /tmp/ton3k/usr/lib/rpi-ton3k/rpi/server.py --help
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pisound-practice-deb
+          path: dist/*.deb
+          if-no-files-found: error

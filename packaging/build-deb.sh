@@ -8,7 +8,7 @@ cpu="${2:-}"
 edition="${3:-general}"
 arch="$(dpkg --print-architecture)"
 case "$arch:$cpu:$edition" in
- arm64:cortex-a76:pisound) source_ref=0275920b3aec7cb23b92f0057b403cfa05b8dc91; package=rpi-ton3k-pisound ;;
+ arm64:cortex-a76:pisound) source_ref="${RPIT3K_SOURCE_REF:-$(git rev-parse HEAD)}"; package=rpi-ton3k-pisound ;;
  arm64::general|arm64:cortex-a72:general|arm64:cortex-a76:general|amd64::general)
   source_ref=37952ece044f9af38372220bd74344dd5fd4becb; package=rpi-ton3k ;;
  *) echo "Unsupported architecture/CPU/edition"; exit 1 ;;
@@ -34,6 +34,16 @@ doc="$root/usr/share/doc/$package"
 install -Dm755 "$src/build-rpi/rpit3k" "$prefix/build-rpi/rpit3k"
 install -Dm755 "$src/build-rpi/librpit3k-daisysp.so" "$prefix/build-rpi/librpit3k-daisysp.so"
 for f in server.py tonecloud.py calibration.py capture_info.py ir_info.py web.html; do install -Dm644 "$src/rpi/$f" "$prefix/rpi/$f"; done
+if [[ "$edition" == pisound ]]; then
+ for f in practice.py data_backup.py; do install -Dm644 "$src/rpi/$f" "$prefix/rpi/$f"; done
+ bash "$src/rpi/install-score-reader.sh"
+ mkdir -p "$prefix/rpi/vendor"
+ cp -a "$src/rpi/vendor/alphatab" "$prefix/rpi/vendor/"
+ python3 - "$prefix/rpi/build-info.json" "$version" "$source_ref" <<'PY'
+import json,sys
+with open(sys.argv[1],"w") as f:json.dump(dict(edition="PiSound DEB",version=sys.argv[2],commit=sys.argv[3]),f)
+PY
+fi
 install -Dm644 "$src/LICENSE" "$doc/copyright"
 install -Dm644 "$src/UI-TONE3000-LICENSE.txt" "$doc/UI-TONE3000-LICENSE.txt"
 cp -a "$src/rpi/vendor/daisysp" "$doc/daisysp-source"
@@ -47,7 +57,7 @@ depends="python3, alsa-utils, libasound2t64, libstdc++6, libc6, systemd, adduser
 conflicts=rpi-ton3k-pisound
 if [[ "$edition" == pisound ]]; then
  conflicts=rpi-ton3k
- depends="$depends, pisound, pisound-btn, network-manager, dnsmasq-base, curl, sudo, util-linux"
+ depends="$depends, ffmpeg, pisound, pisound-btn, network-manager, dnsmasq-base, curl, sudo, util-linux"
  install -Dm644 "$packaging/pisound.service" "$root/usr/lib/systemd/system/$package.service"
  install -Dm644 "$packaging/pisound-config" "$root/etc/default/$package"
  install -Dm644 "$packaging/pisound-hotspot.service" "$root/usr/lib/systemd/system/rpi-ton3k-pisound-hotspot.service"

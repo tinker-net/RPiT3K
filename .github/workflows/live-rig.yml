@@ -1,7 +1,7 @@
 name: Native Linux regression
 on:
   push:
-    branches: [main, rpi-ui, rpi-general, development]
+    branches: [main, rpi-ui, rpi-general, development, experimental/guitar-pro]
     paths: ['rpi/**', '.github/workflows/live-rig.yml']
   workflow_dispatch:
 permissions:

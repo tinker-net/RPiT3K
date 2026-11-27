@@ -5,6 +5,17 @@ if [ "$1" = configure ]; then
   adduser --system --group --home /var/lib/rpi-ton3k-pisound --no-create-home rpi-ton3k-pisound
  fi
  install -d -m700 -o rpi-ton3k-pisound -g rpi-ton3k-pisound /var/lib/rpi-ton3k-pisound
+ # Keep the service-owned parent writable for transactional restore.
+ if [ ! -e /var/lib/rpi-ton3k-pisound/data ]; then
+  stage=$(mktemp -d /var/lib/rpi-ton3k-pisound/.migration.XXXXXX)
+  for f in library presets.json settings.json favorites.json appearance.json amp-art practice-tracks trash; do
+   if [ -e "/var/lib/rpi-ton3k-pisound/$f" ]; then
+    cp -a "/var/lib/rpi-ton3k-pisound/$f" "$stage/"
+   fi
+  done
+  chown -R rpi-ton3k-pisound:rpi-ton3k-pisound "$stage"
+  mv "$stage" /var/lib/rpi-ton3k-pisound/data
+ fi
  tmp=$(mktemp)
  trap 'rm -f "$tmp"' EXIT
  printf '%s\n' 'rpi-ton3k-pisound ALL=(root) NOPASSWD: /usr/bin/systemctl poweroff, /usr/bin/systemctl reboot' > "$tmp"
