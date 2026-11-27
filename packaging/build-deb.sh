@@ -57,7 +57,7 @@ depends="python3, alsa-utils, libasound2t64, libstdc++6, libc6, systemd, adduser
 conflicts=rpi-ton3k-pisound
 if [[ "$edition" == pisound ]]; then
  conflicts=rpi-ton3k
- depends="$depends, ffmpeg, pisound, pisound-btn, network-manager, dnsmasq-base, curl, sudo, util-linux"
+ depends="$depends, ffmpeg, openssl, pisound, pisound-btn, network-manager, dnsmasq-base, curl, sudo, util-linux"
  install -Dm644 "$packaging/pisound.service" "$root/usr/lib/systemd/system/$package.service"
  install -Dm644 "$packaging/pisound-config" "$root/etc/default/$package"
  install -Dm644 "$packaging/pisound-hotspot.service" "$root/usr/lib/systemd/system/rpi-ton3k-pisound-hotspot.service"
@@ -67,6 +67,8 @@ if [[ "$edition" == pisound ]]; then
  sed 's@/usr/local/bin/@/usr/lib/rpi-ton3k/pisound/@g' "$src/rpi/pisound-button.conf" > "$prefix/pisound/button.conf"
  install -Dm755 "$src/rpi/hotspot-check.sh" "$prefix/pisound/hotspot-check"
  install -Dm755 "$packaging/pisound-setup" "$prefix/pisound/setup"
+ install -Dm755 "$packaging/pisound-update.py" "$prefix/pisound/update.py"
+ install -Dm644 "$packaging/pisound-update.service" "$root/usr/lib/systemd/system/rpi-ton3k-update.service"
  install -Dm755 "$packaging/pisound-postinst" "$root/DEBIAN/postinst"
  install -Dm755 "$packaging/pisound-prerm" "$root/DEBIAN/prerm"
  install -Dm755 "$packaging/pisound-postrm" "$root/DEBIAN/postrm"

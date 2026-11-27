@@ -18,7 +18,7 @@ if [ "$1" = configure ]; then
  fi
  tmp=$(mktemp)
  trap 'rm -f "$tmp"' EXIT
- printf '%s\n' 'rpi-ton3k-pisound ALL=(root) NOPASSWD: /usr/bin/systemctl poweroff, /usr/bin/systemctl reboot' > "$tmp"
+ printf '%s\n' 'rpi-ton3k-pisound ALL=(root) NOPASSWD: /usr/bin/systemctl poweroff, /usr/bin/systemctl reboot, /usr/bin/systemctl start --no-block rpi-ton3k-update.service' > "$tmp"
  /usr/sbin/visudo -cf "$tmp"
  install -m0440 "$tmp" /etc/sudoers.d/rpi-ton3k-pisound
  if [ -d /run/systemd/system ]; then

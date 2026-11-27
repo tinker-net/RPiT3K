@@ -1,0 +1,8 @@
+[Unit]
+Description=Install a verified TON3K PiSound update
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /usr/lib/rpi-ton3k/pisound/update.py
+TimeoutStartSec=30min
+PrivateTmp=no
+UMask=0077
