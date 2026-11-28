@@ -2,7 +2,9 @@
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <mutex>
 #include <cmath>
-#include <nlohmann/json.hpp>
+#include <json.hpp>
+#include <algorithm>
+#include <stdexcept>
 namespace ton3k {
 class PracticePlayer {
     using Json=nlohmann::json;
