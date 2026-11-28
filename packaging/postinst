@@ -13,6 +13,11 @@ if [ "$1" = configure ]; then
   chown -R rpi-ton3k:rpi-ton3k "$stage"
   mv "$stage" /var/lib/rpi-ton3k/data
  fi
+ tmp=$(mktemp)
+ trap 'rm -f "$tmp"' EXIT
+ printf '%s\n' 'rpi-ton3k ALL=(root) NOPASSWD: /usr/bin/systemctl start --no-block rpi-ton3k-update.service' > "$tmp"
+ /usr/sbin/visudo -cf "$tmp"
+ install -m0440 "$tmp" /etc/sudoers.d/rpi-ton3k
  if [ -d /run/systemd/system ]; then
   systemctl daemon-reload
   if [ -n "${2:-}" ]; then

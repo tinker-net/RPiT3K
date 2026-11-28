@@ -55,11 +55,11 @@ if [[ "$embedded" == ON ]]; then
 fi
 printf 'source=%s\nNAM Core=%s\nCPU=%s\nEmbedded=%s\n' "$source_ref" "$pin" "${cpu:-portable}" "$embedded" > "$doc/build-provenance"
 mkdir -p "$root/DEBIAN" "$dist"
-depends="python3, alsa-utils, libasound2t64, libstdc++6, libc6, systemd, adduser, ca-certificates, ffmpeg"
+depends="python3, alsa-utils, libasound2t64, libstdc++6, libc6, systemd, adduser, ca-certificates, ffmpeg, openssl, sudo, util-linux"
 conflicts=rpi-ton3k-pisound
 if [[ "$edition" == pisound ]]; then
  conflicts=rpi-ton3k
- depends="$depends, openssl, pisound, pisound-btn, network-manager, dnsmasq-base, curl, sudo, util-linux"
+ depends="$depends, pisound, pisound-btn, network-manager, dnsmasq-base, curl"
  install -Dm644 "$packaging/pisound.service" "$root/usr/lib/systemd/system/$package.service"
  install -Dm644 "$packaging/pisound-config" "$root/etc/default/$package"
  install -Dm644 "$packaging/pisound-hotspot.service" "$root/usr/lib/systemd/system/rpi-ton3k-pisound-hotspot.service"
@@ -69,8 +69,6 @@ if [[ "$edition" == pisound ]]; then
  sed 's@/usr/local/bin/@/usr/lib/rpi-ton3k/pisound/@g' "$src/rpi/pisound-button.conf" > "$prefix/pisound/button.conf"
  install -Dm755 "$src/rpi/hotspot-check.sh" "$prefix/pisound/hotspot-check"
  install -Dm755 "$packaging/pisound-setup" "$prefix/pisound/setup"
- install -Dm755 "$packaging/pisound-update.py" "$prefix/pisound/update.py"
- install -Dm644 "$packaging/pisound-update.service" "$root/usr/lib/systemd/system/rpi-ton3k-update.service"
  install -Dm755 "$packaging/pisound-postinst" "$root/DEBIAN/postinst"
  install -Dm755 "$packaging/pisound-prerm" "$root/DEBIAN/prerm"
  install -Dm755 "$packaging/pisound-postrm" "$root/DEBIAN/postrm"
@@ -84,10 +82,20 @@ if [[ "$edition" == pisound ]]; then
 else
  install -m755 "$packaging/preinst" "$root/DEBIAN/preinst"
 fi
+install -Dm644 "$src/rpi/release_update.py" "$prefix/rpi/release_update.py"
+install -Dm755 "$packaging/update.py" "$prefix/update.py"
+mkdir -p "$root/usr/lib/systemd/system"
+sed "s/@PACKAGE@/$package/g" "$packaging/update.service" > "$root/usr/lib/systemd/system/rpi-ton3k-update.service"
+if [[ -n "${TON3K_UPDATE_PUBLIC_KEY:-}" ]]; then
+ mkdir -p "$root/usr/share/rpi-ton3k"
+ printf '%s\n' "$TON3K_UPDATE_PUBLIC_KEY" > "$root/usr/share/rpi-ton3k/update-public.pem"
+ openssl pkey -pubin -in "$root/usr/share/rpi-ton3k/update-public.pem" -noout
+fi
 cat > "$root/DEBIAN/control" <<EOF
 Package: $package
 Version: $version
 Architecture: $arch
+X-TON3K-CPU: ${cpu:-portable}
 Maintainer: RPi-Ton3K contributors
 Depends: $depends
 Conflicts: $conflicts

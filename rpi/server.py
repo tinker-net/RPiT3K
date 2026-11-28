@@ -5,6 +5,7 @@ import mimetypes
 from practice import Practice, duration as practice_duration, waveform as practice_waveform
 import tempfile
 import data_backup
+import release_update
 from tonecloud import ToneCloud
 from calibration import calibration, valid_number
 from capture_info import capture_info
@@ -753,7 +754,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def dispatch(self,post):
         # Only maintenance is exclusive; normal audio/control requests remain concurrent.
-        maintenance=post and urlsplit(self.path).path in ("/api/backup/export","/api/backup/restore")
+        maintenance=post and urlsplit(self.path).path in ("/api/backup/export","/api/backup/restore","/api/update/install")
         server=self.server
         with server.maintenance_condition:
             if server.maintenance or (maintenance and server.requests_active):
@@ -801,6 +802,11 @@ class Handler(BaseHTTPRequestHandler):
         path=urlsplit(self.path).path
         if path=="/":
             self.send(200,(ROOT/"rpi/web.html").read_bytes(),"text/html; charset=utf-8")
+        elif path=="/api/update/check":
+            try:self.send(200,release_update.check())
+            except (OSError,ValueError,subprocess.SubprocessError) as e:self.send(400,dict(error=str(e)))
+        elif path=="/api/update/status":
+            self.send(200,release_update.status())
         elif path=="/api/version":
             info=ROOT/"rpi/build-info.json"
             if info.is_file():
@@ -895,6 +901,12 @@ class Handler(BaseHTTPRequestHandler):
         c=self.server.controller
         u=urlsplit(self.path)
         try:
+            if u.path=="/api/update/install":
+                if json.loads(self.body(1024))!={"confirm":"update"}:raise ValueError("Explicit update confirmation required")
+                if c.proc is not None or c.practice_analysis.locked():raise ValueError("Turn Audio OFF and finish waveform analysis first")
+                if not release_update.check()["available"]:raise ValueError("No matching signed update")
+                subprocess.run(["/usr/bin/sudo","-n","/usr/bin/systemctl","start","--no-block","rpi-ton3k-update.service"],check=True,timeout=10)
+                self.send(200,dict(accepted=True));return
             if u.path in ("/api/backup/export","/api/backup/restore"):
                 self.backup_request(c,u.path);return
             if u.path=="/api/practice/transport":

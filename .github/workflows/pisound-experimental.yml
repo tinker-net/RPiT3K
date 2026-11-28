@@ -21,10 +21,12 @@ jobs:
     runs-on: ${{ matrix.runner }}
     container: debian:trixie
     steps:
-      - run: apt-get update && apt-get install -y git ca-certificates build-essential cmake libasound2-dev python3 nodejs npm dpkg-dev ffmpeg
+      - run: apt-get update && apt-get install -y git ca-certificates build-essential cmake libasound2-dev python3 nodejs npm dpkg-dev ffmpeg openssl
       - uses: actions/checkout@v4
       - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
-      - run: bash packaging/build-deb.sh "0.2.0~practice${GITHUB_RUN_NUMBER}" "${{ matrix.cpu }}" "${{ matrix.edition }}"
+      - env:
+          TON3K_UPDATE_PUBLIC_KEY: ${{ vars.TON3K_UPDATE_PUBLIC_KEY }}
+        run: bash packaging/build-deb.sh "0.2.0~practice${GITHUB_RUN_NUMBER}" "${{ matrix.cpu }}" "${{ matrix.edition }}"
       - run: |
           dpkg-deb --info dist/*.deb
           dpkg-deb -x dist/*.deb /tmp/ton3k
@@ -35,3 +37,40 @@ jobs:
           name: ton3k-${{ matrix.name }}-deb
           path: dist/*.deb
           if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: ton3k-*-deb
+          merge-multiple: true
+          path: dist
+      - name: Sign and publish experimental release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SIGNING_KEY: ${{ secrets.TON3K_UPDATE_PRIVATE_KEY }}
+          PUBLIC_KEY: ${{ vars.TON3K_UPDATE_PUBLIC_KEY }}
+        run: |
+          set -euo pipefail
+          cd dist
+          test "$(find . -name '*.deb' | wc -l)" -eq 6
+          if [[ -n "$SIGNING_KEY" && -n "$PUBLIC_KEY" ]]; then
+            umask 077
+            key=$(mktemp); pub=$(mktemp)
+            trap 'rm -f "$key" "$pub"' EXIT
+            printf '%s\n' "$SIGNING_KEY" > "$key"
+            printf '%s\n' "$PUBLIC_KEY" > "$pub"
+            for f in *.deb; do
+              openssl dgst -sha256 -sign "$key" -out "$f.sig" "$f"
+              openssl dgst -sha256 -verify "$pub" -signature "$f.sig" "$f"
+            done
+          else
+            echo "::warning::No signing key configured; manual-install release only"
+          fi
+          sha256sum *.deb > SHA256SUMS
+          tag="ton3k-experimental-${GITHUB_RUN_NUMBER}"
+          gh release create "$tag" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease --title "TON3K experimental ${GITHUB_RUN_NUMBER}" --notes "Six unified Debian 13 packages. PiSound Pi 5 reference; other hardware validation pending. Pi 3/Zero 2 community testing; x86 future testing. Signed assets enable in-app updates only on installations with the trusted public key." ./*.deb SHA256SUMS $(find . -name '*.sig')

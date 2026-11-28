@@ -1,0 +1,8 @@
+[Unit]
+Description=Install verified TON3K update
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /usr/lib/rpi-ton3k/update.py @PACKAGE@
+TimeoutStartSec=30min
+PrivateTmp=no
+UMask=0077
