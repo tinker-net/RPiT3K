@@ -2,6 +2,7 @@
 #include <juce_audio_utils/juce_audio_utils.h>
 #include "../rpi/plugin_chain.h"
 #include "rate_adapter.h"
+#include "practice_player.h"
 #include <atomic>
 #include <mutex>
 #include <array>
@@ -32,6 +33,7 @@ public:
         return p;
     }
     State state;
+    ton3k::PracticePlayer practice;
     Ton3k():AudioProcessor(BusesProperties().withInput("Input",juce::AudioChannelSet::mono(),true).withOutput("Output",juce::AudioChannelSet::stereo(),true)),state(*this,nullptr,"TON3K",layout()){
         for(auto* id:ids) params.push_back(state.getRawParameterValue(id));
         ton3k::Options initial; initial.output=.5f; current=new ton3k::Chain(initial);
@@ -51,7 +53,7 @@ public:
         bool valid=std::isfinite(sr)&&sr>=8000&&sr<=384000;hostRate.store(sr);direct=std::abs(sr-48000.)<.01;setLatencySamples(valid?(direct?64:adapter.prepare(sr)):0);supported.store(valid);
         pos=0;std::fill_n(out,64,0.f);std::fill_n(in,64,0.f);
     }
-    void releaseResources() override{}
+    void releaseResources() override{practice.stop();}
     void processBlock(juce::AudioBuffer<float>& buf,juce::MidiBuffer&) override{
         juce::ScopedNoDenormals guard;
         if(!supported.load()){
@@ -69,6 +71,7 @@ public:
             outputPeak.store(std::max(outputPeak.load(),std::abs(y)));
             for(int c=0;c<getTotalNumOutputChannels();++c)buf.setSample(c,i,y);
         }
+        if(!isNonRealtime())practice.mix(buf,getTotalNumOutputChannels(),hostRate.load());
     }
 
     bool hasEditor() const override{return true;}
@@ -156,9 +159,14 @@ public:
     }
     Json webRequest(const juce::String& path,const juce::String& body){
         if(path=="/api/status")return webStatus();
+        if(path=="/api/practice")return practice.list();
+        if(path=="/api/scores")return practice.list(true);
+        if(path=="/api/practice/status")return practice.status();
         if(path=="/api/levels")return Json{{"valid",supported.load()},{"input",inputPeak.exchange(0)},{"output",outputPeak.exchange(0)}};
         auto j=body.isEmpty()?Json::object():Json::parse(body.toStdString());
-        if(path=="/api/version")return Json{{"edition","Native"},{"version","0.3 development"},{"commit","shared UI"}};
+        if(path=="/api/practice/waveform")return practice.waveform(juce::String(j.at("name").get<std::string>()));
+        if(path=="/api/practice/transport")return practice.transport(j);
+        if(path=="/api/version")return Json{{"edition","Native"},{"version","0.3.1 development"},{"commit","shared UI"}};
         if(path=="/api/settings"){ {std::lock_guard<std::mutex> lock(configLock);auto x=j.at("reference_dbu");if(!x.is_null()&&(!x.is_number()||x.get<double>()< -60||x.get<double>()>30))throw std::runtime_error("Invalid ADC reference");adcReference=x;}return webStatus();}
         if(path=="/api/appearance"){std::lock_guard<std::mutex> lock(configLock);for(auto& [k,val]:j.at("values").items())appearance[k]=val;return Json{{"appearance",appearance}};}
         if(path=="/api/calibrate"){
@@ -403,6 +411,30 @@ class WebEditor final:public juce::AudioProcessorEditor{
     Browser::Options options(){
         auto o=Browser::Options{}.withNativeIntegrationEnabled()
             .withResourceProvider([](const juce::String& path)->std::optional<Browser::Resource>{
+                if(path.startsWith("/score-assets/")){
+                    auto file=path.fromLastOccurrenceOf("/",false,false);
+                    for(int i=0;i<BinaryData::namedResourceListSize;++i){
+                        const char* key=BinaryData::namedResourceList[i];
+                        if(file!=juce::String(BinaryData::getNamedResourceOriginalFilename(key)))continue;
+                        int n=0;auto* data=BinaryData::getNamedResource(key,n);
+                        if(!data||n<=0)return std::nullopt;
+                        auto* begin=reinterpret_cast<const std::byte*>(data);
+                        juce::String mime=file.endsWith(".js")?"text/javascript":file.endsWith(".woff2")?"font/woff2":file.endsWith(".woff")?"font/woff":"application/octet-stream";
+                        return Browser::Resource{std::vector<std::byte>(begin,begin+n),mime};
+                    }
+                    return std::nullopt;
+                }
+                if(path.startsWith("/native-score/")||path.startsWith("/native-audio/")){
+                    try{
+                        bool score=path.startsWith("/native-score/");
+                        auto name=juce::URL::removeEscapeChars(path.substring(score?14:14));
+                        auto f=ton3k::PracticePlayer::file(name,score);
+                        if(f.getSize()<=0||f.getSize()>(score?64LL:128LL)*1024*1024)return std::nullopt;
+                        juce::MemoryBlock bytes;if(!f.loadFileAsData(bytes))return std::nullopt;
+                        auto* begin=static_cast<const std::byte*>(bytes.getData());
+                        return Browser::Resource{std::vector<std::byte>(begin,begin+bytes.getSize()),"application/octet-stream"};
+                    }catch(...){return std::nullopt;}
+                }
                 if(path!="/"&&path!="/plugin.html")return std::nullopt;
                 auto* begin=reinterpret_cast<const std::byte*>(BinaryData::plugin_html);
                 return Browser::Resource{std::vector<std::byte>(begin,begin+BinaryData::plugin_htmlSize),"text/html"};
@@ -411,6 +443,18 @@ class WebEditor final:public juce::AudioProcessorEditor{
                 try{
                     if(args.size()<2)throw std::runtime_error("Invalid request");
                     auto path=args[0].toString();
+                    if(path=="/plugin/import-practice"||path=="/plugin/import-score"){
+                        bool score=path=="/plugin/import-score";
+                        chooser=std::make_unique<juce::FileChooser>(score?"Import Guitar Pro score":"Import practice audio",juce::File{},score?"*.gp;*.gp3;*.gp4;*.gp5;*.gpx":"*.wav;*.flac;*.mp3;*.aif;*.aiff;*.ogg");
+                        auto safe=juce::Component::SafePointer<WebEditor>(this);
+                        chooser->launchAsync(juce::FileBrowserComponent::openMode|juce::FileBrowserComponent::canSelectFiles,[safe,done,score](const juce::FileChooser& c){
+                            if(safe==nullptr)return;
+                            try{if(!c.getResult().existsAsFile()){done(juce::String("{\"cancelled\":true}"));return;}
+                                auto name=ton3k::PracticePlayer::import(c.getResult(),score);
+                                done(juce::String(Ton3k::Json{{"name",name.toStdString()}}.dump()));
+                            }catch(const std::exception& e){done(juce::String(Ton3k::Json{{"error",e.what()}}.dump()));}
+                        });return;
+                    }
                     if(path=="/plugin/import"||path=="/plugin/import-folder"){
                         bool directory=path=="/plugin/import-folder";chooser=std::make_unique<juce::FileChooser>(directory?"Import library folder":"Import NAM and WAV files",juce::File{},directory?"*":"*.nam;*.wav");
                         auto safe=juce::Component::SafePointer<WebEditor>(this);
@@ -437,10 +481,11 @@ public:
         auto o=options();
         if(Browser::areOptionsSupported(o)){browser=std::make_unique<Browser>(o);addAndMakeVisible(*browser);browser->goToURL(Browser::getResourceProviderRoot());}
         else{fallback=std::make_unique<Editor>(p);addAndMakeVisible(*fallback);switcher.setEnabled(false);}
-        addAndMakeVisible(switcher);switcher.onClick=[this]{toggle();};
+        switcher.setVisible(false);
         setResizable(true,true);setResizeLimits(760,560,2000,1400);setSize(1280,820);
     }
-    void resized() override{auto r=getLocalBounds();switcher.setBounds(r.removeFromTop(24).removeFromRight(150));if(browser)browser->setBounds(r);if(fallback)fallback->setBounds(r);}
+    ~WebEditor() override{p.practice.stop();}
+    void resized() override{auto r=getLocalBounds();if(browser)browser->setBounds(r);if(fallback)fallback->setBounds(r);}
 };
 
 juce::AudioProcessorEditor* Ton3k::createEditor(){return new WebEditor(*this);}

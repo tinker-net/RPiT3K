@@ -27,4 +27,29 @@ replace("</head>","<style>.hiz-panel,.audio-period-row,#poweroff,#cloudOpen,#xru
 replace("</script></body></html>","el(\"practiceOutput\").value=\"browser\";el(\"metroOutput\").value=\"browser\";el(\"practicePitch\").disabled=true;el(\"practicePitchValue\").textContent=\"Unavailable\";window.addEventListener(\"pagehide\",()=>{browserRelease();metroBrowserStop();});\n</script></body></html>")
 # Keep unsupported device-only sections out of the visible editor while retaining shared DOM hooks.
 src=src.replace("<h2>Backup &amp; restore</h2>","<h2 hidden>Backup &amp; restore</h2>").replace("<h2>Software updates</h2>","<h2 hidden>Software updates</h2>")
+# Native 0.3.1: persistent files and DAW playback at original pitch/rate.
+start=src.index("const nativeTracks=new Map();")
+end=src.index(" if(!window.__JUCE__?.backend)",start)
+src=src[:start]+"""async function request(path,body){
+ const u=new URL(path,location.href);
+ if(u.pathname==="/api/practice/waveform"){path=u.pathname;body=JSON.stringify({name:u.searchParams.get("name")});}
+"""+src[end:]
+replace('let practiceRoute="browser"','let practiceRoute="device"')
+replace('browserAudio.src=URL.createObjectURL(nativeTracks.get(name));','const media=await fetch("/native-audio/"+encodeURIComponent(name));if(!media.ok)throw Error("Cannot open audio");browserAudio.src=URL.createObjectURL(await media.blob());')
+replace('el("practiceImport").onclick=()=>el("practiceFile").click();','el("practiceImport").onclick=async()=>{try{const r=await request("/plugin/import-practice");if(r.cancelled)return;await practiceList();el("practiceTrack").value=r.name;await el("practiceTrack").onchange();}catch(e){msg(e.message);}};')
+replace('$("scoreImport").onclick=()=>$("scoreFile").click();','$("scoreImport").onclick=async()=>{try{const r=await request("/plugin/import-score");if(r.cancelled)return;await refreshScores(r.name);await loadSavedScore(r.name);}catch(e){message(e.message);}};')
+replace('fetch("/api/scores/file?name="+encodeURIComponent(name))','fetch("/native-score/"+encodeURIComponent(name))')
+replace('Run bash rpi/install-score-reader.sh on the Pi','Embedded score renderer unavailable')
+replace('#practiceOutput,#metroOutput,#scoreToggle,','#metroOutput,')
+replace('#practicePitch{display:none!important} #practicePitchValue{display:none!important}','label:has(#practicePitch){display:none!important} .library-icon[title="File options"],.library-icon[title="Folder options"],.library-icon[title="Import into this folder"],#importDrop,#folderTarget{display:none!important}')
+replace('el("practiceOutput").value="browser";','el("practiceOutput").value="device";el("practiceOutput").options[0].textContent="DAW";el("practiceOutput").options[1].textContent="Local";el("practiceSpeed").disabled=true;el("practiceSpeed").title="Use Local output for speed changes";')
+replace('paused=false;practiceRoute=next;','paused=false;practiceRoute=next;el("practiceSpeed").disabled=next==="device";if(next==="device"){el("practiceSpeed").value=1;el("practiceRate").textContent="100%";}')
+replace('el("practicePitch").disabled=next==="browser";','el("practicePitch").disabled=true;')
+replace('Browser cannot decode this track. Try Device output.','Local playback cannot decode this track. Try DAW output.')
+replace('if((s.button_revision||0)>=(state.button_revision||0)){state=s;if(s.presets[slot])setStompUI(s.presets[slot].nam1_enabled!==false);status();}','if((s.button_revision||0)>=(state.button_revision||0)){const prior=state.presets[slot];state=s;const focus=document.activeElement;if(s.presets[slot]&&JSON.stringify(prior)!==JSON.stringify(s.presets[slot])&&!document.querySelector("dialog[open]")&&!focus?.matches("input,select,textarea")&&!document.querySelector(".dial:active"))render(s.presets[slot]);status();}')
+# Hide the entire unsupported maintenance blocks, not only buttons.
+a=src.index("<hr><h2 hidden>Backup &amp; restore")
+b=src.index("</dialog>",a)
+src=src[:a]+"<div hidden>"+src[a:b]+"</div>"+src[b:]
+replace('Audio settings & diagnostics','Host audio & diagnostics')
 Path(sys.argv[2]).write_text(src)
