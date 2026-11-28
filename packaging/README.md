@@ -1,18 +1,21 @@
-# Debian packages — isolated editions
+# Debian packages — shared source, separate installation profiles
 
-Debian 13 / Raspberry Pi OS Trixie 64-bit. Experimental until fresh hardware installation is verified.
+Debian 13 / Raspberry Pi OS Trixie 64-bit. Experimental until hardware acceptance.
 
-| Artifact | Package | Source edition | Target |
+| Edition | Target | Default backend | Hardware validation |
 | --- | --- | --- | --- |
-| rpi-ton3k-pisound | rpi-ton3k-pisound | rpi-ui | Pi 5 / Cortex-A76 + original Blokas Pisound |
-| rpi-ton3k-pi5 | rpi-ton3k | rpi-general | Pi 5 / Cortex-A76 with any supported ALSA device |
-| rpi-ton3k-pi4 | rpi-ton3k | rpi-general | Pi 4 / Cortex-A72 |
-| rpi-ton3k-arm64 | rpi-ton3k | rpi-general | portable ARM64 |
-| rpi-ton3k-amd64 | rpi-ton3k | rpi-general | x86-64 |
+| PiSound | Pi 5 / Cortex-A76 | Embedded + NAM Core | Reference hardware; new DEB and Practice/GP acceptance pending |
+| General | Pi 5 / Cortex-A76 | Embedded + NAM Core | Pending |
+| General | Pi 4 / Cortex-A72 | NAM Core | Pending |
+| General | Pi 3/3+ and Zero 2 W / Cortex-A53 | NAM Core | Community testing requested; maintainer will not test these targets |
+| General | Portable ARM64 | NAM Core | Pending community validation |
+| General | AMD64 / x86-64 | NAM Core | Maintainer intends to test later; no scheduled date |
+
+The dedicated PiSound edition deliberately targets Pi 5 (and the installer permits Compute Module 5). Its A76 binary, fixed low-latency defaults and autonomous button/hotspot integration are not validated for Pi 4. This is a TON3K distribution/support decision, not an assertion that Blokas PiSound is incompatible with Pi 4. Pi 4 users may try the General A72 package with officially installed PiSound and configurable ALSA, without automatic PiSound button/hotspot provisioning. No 32-bit builds or original Pi Zero/Zero W support. Successful CI builds are not evidence of sustainable real-time performance on actual hardware. Pi 3/Zero 2 W validation is explicitly a community contribution, not a prerequisite for closing the Pi 5 edition.
 
 Install only one variant. Packages conflict with each other and share application installation paths; data directories are separate. Stop AND disable any existing source service before installation. No automatic migration, no bundled personal captures, passwords, tokens or presets.
 
-Builds use immutable source revisions listed in build-deb.sh, pinned NAM Core and Embedded v2.0.0. Both editions include the actual native engine, shared DaisySP library/source, Python modules, web UI and license notices. Build runs CTest, production bypass verification and Hi-Z regression. The staged binary is also verified. Generic package CI installs/reinstalls/removes in a container. Pisound CI verifies extracted contents, scripts and executable offline; this is not a physical installation test. Releases remain prereleases.
+Both editions build the same checked-out revision (or explicit RPIT3K_SOURCE_REF), with pinned NAM Core and optional Embedded v2.0.0 on A76. Both editions include the actual native engine, shared DaisySP library/source, Python modules, web UI and license notices. Build runs CTest, production bypass verification and Hi-Z regression. The staged binary is also verified. Generic package CI installs/reinstalls/removes in a container. Pisound CI verifies extracted contents, scripts and executable offline; this is not a physical installation test. Releases remain prereleases.
 
 ## Dedicated PiSound package
 
@@ -37,24 +40,24 @@ On the booted target the package configures and enables rpi-ton3k-pisound.servic
 
 Hotspot RPiT3K, http://10.42.0.1, only when disconnected or manually enabled. Existing RPiT3K-fallback profile is reused without changing credentials. A new profile uses a unique generated WPA2 password: sudo cat /var/lib/rpi-ton3k-pisound-integration/hotspot-password (do not share it). Existing profile credentials are not copied. The timer does not intentionally interrupt working network connections. Manual OFF inhibits automatic fallback until reboot/manual ON.
 
-Data: /var/lib/rpi-ton3k-pisound. Migration is manual with both source and package services stopped; back up ~/.local/share/rpit3k, copy only the desired library/settings/presets/favorites/artwork and set owner rpi-ton3k-pisound. Do not copy credentials into a distributable package. Remove with sudo apt remove rpi-ton3k-pisound; removal on a booted system restores replaced button mappings, removes package-owned hotspot and power permission, retains personal data. Source service is not re-enabled automatically. If configured in a chroot, boot the target and run sudo dpkg-reconfigure rpi-ton3k-pisound. Pi 4 Pisound package is not produced yet.
+Data: /var/lib/rpi-ton3k-pisound/data. Migration is manual with both source and package services stopped; back up ~/.local/share/rpit3k, copy only the desired library/settings/presets/favorites/artwork and set owner rpi-ton3k-pisound. Do not copy credentials into a distributable package. Remove with sudo apt remove rpi-ton3k-pisound; removal on a booted system restores replaced button mappings, removes package-owned hotspot and power permission, retains personal data. Source service is not re-enabled automatically. If configured in a chroot, boot the target and run sudo dpkg-reconfigure rpi-ton3k-pisound. Pi 4 Pisound package is not produced yet.
 
 ## Generic packages
 
     sudo apt install ./rpi-ton3k_*.deb
 
-Install a single CPU variant. No Pisound driver dependency, button mapping/helper, hotspot unit, network provisioning or sudo power permission is shipped. Default localhost:8080, cloud disabled, configurable PCM/channel routing, 256 x 3, unknown ADC reference, audio OFF. Use SSH forwarding or explicitly configure trusted LAN access. Data /var/lib/rpi-ton3k survives removal/purge. Remove with sudo apt remove rpi-ton3k.
+Install a single CPU variant. No Pisound driver dependency, button mapping/helper, hotspot unit, network provisioning or sudo power permission is shipped. Default localhost:8080, cloud disabled, configurable PCM/channel routing, 256 x 3, unknown ADC reference, audio OFF. Use SSH forwarding or explicitly configure trusted LAN access. Data /var/lib/rpi-ton3k/data survives removal/purge. Remove with sudo apt remove rpi-ton3k.
 
 ## Local build
 
-From deb-packaging with git, build-essential, cmake, libasound2-dev, python3, dpkg-dev and ca-certificates:
+From the experimental/guitar-pro branch with git, build-essential, cmake, libasound2-dev, python3, npm, dpkg-dev and ca-certificates:
 
     bash packaging/build-deb.sh 0.1.0~preview1 cortex-a76 pisound
     bash packaging/build-deb.sh 0.1.0~preview1 cortex-a76 general
 
-The first command is ARM64 only. Generic CPU argument can be empty for portable ARM64/AMD64 or cortex-a72 for Pi 4. Update source pins deliberately when promoting a new tested edition. The generic source pin is its existing branch revision; it does not automatically inherit newer Pi-only UI changes. See build-provenance in installed documentation.
+The first command is ARM64 only. Generic CPU argument can be empty for portable ARM64/AMD64, cortex-a72 for Pi 4 or cortex-a53 for Pi 3/Zero 2 W. Both editions use HEAD by default. See build-provenance in installed documentation.
 
-[Build artifacts](https://github.com/tinker-net/RPiT3K/actions/workflows/deb-packaging.yml) · [Prereleases](https://github.com/tinker-net/RPiT3K/releases) · [Pisound source guide](https://github.com/tinker-net/RPiT3K/blob/rpi-ui/README-PISOUND.md).
+[Build artifacts](https://github.com/tinker-net/RPiT3K/actions/workflows/pisound-experimental.yml) · [Prereleases](https://github.com/tinker-net/RPiT3K/releases) · [Pisound source guide](https://github.com/tinker-net/RPiT3K/blob/rpi-ui/README-PISOUND.md).
 
 ## Current shared controls and library
 
@@ -72,4 +75,4 @@ The first command is ARM64 only. Generic CPU argument can be empty for portable 
 [Five-variant package CI passed at 8ab4841](https://github.com/tinker-net/RPiT3K/actions/runs/45853780731), using source pins 0275920 (PiSound) and 37952ec (General). Physical installation and browser/ALSA tests are not established by this run. See the [current project state and acceptance checklist](https://github.com/tinker-net/RPiT3K/blob/rpi-ui/docs/PROJECT_STATE.md). Documentation-only commits do not change the functional source pins.
 
 ## Experimental PiSound package (Practice)
-On experimental/guitar-pro the PiSound build uses HEAD (or explicit RPIT3K_SOURCE_REF) and bundles FFmpeg dependency, score assets and new modules. Requires npm at build time. The dedicated service stores data in /var/lib/rpi-ton3k-pisound/data; the previous package roots are copied on first upgrade and retained. For source migration export a verified backup in Settings, stop and disable source service and hotspot timer, install matching DEB and restore through Settings with Audio OFF. Do not delete the source data until physical acceptance. No automatic root-level installation via LAN web UI; Settings displays version and links releases. Generic edition pins unchanged. Experimental workflow uploads DEB only if build checks pass; no public release yet.
+On experimental/guitar-pro the PiSound build uses HEAD (or explicit RPIT3K_SOURCE_REF) and bundles FFmpeg dependency, score assets and new modules. Requires npm at build time. The dedicated service stores data in /var/lib/rpi-ton3k-pisound/data; the previous package roots are copied on first upgrade and retained. For source migration export a verified backup in Settings, stop and disable source service and hotspot timer, install matching DEB and restore through Settings with Audio OFF. Do not delete the source data until physical acceptance. No automatic root-level installation via LAN web UI; Settings displays version and links releases. Both editions now use the shared source. Experimental workflow uploads DEB only if build checks pass; no public release yet.

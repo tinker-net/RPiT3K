@@ -20,7 +20,7 @@ A dedicated guitar rig for Raspberry Pi 5 and Blokas PiSound. Browser control, p
 
 ## TON3K Standalone
 
-A hardware-independent Linux guitar processor for ARM64 and x86-64, using configurable ALSA input/output. No PiSound driver, button or hotspot dependency. Raspberry Pi 4/5 and compatible 64-bit Linux systems.
+A hardware-independent Linux guitar processor for ARM64 and x86-64, using configurable ALSA input/output. No PiSound driver, button or hotspot dependency. Raspberry Pi 4/5 and compatible 64-bit Linux systems. Experimental Cortex-A53 builds for Pi 3/3+ and Zero 2 W require community validation.
 
 [Installation guide](README-GENERAL.md) · [Debian packages](https://github.com/tinker-net/RPiT3K/releases/tag/deb-preview-54)
 
@@ -61,6 +61,21 @@ The current published packages are experimental. Install only one variant; read 
 
 These CI artifacts require GitHub login and expire. Native release publication is a separate manual promotion step after license compliance and host validation. macOS is ad-hoc signed, not notarized; AU registration is not yet confirmed. PiPedal does not automatically display the desktop LV2 editor.
 
+## Experimental hardware support
+
+| Edition | Target | Default backend | Hardware validation |
+| --- | --- | --- | --- |
+| PiSound | Pi 5 / Cortex-A76 | Embedded + NAM Core | Reference hardware; new DEB and Practice/GP acceptance pending |
+| General | Pi 5 / Cortex-A76 | Embedded + NAM Core | Pending |
+| General | Pi 4 / Cortex-A72 | NAM Core | Pending |
+| General | Pi 3/3+ and Zero 2 W / Cortex-A53 | NAM Core | Community testing requested; maintainer will not test these targets |
+| General | Portable ARM64 | NAM Core | Pending community validation |
+| General | AMD64 / x86-64 | NAM Core | Maintainer intends to test later; no scheduled date |
+
+The dedicated PiSound edition deliberately targets Pi 5 (and the installer permits Compute Module 5). Its A76 binary, fixed low-latency defaults and autonomous button/hotspot integration are not validated for Pi 4. This is a TON3K distribution/support decision, not an assertion that Blokas PiSound is incompatible with Pi 4. Pi 4 users may try the General A72 package with officially installed PiSound and configurable ALSA, without automatic PiSound button/hotspot provisioning. No 32-bit builds or original Pi Zero/Zero W support. Successful CI builds are not evidence of sustainable real-time performance on actual hardware. Pi 3/Zero 2 W validation is explicitly a community contribution, not a prerequisite for closing the Pi 5 edition.
+
+[Unified experimental build workflow](https://github.com/tinker-net/RPiT3K/actions/workflows/pisound-experimental.yml). These builds are not the older published DEBs linked above.
+
 ## Documentation
 
 - [PiSound](README-PISOUND.md)
@@ -75,7 +90,7 @@ These CI artifacts require GitHub login and expire. Native release publication i
 
 ## Project status
 
-PiSound is the reference hardware. Standalone uses its own validated source snapshot pending full integration. Native shares DSP components but still has a separate chain implementation. No personal captures, API credentials or commercial IRs are distributed.
+PiSound is the reference hardware. The experimental unified DEBs share one source revision; published preview-54 packages remain older snapshots. Native shares DSP components but still has a separate chain implementation. No personal captures, API credentials or commercial IRs are distributed.
 
 ## Credits and licensing
 
