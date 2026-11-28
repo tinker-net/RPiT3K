@@ -1,7 +1,7 @@
 name: TON3K VST3 and AU preview
 on:
   push:
-    branches: [vst3]
+    branches: [vst3, native-unified]
   workflow_dispatch:
 jobs:
   build:

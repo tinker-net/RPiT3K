@@ -75,7 +75,7 @@ public:
     juce::AudioProcessorEditor* createEditor() override;
     void getStateInformation(juce::MemoryBlock& b) override{
         auto tree=state.copyState();{std::lock_guard<std::mutex> lock(configLock);savedSlots[std::to_string(activeSlot)]=webPreset();
-        for(int i=0;i<4;++i)tree.setProperty("file"+juce::String(i),paths[i],nullptr); tree.setProperty("webSlots",juce::String(savedSlots.dump()),nullptr); tree.setProperty("webActive",activeSlot,nullptr); nlohmann::json lib=nlohmann::json::object();for(const auto& [k,v]:library)lib[k.toStdString()]=v.toStdString();tree.setProperty("webLibrary",juce::String(lib.dump()),nullptr);}
+        for(int i=0;i<4;++i)tree.setProperty("file"+juce::String(i),paths[i],nullptr); tree.setProperty("webSlots",juce::String(savedSlots.dump()),nullptr); tree.setProperty("webActive",activeSlot,nullptr);tree.setProperty("adcReference",juce::String(adcReference.dump()),nullptr);tree.setProperty("appearance",juce::String(appearance.dump()),nullptr); nlohmann::json lib=nlohmann::json::object();for(const auto& [k,v]:library)lib[k.toStdString()]=v.toStdString();tree.setProperty("webLibrary",juce::String(lib.dump()),nullptr);}
         if(auto xml=tree.createXml())copyXmlToBinary(*xml,b);
     }
     void setStateInformation(const void* data,int size) override{
@@ -84,7 +84,7 @@ public:
                 state.replaceState(t);
                 std::lock_guard<std::mutex> lock(configLock);
                 for(int i=0;i<4;++i)paths[i]=t.getProperty("file"+juce::String(i)).toString();
-                try{savedSlots=nlohmann::json::parse(t.getProperty("webSlots","{}").toString().toStdString());activeSlot=juce::jlimit(1,4,int(t.getProperty("webActive",1)));if(savedSlots.contains(std::to_string(activeSlot))){auto& pr=savedSlots[std::to_string(activeSlot)];slim=pr.value("slim",1.0);slim2=pr.value("slim2",1.0);}auto lib=nlohmann::json::parse(t.getProperty("webLibrary","{}").toString().toStdString());for(auto it=lib.begin();it!=lib.end();++it)library[juce::String(it.key())]=juce::String(it.value().get<std::string>());}catch(...){savedSlots=nlohmann::json::object();}dirty=true;wake.notify_one();
+                try{adcReference=nlohmann::json::parse(t.getProperty("adcReference","null").toString().toStdString());appearance=nlohmann::json::parse(t.getProperty("appearance","{}").toString().toStdString());savedSlots=nlohmann::json::parse(t.getProperty("webSlots","{}").toString().toStdString());activeSlot=juce::jlimit(1,4,int(t.getProperty("webActive",1)));if(savedSlots.contains(std::to_string(activeSlot))){auto& pr=savedSlots[std::to_string(activeSlot)];slim=pr.value("slim",1.0);slim2=pr.value("slim2",1.0);}auto lib=nlohmann::json::parse(t.getProperty("webLibrary","{}").toString().toStdString());for(auto it=lib.begin();it!=lib.end();++it)library[juce::String(it.key())]=juce::String(it.value().get<std::string>());}catch(...){savedSlots=nlohmann::json::object();}dirty=true;wake.notify_one();
             }
         }
     }
@@ -124,13 +124,14 @@ public:
     }
     nlohmann::json savedSlots=nlohmann::json::object();
     int activeSlot=1;
+    nlohmann::json adcReference=nullptr, appearance=nlohmann::json::object();
 
     using Json=nlohmann::json;
     static constexpr const char* webKeys[]={"input","output","bass","mid","treble","gate","comp","comp_post","reverb","decay","reverb_type","ir_mix","hiz","hiz_profile","chorus","chorus_rate","chorus_depth","delay","delay_ms","delay_feedback"};
     void importFile(const juce::File& file){juce::Array<juce::File> a;a.add(file);importFiles(a);}
     Json webPreset(){
         Json j=Json::object();
-        for(int i=0;i<20;++i)j[webKeys[i]]=v(i);
+        for(int i=0;i<20;++i)j[webKeys[i]]=(i==12||i==13)?0.f:v(i);
         j["nam1_enabled"]=v(20)>.5f;j["bypass_nam2"]=v(21)<.5f;j["bypass_ir"]=v(22)<.5f;
         j["slim"]=slim;j["slim2"]=slim2;
         const char* keys[]={"model","second","ir","ir2"};
@@ -151,12 +152,25 @@ public:
         loadLibrary(); auto currentPreset=webPreset();savedSlots[std::to_string(activeSlot)]=currentPreset;
         for(int i=1;i<=4;++i){auto key=std::to_string(i);if(!savedSlots.contains(key)){auto empty=currentPreset;for(auto* k:{"model","second","ir","ir2"})empty[k]="";savedSlots[key]=empty;}}
         Json files=Json::array(), fs=Json::array(), fav=Json::array();for(const auto& kv:library)files.push_back(kv.first.toStdString());for(auto& k:folders)fs.push_back(k.toStdString());for(auto& k:favorites)fav.push_back(k.toStdString());
-        return Json{{"files",files},{"folders",fs},{"favorites",fav},{"presets",savedSlots},{"active",std::to_string(activeSlot)},{"settings",{{"last",std::to_string(activeSlot)},{"reference_dbu",nullptr}}},{"running",supported.load()},{"host_rate",hostRate.load()},{"host_latency",getLatencySamples()},{"logs",Json::array({message.toStdString()})},{"cloud_enabled",false},{"poweroff_enabled",false},{"amp_art",Json::object()}};
+        return Json{{"files",files},{"folders",fs},{"favorites",fav},{"presets",savedSlots},{"active",std::to_string(activeSlot)},{"settings",{{"last",std::to_string(activeSlot)},{"reference_dbu",adcReference}}},{"running",supported.load()},{"host_rate",hostRate.load()},{"host_latency",getLatencySamples()},{"logs",Json::array({message.toStdString()})},{"cloud_enabled",false},{"poweroff_enabled",false},{"amp_art",Json::object()},{"appearance",appearance}};
     }
     Json webRequest(const juce::String& path,const juce::String& body){
         if(path=="/api/status")return webStatus();
         if(path=="/api/levels")return Json{{"valid",supported.load()},{"input",inputPeak.exchange(0)},{"output",outputPeak.exchange(0)}};
         auto j=body.isEmpty()?Json::object():Json::parse(body.toStdString());
+        if(path=="/api/version")return Json{{"edition","Native"},{"version","0.3 development"},{"commit","shared UI"}};
+        if(path=="/api/settings"){ {std::lock_guard<std::mutex> lock(configLock);auto x=j.at("reference_dbu");if(!x.is_null()&&(!x.is_number()||x.get<double>()< -60||x.get<double>()>30))throw std::runtime_error("Invalid ADC reference");adcReference=x;}return webStatus();}
+        if(path=="/api/appearance"){std::lock_guard<std::mutex> lock(configLock);for(auto& [k,val]:j.at("values").items())appearance[k]=val;return Json{{"appearance",appearance}};}
+        if(path=="/api/calibrate"){
+            std::lock_guard<std::mutex> lock(configLock);
+            auto it=library.find(juce::String(j.at("model").get<std::string>()));if(it==library.end())throw std::runtime_error("Unknown capture");
+            std::ifstream f(std::filesystem::u8path(it->second.toStdString()));Json model;f>>model;
+            auto level=[](const Json& m)->Json{if(!m.is_object()||!m.contains("metadata")||!m["metadata"].is_object())return nullptr;auto x=m["metadata"].value("input_level_dbu",Json(nullptr));if(x.is_number()&&x.get<double>()>=-60&&x.get<double>()<=60)return x;return nullptr;};
+            auto l=level(model);
+            if(model.value("architecture",std::string{})=="SlimmableContainer"&&model.contains("config")&&model["config"].contains("submodels")){auto& subs=model["config"]["submodels"];if(subs.is_array()&&!subs.empty()){auto* selected=&subs.back();for(auto& sub:subs)if(sub.contains("max_value")&&sub["max_value"].is_number()&&j.value("slim",1.)<sub["max_value"].get<double>()){selected=&sub;break;}if(selected->contains("model")){auto child=level((*selected)["model"]);if(!child.is_null())l=child;}}}
+            Json result={{"model_dbu",l},{"reference_dbu",adcReference},{"gain",nullptr},{"db",nullptr}};
+            if(l.is_null())result["status"]="missing_metadata";else if(adcReference.is_null())result["status"]="missing_adc";else{double db=adcReference.get<double>()-l.get<double>(),gain=std::pow(10.,db/20.);result["db"]=db;result["status"]=gain>=.000001&&gain<=2?"ready":"out_of_range";if(gain>=.000001&&gain<=2)result["gain"]=gain;}return result;
+        }
         if(path=="/api/edit"||path=="/api/save"){
             auto pr=j.at("preset");
             std::lock_guard<std::mutex> lock(configLock);
@@ -166,7 +180,7 @@ public:
             for(int i=0;i<4;++i)if(paths[i]!=newPaths[i]){paths[i]=newPaths[i];dirty=true;}
             double ns=pr.value("slim",1.0),ns2=pr.value("slim2",1.0);if(ns!=slim||ns2!=slim2){slim=ns;slim2=ns2;dirty=true;} activeSlot=next;savedSlots[std::to_string(next)]=pr;
             auto set=[&](int i,float x){if(auto* q=state.getParameter(ids[i])){auto norm=q->convertTo0to1(x);if(std::abs(q->getValue()-norm)>1e-7f){q->beginChangeGesture();q->setValueNotifyingHost(norm);q->endChangeGesture();}}};
-            for(int i=0;i<20;++i)if(pr.contains(webKeys[i])&&pr[webKeys[i]].is_number())set(i,pr[webKeys[i]].get<float>());
+            for(int i=0;i<20;++i)if(i!=12&&i!=13&&pr.contains(webKeys[i])&&pr[webKeys[i]].is_number())set(i,pr[webKeys[i]].get<float>());
             set(20,pr.value("nam1_enabled",true)?1:0);set(21,pr.value("bypass_nam2",false)?0:1);set(22,pr.value("bypass_ir",false)?0:1);wake.notify_one();
          }else if(path=="/api/favorite"||path=="/api/folder"){
             std::lock_guard<std::mutex> lock(configLock);std::lock_guard<std::mutex> g(libraryMutex());mergeLibraryUnlocked();
@@ -201,7 +215,7 @@ private:
                 retired.store(current,std::memory_order_release);current=next;fade=true;
             }
         }
-        current->controls(v(0),v(1),v(2),v(3),v(4),v(5),v(6),v(7),v(8),v(9),v(10),v(11),v(12),v(13),v(14),v(15),v(16),v(17),v(18),v(19));
+        current->controls(v(0),v(1),v(2),v(3),v(4),v(5),v(6),v(7),v(8),v(9),v(10),v(11),0.f,0.f,v(14),v(15),v(16),v(17),v(18),v(19));
         current->set_stomp(v(20)>.5f);
         std::copy_n(src,64,current->x);current->process();
         for(int j=0;j<64;++j)dst[j]=current->y[j]*(fade?float(j)/63.f:1.f);
@@ -357,7 +371,7 @@ public:
             r.removeFromTop(115);
             auto row=r.removeFromTop(r.getHeight()*2/3);
             for(int i=0;i<6;++i)place(i,row.removeFromLeft(row.getWidth()/(6-i)));
-            auto bottom=r;int indices[]={11,12,13};for(int j=0;j<3;++j)place(indices[j],bottom.removeFromLeft(bottom.getWidth()/(3-j)));
+            auto bottom=r;place(11,bottom);
         }else{
             int indices[]={6,7,8,9,10,14,15,16,17,18,19};
             for(int j=0;j<2;++j){auto row=r.removeFromTop(r.getHeight()/(2-j));int n=j==0?6:5;for(int k=0;k<n;++k)place(indices[j*6+k],row.removeFromLeft(row.getWidth()/(n-k)));}
@@ -424,7 +438,7 @@ public:
         if(Browser::areOptionsSupported(o)){browser=std::make_unique<Browser>(o);addAndMakeVisible(*browser);browser->goToURL(Browser::getResourceProviderRoot());}
         else{fallback=std::make_unique<Editor>(p);addAndMakeVisible(*fallback);switcher.setEnabled(false);}
         addAndMakeVisible(switcher);switcher.onClick=[this]{toggle();};
-        setResizable(true,true);setResizeLimits(760,600,1800,1200);setSize(1200,780);
+        setResizable(true,true);setResizeLimits(760,560,2000,1400);setSize(1280,820);
     }
     void resized() override{auto r=getLocalBounds();switcher.setBounds(r.removeFromTop(24).removeFromRight(150));if(browser)browser->setBounds(r);if(fallback)fallback->setBounds(r);}
 };

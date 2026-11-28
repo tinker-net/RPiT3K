@@ -1,7 +1,7 @@
 name: TON3K Linux preview
 on:
   push:
-    branches: [vst3]
+    branches: [vst3, native-unified]
     paths:
       - 'vst3/**'
       - 'rpi/**'
