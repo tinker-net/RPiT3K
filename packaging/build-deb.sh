@@ -9,8 +9,8 @@ edition="${3:-general}"
 arch="$(dpkg --print-architecture)"
 case "$arch:$cpu:$edition" in
  arm64:cortex-a76:pisound) source_ref="${RPIT3K_SOURCE_REF:-$(git rev-parse HEAD)}"; package=rpi-ton3k-pisound ;;
- arm64::general|arm64:cortex-a72:general|arm64:cortex-a76:general|amd64::general)
-  source_ref=37952ece044f9af38372220bd74344dd5fd4becb; package=rpi-ton3k ;;
+ arm64::general|arm64:cortex-a72:general|arm64:cortex-a53:general|arm64:cortex-a76:general|amd64::general)
+  source_ref="${RPIT3K_SOURCE_REF:-$(git rev-parse HEAD)}"; package=rpi-ton3k ;;
  *) echo "Unsupported architecture/CPU/edition"; exit 1 ;;
 esac
 work="$(mktemp -d)"
@@ -23,7 +23,9 @@ pin=d3189ed482ded880c128bf312941266c4fa5ceec
 git clone https://github.com/sdatkinson/NeuralAmpModelerCore.git "$src/NeuralAmpModelerCore"
 git -C "$src/NeuralAmpModelerCore" checkout --detach "$pin"
 git -C "$src/NeuralAmpModelerCore" submodule update --init --recursive
-embedded=ON # upstream also supplies a scalar fallback on non-NEON hosts
+embedded="${RPIT3K_EMBEDDED_OVERRIDE:-OFF}"
+if [[ -z "${RPIT3K_EMBEDDED_OVERRIDE:-}" && "$arch:$cpu" == arm64:cortex-a76 ]]; then embedded=ON; fi
+[[ "$embedded" == ON || "$embedded" == OFF ]] || { echo "Invalid Embedded override"; exit 1; }
 cmake -S "$src/rpi" -B "$src/build-rpi" -DCMAKE_BUILD_TYPE=Release -DRPIT3K_CPU="$cpu" -DRPIT3K_EMBEDDED="$embedded" -DCMAKE_BUILD_RPATH_USE_ORIGIN=ON
 cmake --build "$src/build-rpi" -j"${JOBS:-2}"
 ctest --test-dir "$src/build-rpi" --output-on-failure
@@ -34,16 +36,16 @@ doc="$root/usr/share/doc/$package"
 install -Dm755 "$src/build-rpi/rpit3k" "$prefix/build-rpi/rpit3k"
 install -Dm755 "$src/build-rpi/librpit3k-daisysp.so" "$prefix/build-rpi/librpit3k-daisysp.so"
 for f in server.py tonecloud.py calibration.py capture_info.py ir_info.py web.html; do install -Dm644 "$src/rpi/$f" "$prefix/rpi/$f"; done
-if [[ "$edition" == pisound ]]; then
+{
  for f in practice.py data_backup.py; do install -Dm644 "$src/rpi/$f" "$prefix/rpi/$f"; done
  bash "$src/rpi/install-score-reader.sh"
  mkdir -p "$prefix/rpi/vendor"
  cp -a "$src/rpi/vendor/alphatab" "$prefix/rpi/vendor/"
- python3 - "$prefix/rpi/build-info.json" "$version" "$source_ref" <<'PY'
+ python3 - "$prefix/rpi/build-info.json" "$version" "$source_ref" "$edition" "$cpu" "$embedded" <<'PY'
 import json,sys
-with open(sys.argv[1],"w") as f:json.dump(dict(edition="PiSound DEB",version=sys.argv[2],commit=sys.argv[3]),f)
+with open(sys.argv[1],"w") as f:json.dump(dict(edition=("PiSound DEB" if sys.argv[4]=="pisound" else "General DEB"),version=sys.argv[2],commit=sys.argv[3],cpu=sys.argv[5] or "portable",embedded=sys.argv[6]),f)
 PY
-fi
+}
 install -Dm644 "$src/LICENSE" "$doc/copyright"
 install -Dm644 "$src/UI-TONE3000-LICENSE.txt" "$doc/UI-TONE3000-LICENSE.txt"
 cp -a "$src/rpi/vendor/daisysp" "$doc/daisysp-source"
@@ -53,11 +55,11 @@ if [[ "$embedded" == ON ]]; then
 fi
 printf 'source=%s\nNAM Core=%s\nCPU=%s\nEmbedded=%s\n' "$source_ref" "$pin" "${cpu:-portable}" "$embedded" > "$doc/build-provenance"
 mkdir -p "$root/DEBIAN" "$dist"
-depends="python3, alsa-utils, libasound2t64, libstdc++6, libc6, systemd, adduser, ca-certificates"
+depends="python3, alsa-utils, libasound2t64, libstdc++6, libc6, systemd, adduser, ca-certificates, ffmpeg"
 conflicts=rpi-ton3k-pisound
 if [[ "$edition" == pisound ]]; then
  conflicts=rpi-ton3k
- depends="$depends, ffmpeg, openssl, pisound, pisound-btn, network-manager, dnsmasq-base, curl, sudo, util-linux"
+ depends="$depends, openssl, pisound, pisound-btn, network-manager, dnsmasq-base, curl, sudo, util-linux"
  install -Dm644 "$packaging/pisound.service" "$root/usr/lib/systemd/system/$package.service"
  install -Dm644 "$packaging/pisound-config" "$root/etc/default/$package"
  install -Dm644 "$packaging/pisound-hotspot.service" "$root/usr/lib/systemd/system/rpi-ton3k-pisound-hotspot.service"

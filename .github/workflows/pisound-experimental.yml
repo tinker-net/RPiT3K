@@ -1,4 +1,4 @@
-name: PiSound experimental DEB
+name: Unified experimental DEBs
 on:
   push:
     branches: [experimental/guitar-pro]
@@ -8,13 +8,23 @@ permissions:
   contents: read
 jobs:
   build:
-    runs-on: ubuntu-24.04-arm
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {runner: ubuntu-24.04-arm, cpu: cortex-a76, edition: pisound, name: pisound-pi5}
+          - {runner: ubuntu-24.04-arm, cpu: cortex-a76, edition: general, name: general-pi5}
+          - {runner: ubuntu-24.04-arm, cpu: cortex-a72, edition: general, name: general-pi4}
+          - {runner: ubuntu-24.04-arm, cpu: cortex-a53, edition: general, name: general-pi3-zero2}
+          - {runner: ubuntu-24.04-arm, cpu: '', edition: general, name: general-arm64}
+          - {runner: ubuntu-24.04, cpu: '', edition: general, name: general-amd64}
+    runs-on: ${{ matrix.runner }}
     container: debian:trixie
     steps:
       - run: apt-get update && apt-get install -y git ca-certificates build-essential cmake libasound2-dev python3 nodejs npm dpkg-dev ffmpeg
       - uses: actions/checkout@v4
       - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
-      - run: bash packaging/build-deb.sh "0.2.0~practice${GITHUB_RUN_NUMBER}" cortex-a76 pisound
+      - run: bash packaging/build-deb.sh "0.2.0~practice${GITHUB_RUN_NUMBER}" "${{ matrix.cpu }}" "${{ matrix.edition }}"
       - run: |
           dpkg-deb --info dist/*.deb
           dpkg-deb -x dist/*.deb /tmp/ton3k
@@ -22,6 +32,6 @@ jobs:
           python3 /tmp/ton3k/usr/lib/rpi-ton3k/rpi/server.py --help
       - uses: actions/upload-artifact@v4
         with:
-          name: pisound-practice-deb
+          name: ton3k-${{ matrix.name }}-deb
           path: dist/*.deb
           if-no-files-found: error
